@@ -20,6 +20,8 @@ license = { text = "MIT" }
 [tool.alembic]
 # Configurações do Alembic, serão preenchidas posteriormente
 
+packages = [{ include = "caramello", from = "src" }]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"

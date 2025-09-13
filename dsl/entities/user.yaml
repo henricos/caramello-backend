@@ -1,0 +1,51 @@
+# dsl/user.yaml
+# Definição do objeto de domínio 'User'
+
+name: User
+description: Representa um usuário do sistema.
+table_name: users # Nome da tabela no banco de dados
+
+fields:
+  - name: id
+    type: UUID
+    primary_key: true
+    default_factory: uuid4
+    nullable: false
+
+  - name: username
+    type: str
+    max_length: 50
+    unique: true
+    nullable: false
+
+  - name: email
+    type: EmailStr
+    unique: true
+    nullable: false
+
+  - name: hashed_password
+    type: str
+    nullable: false
+
+  - name: is_active
+    type: bool
+    default: true
+    nullable: false
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+
+  - name: updated_at
+    type: datetime
+    default_factory: now_utc
+    on_update: now_utc
+    nullable: false
+
+relationships:
+  # Exemplo de relacionamento (se houver)
+  # - name: items
+  #   type: List[Item]
+  #   relationship_type: OneToMany
+  #   back_populates: owner
