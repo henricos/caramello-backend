@@ -1,0 +1,25 @@
+[project]
+name = "caramello-backend"
+version = "0.1.0"
+description = "API de backend para a aplicação Caramello"
+authors = [{ name = "Henrico", email = "henrico@example.com" }]
+dependencies = [
+    "fastapi",
+    "sqlmodel",
+    "alembic",
+    "pydantic",
+    "uvicorn",
+]
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+
+[tool.uv]
+# Configurações específicas do uv, se houver
+
+[tool.alembic]
+# Configurações do Alembic, serão preenchidas posteriormente
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
