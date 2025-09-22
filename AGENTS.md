@@ -6,9 +6,6 @@ O contexto principal para este projeto está na pasta /docs.
 - Para o roadmap geral do projeto, consulte /docs/roadmap.md.
 - Para o guia de workflow com IA, consulte /docs/ai_workflow.md.
 - Para as convenções da API, consulte /docs/api_conventions.md.
-- Para as definições de domínio (DSL), consulte a pasta /dsl.
-
-A pasta /prompts contém exemplos de prompts reutilizáveis que podem ser adaptados para diversas tarefas de desenvolvimento.
 
 **Instruções para a IA:**
 Ao receber uma solicitação, avalie cuidadosamente o tipo de atividade (ex: desenvolvimento de funcionalidade, refatoração, correção de bug, documentação). Com base nesta avaliação, decida quais arquivos na pasta /docs são mais relevantes para obter o contexto necessário.
