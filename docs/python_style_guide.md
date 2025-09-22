@@ -53,8 +53,8 @@ def create_user(data: UserCreate) -> User:
 * `core/` → config and constants.
 * `database/` → engine and session (SQLModel).
 * `models/` → tables (SQLModel).
-* `schemas/` → I/O (Pydantic models).
 * `repositories/` → CRUD with `Session`.
+* `schemas/` → I/O (Pydantic models).
 * `services/` → business logic.
 * `exceptions.py` / `http_errors.py` → domain errors and handlers.
 * `main.py` → FastAPI app, include routers.
