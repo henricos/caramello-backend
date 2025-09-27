@@ -17,7 +17,11 @@ Serviços backend para o sistema pessoal de organização familiar Caramello.
 
 ## Sobre
 
-Este repositório contém os serviços backend escritos em Python para o projeto pessoal Caramello, que visa organizar diversos aspectos da vida familiar, como finanças, agenda, lembretes, entre outros.
+O Caramello é um sistema pessoal e integrado para organização familiar. Este repositório contém os serviços backend (a API) escritos em Python, que servem como a base para todas as aplicações do ecossistema Caramello (web e mobile).
+
+O objetivo do projeto é centralizar diversas ferramentas de uso individual e compartilhado, como agenda, finanças, listas de compras, saúde e entretenimento, para simplificar a gestão do dia a dia da família.
+
+Para uma descrição detalhada da visão e de todas as funcionalidades planejadas, consulte o documento [Visão do Projeto](./docs/project_vision.md).
 
 ## Funcionalidades
 

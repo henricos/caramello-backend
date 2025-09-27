@@ -1,5 +1,7 @@
 # Diretrizes de Fluxo de Trabalho de IA
 
+> **Nota para a IA:** Para obter o contexto completo sobre a visão, os objetivos e a arquitetura do sistema Caramello, consulte sempre o `README.md` e o documento detalhado em `docs/project_vision.md`.
+
 Este projeto segue uma estratégia **API First**, adotando a **Especificação OpenAPI** como a **única fonte da verdade**.  
 Todas as decisões de modelagem, banco de dados e API devem sempre estar em conformidade com o OpenAPI.  
 
@@ -22,7 +24,7 @@ Todas as decisões de modelagem, banco de dados e API devem sempre estar em conf
 - O DSL **nunca é a fonte da verdade**. Após a geração, **apenas o OpenAPI deve ser usado**.  
 
 ## OpenAPI
-- A **especificação OpenAPI** é a **única fonte da verdade** para o projeto.  
+- A **Especificação OpenAPI** é a **única fonte da verdade** para o projeto.  
 - Deve incluir:  
   - **Endpoints CRUD** (derivados do DSL).  
   - **Endpoints adicionais** (negócio, autenticação, fluxos de trabalho, etc.) definidos diretamente no OpenAPI.  
