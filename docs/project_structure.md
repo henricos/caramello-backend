@@ -1,15 +1,15 @@
-# Project Directory Structure
+# Estrutura de Diretórios do Projeto
 
-### Main folders:
-- **`alembic/`**: Database migration scripts (Alembic).
-- **`docs/`**: Detailed project documentation.
-- **`dsl/`**: Domain objects definitions in YAML (DSL). Generates code and OpenAPI.
-- **`src/caramello/`**: Main application package.
-  - **`api/`**: FastAPI routers (endpoints).
-  - **`core/`**: Global settings, environment variables, utilities.
-  - **`database/`**: Database connection and session configuration.
-  - **`models/`**: SQLModel models (database tables).
-  - **`repositories/`**: Data access layer (queries).
-  - **`schemas/`**: Pydantic schemas for validation.
-  - **`services/`**: Business logic layer.
-- **`tests/`**: Automated tests.
+### Pastas principais:
+- **`alembic/`**: Scripts de migração de banco de dados (Alembic).
+- **`docs/`**: Documentação detalhada do projeto.
+- **`dsl/`**: Definições de objetos de domínio em YAML (DSL). Gera código e OpenAPI.
+- **`src/caramello/`**: Pacote principal da aplicação.
+  - **`api/`**: Routers FastAPI (endpoints).
+  - **`core/`**: Configurações globais, variáveis de ambiente, utilitários.
+  - **`database/`**: Conexão com o banco de dados e configuração de sessão.
+  - **`models/`**: Modelos SQLModel (tabelas do banco de dados).
+  - **`repositories/`**: Camada de acesso a dados (queries).
+  - **`schemas/`**: Schemas Pydantic para validação.
+  - **`services/`**: Camada de lógica de negócio.
+- **`tests/`**: Testes automatizados.

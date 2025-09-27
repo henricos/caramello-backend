@@ -1,7 +1,7 @@
-# Security Rules
+# Regras de Segurança
 
-- Check dependencies for known vulnerabilities (`pip-audit`).  
-- Ensure authentication/authorization is correctly implemented.  
-- Never expose sensitive data in logs or errors.  
-- Apply the principle of least privilege (DB, API keys, services).  
-- Validate input/output strictly (schemas, Pydantic).  
+- Verifique as dependências em busca de vulnerabilidades conhecidas (`pip-audit`).
+- Garanta que a autenticação/autorização seja implementada corretamente.
+- Nunca exponha dados sensíveis em logs ou erros.
+- Aplique o princípio do menor privilégio (banco de dados, chaves de API, serviços).
+- Valide estritamente a entrada/saída de dados (schemas, Pydantic).

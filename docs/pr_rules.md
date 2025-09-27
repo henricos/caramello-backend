@@ -1,11 +1,11 @@
-# Pull Request Rules
+# Regras de Pull Request
 
-- PR titles must be **descriptive** and in English.  
-- Reference related issues using `Closes #id`.  
-- Provide a clear description of changes.  
-- Include test coverage information.  
-- Use checklist before merge:  
-  - [ ] Code builds successfully  
-  - [ ] Tests pass  
-  - [ ] Docs updated (if applicable)  
-  - [ ] No security issues introduced  
+- Títulos de PRs devem ser **descritivos** e em **Português do Brasil (pt-BR)**.
+- Referencie issues relacionadas usando `Closes #id`.
+- Forneça uma descrição clara das mudanças.
+- Inclua informações sobre a cobertura de testes.
+- Use a checklist antes do merge:
+  - [ ] O código compila com sucesso
+  - [ ] Os testes passam
+  - [ ] A documentação foi atualizada (se aplicável)
+  - [ ] Nenhuma falha de segurança foi introduzida

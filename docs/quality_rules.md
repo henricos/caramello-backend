@@ -1,7 +1,7 @@
-# Quality Rules
+# Regras de Qualidade
 
-- Run linting: `ruff check .`  
-- Run formatting: `black .`  
-- Run type checking: `mypy .`  
-- Run tests: `pytest`  
-- Ensure code complexity and maintainability are acceptable.  
+- Execute a análise de lint: `ruff check .`
+- Execute a formatação: `black .`
+- Execute a checagem de tipos: `mypy .`
+- Execute os testes: `pytest`
+- Garanta que a complexidade e a manutenibilidade do código sejam aceitáveis.

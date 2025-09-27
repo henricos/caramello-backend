@@ -1,57 +1,62 @@
-# Python Style Guide
+# Guia de Estilo Python
 
-## Language
-- **All code (identifiers, functions, classes, variables, modules, packages): English + ASCII only.**
-- **Domain terms from Brazil (CPF, CNPJ, boleto, pix):** allowed, but lowercase/ASCII and combined with English style → `cpf_validator`, `pix_webhook_handler`.
-- **Comments and docstrings:** English only, consistent across the project.
+## Idioma (Código-Fonte)
 
-## Naming Conventions
-- **Packages/Modules:** `snake_case` → `repositories`, `user.py`.
+Para manter a consistência com o ecossistema de desenvolvimento (bibliotecas, frameworks, etc.), todo o código-fonte e seus artefatos diretos devem ser escritos em **Inglês (English)**.
+
+- **Código-Fonte**: Identificadores, funções, classes, variáveis, módulos e pacotes.
+- **Termos de Domínio**: Termos específicos do Brasil (como `CPF`, `CNPJ`) são permitidos, mas devem ser adaptados ao estilo `snake_case` em inglês (ex: `cpf_validator`, `handle_pix_webhook`).
+- **Comentários e Docstrings**: Devem ser escritos em inglês para acompanhar o código ao qual se referem.
+
+As diretrizes gerais sobre o uso de idiomas no projeto (commits, PRs, documentação) estão definidas no arquivo `AGENTS.md`.
+
+## Convenções de Nomenclatura
+- **Pacotes/Módulos:** `snake_case` → `repositories`, `user.py`.
 - **Classes:** `PascalCase` → `UserRepository`, `UserService`.
-- **Functions/Variables:** `snake_case` → `create_user`, `max_retries`.
-- **Constants:** `UPPER_CASE` → `DEFAULT_PAGE_SIZE`.
-- **Endpoints:** paths in `kebab-case`, functions in `snake_case`.
+- **Funções/Variáveis:** `snake_case` → `create_user`, `max_retries`.
+- **Constantes:** `UPPER_CASE` → `DEFAULT_PAGE_SIZE`.
+- **Endpoints:** caminhos em `kebab-case`, funções em `snake_case`.
 
 ## Docstrings
-- Follow **PEP 257**:
+- Siga a **PEP 257**:
 
 ```python
 def create_user(data: UserCreate) -> User:
-    """Create a new user.
+    """Creates a new user.
 
     Args:
-        data: Validated user input.
+        data: Validated user input data.
 
     Returns:
         The persisted User entity.
     """
 ```
 
-## Code Style and Quality
-- **Line length:** max 88 chars (Black).
-- **Imports:** stdlib / third-party / local (Ruff organizes).
-- **Type hints:** always for public functions and domain objects (checked with mypy).
-- **Tools:**
+## Estilo e Qualidade do Código
+- **Comprimento da linha:** máx. 88 caracteres (Black).
+- **Imports:** stdlib / terceiros / local (Ruff organiza).
+- **Type hints:** sempre para funções públicas e objetos de domínio (verificado com mypy).
+- **Ferramentas:**
   - `ruff` → lint/isort/docstyle
-  - `black` → format
-  - `mypy` → type check
-  - `pytest` → tests
+  - `black` → formatação
+  - `mypy` → checagem de tipos
+  - `pytest` → testes
 
-## Database
-- Provide `Session` per request via dependency (`yield`) in `database/session.py`.
-- Configure Alembic with `target_metadata = SQLModel.metadata` in `env.py`.
+## Banco de Dados
+- Forneça uma `Session` por requisição via dependência (`yield`) em `database/session.py`.
+- Configure o Alembic com `target_metadata = SQLModel.metadata` em `env.py`.
 
 ## API
-- `api/v1/routes.py`: mount routers.
-- `api/v1/users.py`: user routes.
+- `api/v1/routes.py`: monta os routers.
+- `api/v1/users.py`: rotas de usuário.
 - Use `response_model`, `status_code`, `HTTPException`.
 
-## Repositories and Services
-- **Repository:** data access only.
-- **Service:** orchestration and business rules.
-- Naming: `UserRepository`, `UserService`.
+## Repositórios e Serviços
+- **Repositório:** apenas acesso a dados.
+- **Serviço:** orquestração e regras de negócio.
+- Nomenclatura: `UserRepository`, `UserService`.
 
-## Testing
-- `tests/` mirrors project structure.
-- Use fixtures for isolated DB `Session`.
-- Pre-commit hooks: `ruff`, `black`, `mypy`, `pytest`.
+## Testes
+- `tests/` espelha a estrutura do projeto.
+- Use fixtures para `Session` de banco de dados isolada.
+- Hooks de pré-commit: `ruff`, `black`, `mypy`, `pytest`.
