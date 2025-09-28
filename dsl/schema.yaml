@@ -1,0 +1,81 @@
+# dsl/schema.yaml
+# Schema to validate the structure of entity definition files.
+
+type: object
+properties:
+  name:
+    type: string
+    description: "The name of the entity (e.g., User)."
+  description:
+    type: string
+    description: "A brief description of the entity."
+  table_name:
+    type: string
+    description: "The table name in the database."
+
+  fields:
+    type: array
+    description: "List of entity fields."
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+          description: "Name of the field."
+        type:
+          type: string
+          description: "Data type of the field (e.g., UUID, str, int)."
+        primary_key:
+          type: boolean
+          description: "Indicates if the field is the primary key."
+        default_factory:
+          type: string
+          description: "Function to generate the default value (e.g., uuid4)."
+        default:
+          type: [string, number, boolean, 'null']
+          description: "Default value for the field."
+        on_update:
+          type: string
+          description: "Function to be executed on update (e.g., now_utc)."
+        nullable:
+          type: boolean
+          description: "Indicates if the field can be null."
+        unique:
+          type: boolean
+          description: "Indicates if the field value must be unique."
+        max_length:
+          type: integer
+          description: "Maximum length for string type fields."
+      required:
+        - name
+        - type
+        - nullable
+
+  relationships:
+    type: array
+    description: "List of relationships with other entities."
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+          description: "Name of the relationship field."
+        type:
+          type: string
+          description: "The type of the relationship (e.g., List[Item])."
+        relationship_type:
+          type: string
+          description: "The cardinality of the relationship."
+          enum: [OneToOne, OneToMany, ManyToOne, ManyToMany]
+        back_populates:
+          type: string
+          description: "The field in the related entity that completes the relationship."
+      required:
+        - name
+        - type
+        - relationship_type
+
+required:
+  - name
+  - table_name
+  - fields
