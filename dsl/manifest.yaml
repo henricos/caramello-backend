@@ -1,0 +1,10 @@
+# dsl/manifest.yaml
+# Este arquivo serve como um índice para todas as entidades definidas no DSL.
+# Ele é usado pelas ferramentas de geração de código para descobrir e processar
+# cada entidade do projeto.
+
+entities:
+  - path: ./entities/user.yaml
+  - path: ./entities/family.yaml
+  - path: ./entities/family_member.yaml
+  - path: ./entities/family_invitation.yaml

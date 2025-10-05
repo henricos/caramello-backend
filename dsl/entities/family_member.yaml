@@ -1,0 +1,42 @@
+# dsl/entities/family_member.yaml
+# Definição da tabela de associação FamilyMember.
+
+name: FamilyMember
+description: "Tabela de associação que conecta Usuários e Famílias, definindo o papel de cada membro."
+table_name: family_members
+is_link_model: true # Indica que é um modelo de associação para um relacionamento N:N
+
+fields:
+  - name: user_id
+    type: int
+    foreign_key: "users.id"
+    primary_key: true
+    description: "Chave estrangeira para a tabela de usuários."
+
+  - name: family_id
+    type: int
+    foreign_key: "families.id"
+    primary_key: true
+    description: "Chave estrangeira para a tabela de famílias."
+
+  - name: role
+    type: str
+    max_length: 20
+    default: "member"
+    nullable: false
+    description: "Papel do usuário na família (ex: admin, member)."
+
+  - name: joined_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Timestamp de quando o usuário se juntou à família."
+
+relationships:
+  - name: user
+    type: "User"
+    back_populates: "families"
+
+  - name: family
+    type: "Family"
+    back_populates: "members"

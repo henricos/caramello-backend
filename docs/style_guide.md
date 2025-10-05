@@ -46,6 +46,10 @@ def create_user(data: UserCreate) -> User:
 - Forneça uma `Session` por requisição via dependência (`yield`) em `database/session.py`.
 - Configure o Alembic com `target_metadata = SQLModel.metadata` em `env.py`.
 
+
+### Chaves Primárias e Identificadores Públicos
+- **Chave Primária (PK):** Todas as tabelas devem ter uma chave primária interna do tipo `integer` autoincrementada, chamada `id`. Esta chave deve ser usada para relacionamentos (joins) entre tabelas.
+- **Identificador Público:** Todas as tabelas devem ter uma coluna `uuid` do tipo `UUID`, com um valor padrão gerado e um índice `unique`. Este campo deve ser usado como o identificador público do recurso em todas as APIs externas, para evitar a exposição de IDs sequenciais.
 ## API
 - `api/v1/routes.py`: monta os routers.
 - `api/v1/users.py`: rotas de usuário.

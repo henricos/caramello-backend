@@ -1,0 +1,63 @@
+# dsl/entities/family_invitation.yaml
+# Definição da entidade FamilyInvitation.
+
+name: FamilyInvitation
+description: "Gerencia o fluxo de convites para famílias."
+table_name: family_invitations
+
+fields:
+  - name: id
+    type: int
+    primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
+    default_factory: uuid4
+    nullable: false
+    description: "Identificador público único (UUID)."
+
+  - name: family_id
+    type: int
+    foreign_key: "families.id"
+    nullable: false
+    description: "ID da família para a qual o convite foi enviado."
+
+  - name: inviter_id
+    type: int
+    foreign_key: "users.id"
+    nullable: false
+    description: "ID do usuário que enviou o convite."
+
+  - name: invitee_email
+    type: EmailStr
+    nullable: false
+    description: "E-mail do usuário convidado."
+
+  - name: status
+    type: str
+    max_length: 20
+    default: "pending"
+    nullable: false
+    description: "Estado do convite (pending, accepted, declined)."
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Timestamp de criação do convite."
+
+  - name: expires_at
+    type: datetime
+    nullable: false
+    description: "Timestamp de expiração do convite."
+
+relationships:
+  - name: family
+    type: "Family"
+    back_populates: "invitations"
+
+  - name: inviter
+    type: "User"
+    back_populates: "sent_invitations"

@@ -1,0 +1,65 @@
+# dsl/entities/family.yaml
+# Definição da entidade Family.
+
+name: Family
+description: "Representa um grupo familiar no sistema."
+table_name: families
+
+fields:
+  - name: id
+    type: int
+    primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
+    default_factory: uuid4
+    nullable: false
+    description: "Identificador público único (UUID)."
+
+  - name: name
+    type: str
+    max_length: 100
+    nullable: false
+    description: "Nome da família."
+
+  - name: description
+    type: str
+    max_length: 255
+    nullable: true
+    description: "Descrição opcional da família."
+
+  - name: status
+    type: str
+    max_length: 20
+    default: "active"
+    nullable: false
+    description: "Estado da família (ex: active, archived)."
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Timestamp de criação do registro."
+
+  - name: updated_at
+    type: datetime
+    default_factory: now_utc
+    on_update: now_utc
+    nullable: false
+    description: "Timestamp da última atualização do registro."
+
+relationships:
+  - name: members
+    type: "List[User]"
+    link_model: "FamilyMember"
+    back_populates: "families"
+    description: "Membros que pertencem a esta família."
+
+  - name: invitations
+    type: "List[FamilyInvitation]"
+    relationship_type: "OneToMany"
+    back_populates: "family"
+    foreign_key: "FamilyInvitation.family_id"
+    description: "Convites associados a esta família."

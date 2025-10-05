@@ -23,6 +23,11 @@ Todas as decisões de modelagem, banco de dados e API devem sempre estar em conf
 - O papel do DSL é **gerar um arquivo OpenAPI**.  
 - O DSL **nunca é a fonte da verdade**. Após a geração, **apenas o OpenAPI deve ser usado**.  
 
+### Convenções de Nomenclatura no DSL
+- **Nome da Entidade (`name`):** Use `PascalCase` (ex: `UserProfile`), pois irá gerar uma classe Python com o mesmo nome.
+- **Nome do Arquivo YAML:** Use `snake_case` (ex: `user_profile.yaml`).
+- **Nome da Tabela (`table_name`):** Use `snake_case` no plural (ex: `user_profiles`).
+
 ## OpenAPI
 - A **Especificação OpenAPI** é a **única fonte da verdade** para o projeto.  
 - Deve incluir:  

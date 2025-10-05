@@ -1,51 +1,86 @@
-# dsl/user.yaml
-# Definição do objeto de domínio 'User'
+# dsl/entities/user.yaml
+# Definição da entidade User, alinhada com as diretrizes de design.
 
 name: User
 description: Representa um usuário do sistema.
-table_name: users # Nome da tabela no banco de dados
+table_name: users
 
 fields:
   - name: id
-    type: UUID
+    type: int
     primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
     default_factory: uuid4
     nullable: false
+    description: "Identificador público único (UUID)."
 
-  - name: username
+  - name: full_name
     type: str
-    max_length: 50
-    unique: true
+    max_length: 100
     nullable: false
+    description: "Nome completo do usuário."
 
   - name: email
     type: EmailStr
     unique: true
     nullable: false
+    description: "Endereço de e-mail único, usado para login."
+
+  - name: phone_number
+    type: str
+    max_length: 20
+    nullable: true
+    description: "Número de telefone (formato E.164 recomendado)."
 
   - name: hashed_password
     type: str
-    nullable: false
+    nullable: true
+    description: "Senha criptografada (nulo para usuários via OAuth)."
+
+  - name: google_id
+    type: str
+    unique: true
+    nullable: true
+    description: "ID exclusivo do usuário no Google (para OAuth)."
+
+  - name: avatar_url
+    type: str
+    nullable: true
+    description: "URL da foto de perfil do usuário."
 
   - name: is_active
     type: bool
     default: true
     nullable: false
+    description: "Indica se o usuário está ativo no sistema."
 
   - name: created_at
     type: datetime
     default_factory: now_utc
     nullable: false
+    description: "Timestamp de criação do registro."
 
   - name: updated_at
     type: datetime
     default_factory: now_utc
     on_update: now_utc
     nullable: false
+    description: "Timestamp da última atualização do registro."
 
 relationships:
-  # Exemplo de relacionamento (se houver)
-  # - name: items
-  #   type: List[Item]
-  #   relationship_type: OneToMany
-  #   back_populates: owner
+  - name: families
+    type: "List[Family]"
+    link_model: "FamilyMember"
+    back_populates: "members"
+    description: "Famílias às quais o usuário pertence."
+
+  - name: sent_invitations
+    type: "List[FamilyInvitation]"
+    relationship_type: "OneToMany"
+    back_populates: "inviter"
+    foreign_key: "FamilyInvitation.inviter_id"
+    description: "Convites enviados por este usuário."
