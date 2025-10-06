@@ -3,8 +3,10 @@
 # It is used by code generation tools to discover and process
 # each entity in the project.
 
-entities:
-  - path: ./entities/user.yaml
-  - path: ./entities/family.yaml
-  - path: ./entities/family_member.yaml
-  - path: ./entities/family_invitation.yaml
+# Lista de arquivos de entidade a serem processados pelo gerador.
+# O gerador irá procurar por esses arquivos dentro do diretório 'dsl/entities/'.
+x-caramello-entities:
+  - user.yaml
+  - family.yaml
+  - family_member.yaml
+  - family_invitation.yaml

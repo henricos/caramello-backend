@@ -1,0 +1,135 @@
+x-caramello-entities:
+- user.yaml
+- family.yaml
+- family_member.yaml
+- family_invitation.yaml
+paths: {}
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Internal primary key (numeric).
+        uuid:
+          type: string
+          description: Unique public identifier (UUID).
+        full_name:
+          type: string
+          description: User's full name.
+        email:
+          type: string
+          description: Unique email address, used for login.
+        phone_number:
+          type: string
+          description: Phone number (E.164 format recommended).
+        hashed_password:
+          type: string
+          description: Hashed password (null for users via OAuth).
+        google_id:
+          type: string
+          description: User's unique Google ID (for OAuth).
+        avatar_url:
+          type: string
+          description: URL of the user's profile picture.
+        is_active:
+          type: string
+          description: Indicates if the user is active in the system.
+          default: true
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp of the record's creation.
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp of the record's last update.
+      required:
+      - id
+      description: Represents a system user.
+    Family:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Internal primary key (numeric).
+        uuid:
+          type: string
+          description: Unique public identifier (UUID).
+        name:
+          type: string
+          description: Name of the family.
+        description:
+          type: string
+          description: Optional description of the family.
+        status:
+          type: string
+          description: Status of the family (e.g., active, archived).
+          default: active
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp of the record's creation.
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp of the record's last update.
+      required:
+      - id
+      description: Represents a family group in the system.
+    FamilyMember:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: Foreign key for the users table.
+        family_id:
+          type: string
+          description: Foreign key for the families table.
+        role:
+          type: string
+          description: User's role in the family (e.g., admin, member).
+          default: member
+        joined_at:
+          type: string
+          format: date-time
+          description: Timestamp of when the user joined the family.
+      required:
+      - user_id
+      - family_id
+      description: Association table connecting Users and Families, defining the role
+        of each member.
+    FamilyInvitation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Internal primary key (numeric).
+        uuid:
+          type: string
+          description: Unique public identifier (UUID).
+        family_id:
+          type: string
+          description: ID of the family to which the invitation was sent.
+        inviter_id:
+          type: string
+          description: ID of the user who sent the invitation.
+        invitee_email:
+          type: string
+          description: Email of the invited user.
+        status:
+          type: string
+          description: Status of the invitation (pending, accepted, declined).
+          default: pending
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp of the invitation's creation.
+        expires_at:
+          type: string
+          format: date-time
+          description: Timestamp of the invitation's expiration.
+      required:
+      - id
+      description: Manages the invitation flow for families.

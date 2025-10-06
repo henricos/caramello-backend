@@ -2,13 +2,11 @@
 
 ## Idioma (Código-Fonte)
 
-Para manter a consistência com o ecossistema de desenvolvimento (bibliotecas, frameworks, etc.), todo o código-fonte e seus artefatos diretos devem ser escritos em **Inglês (English)**.
+Em conformidade com as diretrizes gerais de idioma do projeto (detalhadas em `AGENTS.md`), todo o código-fonte e artefatos diretamente relacionados devem ser escritos em **Inglês (English)**. Isso garante consistência com o ecossistema de desenvolvimento, ferramentas e bibliotecas.
 
-- **Código-Fonte**: Identificadores, funções, classes, variáveis, módulos e pacotes.
-- **Termos de Domínio**: Termos específicos do Brasil (como `CPF`, `CNPJ`) são permitidos, mas devem ser adaptados ao estilo `snake_case` em inglês (ex: `cpf_validator`, `handle_pix_webhook`).
-- **Comentários e Docstrings**: Devem ser escritos em inglês para acompanhar o código ao qual se referem.
-
-As diretrizes gerais sobre o uso de idiomas no projeto (commits, PRs, documentação) estão definidas no arquivo `AGENTS.md`.
+-   **Código-Fonte**: Inclui identificadores, nomes de arquivos, diretórios, variáveis, funções, classes, módulos e pacotes.
+-   **Comentários e Docstrings**: Devem ser escritos em inglês para manter a coesão com o código que descrevem.
+-   **Termos de Domínio Específicos**: Termos inerentes ao contexto brasileiro (ex: `CPF`, `CNPJ`, `PIX`) são permitidos, mas devem ser adaptados ao estilo `snake_case` em inglês (ex: `cpf_validator`, `handle_pix_webhook`).
 
 ## Convenções de Nomenclatura
 - **Pacotes/Módulos:** `snake_case` → `repositories`, `user.py`.
