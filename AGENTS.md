@@ -44,6 +44,7 @@ O projeto adota uma estratégia de dois idiomas para equilibrar a clareza para o
 Utilizado para toda a base de código e artefatos diretamente ligados a ela. O objetivo é manter a consistência com as ferramentas, bibliotecas e o ecossistema de programação.
 - **Código-Fonte**: Nomes de arquivos, diretórios, variáveis, funções e classes.
 - **Comentários e Docstrings**: Devem estar no mesmo idioma do código para evitar inconsistências.
+- **Arquivos DSL (YAML)**: Todas as descrições (`description`), comentários e qualquer outro texto livre dentro dos arquivos `.yaml` na pasta `dsl/` devem estar em inglês. Esses arquivos são a base para a geração do OpenAPI e, consequentemente, do código-fonte.
 
 ### Português do Brasil (pt-BR)
 Utilizado para toda a comunicação e documentação voltada para humanos. O objetivo é garantir que o projeto seja acessível e claro para a equipe e os usuários brasileiros.

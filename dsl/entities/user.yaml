@@ -1,86 +1,86 @@
 # dsl/entities/user.yaml
-# Definição da entidade User, alinhada com as diretrizes de design.
+# Definition of the User entity, aligned with design guidelines.
 
 name: User
-description: Representa um usuário do sistema.
+description: Represents a system user.
 table_name: users
 
 fields:
   - name: id
     type: int
     primary_key: true
-    description: "Chave primária interna (numérica)."
+    description: "Internal primary key (numeric)."
 
   - name: uuid
     type: UUID
     unique: true
     default_factory: uuid4
     nullable: false
-    description: "Identificador público único (UUID)."
+    description: "Unique public identifier (UUID)."
 
   - name: full_name
     type: str
     max_length: 100
     nullable: false
-    description: "Nome completo do usuário."
+    description: "User's full name."
 
   - name: email
     type: EmailStr
     unique: true
     nullable: false
-    description: "Endereço de e-mail único, usado para login."
+    description: "Unique email address, used for login."
 
   - name: phone_number
     type: str
     max_length: 20
     nullable: true
-    description: "Número de telefone (formato E.164 recomendado)."
+    description: "Phone number (E.164 format recommended)."
 
   - name: hashed_password
     type: str
     nullable: true
-    description: "Senha criptografada (nulo para usuários via OAuth)."
+    description: "Hashed password (null for users via OAuth)."
 
   - name: google_id
     type: str
     unique: true
     nullable: true
-    description: "ID exclusivo do usuário no Google (para OAuth)."
+    description: "User's unique Google ID (for OAuth)."
 
   - name: avatar_url
     type: str
     nullable: true
-    description: "URL da foto de perfil do usuário."
+    description: "URL of the user's profile picture."
 
   - name: is_active
     type: bool
     default: true
     nullable: false
-    description: "Indica se o usuário está ativo no sistema."
+    description: "Indicates if the user is active in the system."
 
   - name: created_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Timestamp de criação do registro."
+    description: "Timestamp of the record's creation."
 
   - name: updated_at
     type: datetime
     default_factory: now_utc
     on_update: now_utc
     nullable: false
-    description: "Timestamp da última atualização do registro."
+    description: "Timestamp of the record's last update."
 
 relationships:
   - name: families
     type: "List[Family]"
     link_model: "FamilyMember"
     back_populates: "members"
-    description: "Famílias às quais o usuário pertence."
+    description: "Families to which the user belongs."
 
   - name: sent_invitations
     type: "List[FamilyInvitation]"
     relationship_type: "OneToMany"
     back_populates: "inviter"
     foreign_key: "FamilyInvitation.inviter_id"
-    description: "Convites enviados por este usuário."
+    description: "Invitations sent by this user."

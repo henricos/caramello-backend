@@ -1,65 +1,65 @@
 # dsl/entities/family.yaml
-# Definição da entidade Family.
+# Definition of the Family entity.
 
 name: Family
-description: "Representa um grupo familiar no sistema."
+description: "Represents a family group in the system."
 table_name: families
 
 fields:
   - name: id
     type: int
     primary_key: true
-    description: "Chave primária interna (numérica)."
+    description: "Internal primary key (numeric)."
 
   - name: uuid
     type: UUID
     unique: true
     default_factory: uuid4
     nullable: false
-    description: "Identificador público único (UUID)."
+    description: "Unique public identifier (UUID)."
 
   - name: name
     type: str
     max_length: 100
     nullable: false
-    description: "Nome da família."
+    description: "Name of the family."
 
   - name: description
     type: str
     max_length: 255
     nullable: true
-    description: "Descrição opcional da família."
+    description: "Optional description of the family."
 
   - name: status
     type: str
     max_length: 20
     default: "active"
     nullable: false
-    description: "Estado da família (ex: active, archived)."
+    description: "Status of the family (e.g., active, archived)."
 
   - name: created_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Timestamp de criação do registro."
+    description: "Timestamp of the record's creation."
 
   - name: updated_at
     type: datetime
     default_factory: now_utc
     on_update: now_utc
     nullable: false
-    description: "Timestamp da última atualização do registro."
+    description: "Timestamp of the record's last update."
 
 relationships:
   - name: members
     type: "List[User]"
     link_model: "FamilyMember"
     back_populates: "families"
-    description: "Membros que pertencem a esta família."
+    description: "Members belonging to this family."
 
   - name: invitations
     type: "List[FamilyInvitation]"
     relationship_type: "OneToMany"
     back_populates: "family"
     foreign_key: "FamilyInvitation.family_id"
-    description: "Convites associados a esta família."
+    description: "Invitations associated with this family."

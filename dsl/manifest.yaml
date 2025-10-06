@@ -1,7 +1,7 @@
 # dsl/manifest.yaml
-# Este arquivo serve como um índice para todas as entidades definidas no DSL.
-# Ele é usado pelas ferramentas de geração de código para descobrir e processar
-# cada entidade do projeto.
+# This file serves as an index for all entities defined in the DSL.
+# It is used by code generation tools to discover and process
+# each entity in the project.
 
 entities:
   - path: ./entities/user.yaml
