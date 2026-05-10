@@ -183,11 +183,12 @@ Para garantir que o código gerado, as migrações e os testes estejam alinhados
 O projeto é construído sobre uma stack moderna de Python:
 
 -   **Python 3.10+**
--   **FastAPI**: Framework web moderno e de alta performance.
--   **SQLModel**: ORM que combina SQLAlchemy e Pydantic.
--   **Alembic**: Ferramenta de migração de banco de dados.
--   **Pydantic**: Validação de dados e gerenciamento de configurações.
--   **uv**: Gerenciador de pacotes e projetos Python extremamente rápido.
+-   **FastAPI** (async): framework web moderno e de alta performance.
+-   **SQLModel / SQLAlchemy** (async): ORM que combina SQLAlchemy e Pydantic.
+-   **Alembic**: ferramenta de migração de banco de dados.
+-   **PostgreSQL**: banco de dados obrigatório em todos os ambientes — SQLite e bancos in-memory não são suportados.
+-   **Pydantic**: validação de dados e gerenciamento de configurações.
+-   **uv**: gerenciador de pacotes e projetos Python.
 
 ## Contribuição
 
