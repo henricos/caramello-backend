@@ -9,14 +9,18 @@ Para runtime empacotado via Docker, use `docs/deploy.md`. Para fechar uma releas
 ## Pré-requisitos
 
 - **Python 3.10+**
-- **uv** — gerenciador de pacotes: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **PostgreSQL** rodando localmente (obrigatório — SQLite não é suportado)
+- **uv** - gerenciador de pacotes:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- **PostgreSQL** rodando localmente (obrigatório - SQLite não é suportado)
 
 ## 1. Instalação
 
 ```bash
 uv venv
 source .venv/bin/activate
+uv pip install -e .
 uv pip install -e ".[dev]"
 ```
 
@@ -28,6 +32,17 @@ cp .env.example .env
 
 Edite `.env` com as credenciais do seu banco PostgreSQL local. O `.env` nunca deve ser commitado.
 
+### Variáveis obrigatórias
+
+| Variável | Descrição | Padrão |
+| :--- | :--- | :--- |
+| `ENVIRONMENT` | Ambiente de execução (`development`, `qa`, `production`) | `development` |
+| `DB_HOST` | Host do banco de dados | `localhost` |
+| `DB_PORT` | Porta do banco de dados | `5432` |
+| `DB_USER` | Usuário do banco de dados | `postgres` |
+| `DB_PASSWORD` | Senha do banco de dados | `postgres` |
+| `DB_NAME` | Nome do banco de dados | `caramello_db` |
+
 ## 3. Banco de dados
 
 Crie o usuário e banco definidos no `.env` (requer superusuário do Postgres):
@@ -35,6 +50,12 @@ Crie o usuário e banco definidos no `.env` (requer superusuário do Postgres):
 ```bash
 ./bin/setup_db
 ```
+
+O script irá:
+1. Ler `DB_USER` e `DB_NAME` do `.env`.
+2. Verificar se o banco já existe.
+3. Se existir, oferecer o modo **RESET** (drop & create) para começar do zero.
+4. Se não existir, criar o usuário (role) e o banco com as permissões corretas.
 
 Aplique as migrações:
 
