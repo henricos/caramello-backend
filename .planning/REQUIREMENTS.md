@@ -117,44 +117,42 @@ Reconhecidos mas deferidos para milestones futuros.
 
 ## Traceability
 
-Será preenchido pelo agente de roadmap após a criação do ROADMAP.md.
-
 | Requisito | Fase | Status |
 |-----------|------|--------|
-| INFRA-01 | — | Pendente |
-| INFRA-02 | — | Pendente |
-| INFRA-03 | — | Pendente |
-| MODEL-01 | — | Pendente |
-| MODEL-02 | — | Pendente |
-| MODEL-03 | — | Pendente |
-| AUTH-01 | — | Pendente |
-| AUTH-02 | — | Pendente |
-| AUTH-03 | — | Pendente |
-| STRUCT-01 | — | Pendente |
-| STRUCT-02 | — | Pendente |
-| USER-01 | — | Pendente |
-| FAMILY-01 | — | Pendente |
-| FAMILY-02 | — | Pendente |
-| FAMILY-03 | — | Pendente |
-| FAMILY-04 | — | Pendente |
-| FAMILY-05 | — | Pendente |
-| FAMILY-06 | — | Pendente |
-| FAMILY-07 | — | Pendente |
-| MCP-01 | — | Pendente |
-| MCP-02 | — | Pendente |
-| DEPLOY-01 | — | Pendente |
-| DEPLOY-02 | — | Pendente |
-| DEPLOY-03 | — | Pendente |
-| TEST-01 | — | Pendente |
-| TEST-02 | — | Pendente |
-| TEST-03 | — | Pendente |
+| INFRA-01 | Phase 2 | Pendente |
+| INFRA-02 | Phase 1 | Pendente |
+| INFRA-03 | Phase 1 | Pendente |
+| MODEL-01 | Phase 1 | Pendente |
+| MODEL-02 | Phase 1 | Pendente |
+| MODEL-03 | Phase 1 | Pendente |
+| AUTH-01 | Phase 3 | Pendente |
+| AUTH-02 | Phase 3 | Pendente |
+| AUTH-03 | Phase 3 | Pendente |
+| STRUCT-01 | Phase 3 | Pendente |
+| STRUCT-02 | Phase 3 | Pendente |
+| USER-01 | Phase 3 | Pendente |
+| FAMILY-01 | Phase 4 | Pendente |
+| FAMILY-02 | Phase 4 | Pendente |
+| FAMILY-03 | Phase 4 | Pendente |
+| FAMILY-04 | Phase 4 | Pendente |
+| FAMILY-05 | Phase 4 | Pendente |
+| FAMILY-06 | Phase 4 | Pendente |
+| FAMILY-07 | Phase 4 | Pendente |
+| MCP-01 | Phase 5 | Pendente |
+| MCP-02 | Phase 5 | Pendente |
+| DEPLOY-01 | Phase 5 | Pendente |
+| DEPLOY-02 | Phase 5 | Pendente |
+| DEPLOY-03 | Phase 5 | Pendente |
+| TEST-01 | Phase 5 | Pendente |
+| TEST-02 | Phase 5 | Pendente |
+| TEST-03 | Phase 5 | Pendente |
 
 **Coverage:**
 - v1 requirements: 27 total
-- Mapped to phases: 0 (aguardando roadmap)
-- Unmapped: 27 ⚠️
+- Mapped to phases: 27 ✓
+- Unmapped: 0 ✓
 
 ---
 
 *Requirements definidos: 2026-05-23*
-*Last updated: 2026-05-23 após questionamento e pesquisa do M1*
+*Last updated: 2026-05-23 — traceability preenchida pelo agente de roadmap (5 fases, cobertura 100%)*
