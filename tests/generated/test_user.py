@@ -11,7 +11,7 @@ def client_fixture():
 
 def test_create_user(client: TestClient):
     # Dynamic sample data
-    data = {'full_name': 'test_string', 'email': 'test@example.com', 'phone_number': 'test_string', 'password': 'secret123', 'google_id': 'test_string', 'avatar_url': 'test_string', 'is_active': True}
+    data = {'idp_sub': 'test_string', 'email': 'test@example.com', 'name': 'test_string'}
     # Fix unique constraints
     if "email" in data: data["email"] = f"test_{uuid4()}@example.com"
     if "google_id" in data: data["google_id"] = f"gid_{uuid4()}"
@@ -27,7 +27,7 @@ def test_create_user(client: TestClient):
 
 def test_read_user(client: TestClient):
     # Dynamic sample data
-    data = {'full_name': 'test_string', 'email': 'test@example.com', 'phone_number': 'test_string', 'password': 'secret123', 'google_id': 'test_string', 'avatar_url': 'test_string', 'is_active': True}
+    data = {'idp_sub': 'test_string', 'email': 'test@example.com', 'name': 'test_string'}
     if "email" in data: data["email"] = f"test_{uuid4()}@example.com"
     if "google_id" in data: data["google_id"] = f"gid_{uuid4()}"
     
@@ -45,7 +45,7 @@ def test_read_user(client: TestClient):
 
 def test_read_user_list(client: TestClient):
     # Dynamic sample data
-    data = {'full_name': 'test_string', 'email': 'test@example.com', 'phone_number': 'test_string', 'password': 'secret123', 'google_id': 'test_string', 'avatar_url': 'test_string', 'is_active': True}
+    data = {'idp_sub': 'test_string', 'email': 'test@example.com', 'name': 'test_string'}
     if "email" in data: data["email"] = f"test_{uuid4()}@example.com"
     if "google_id" in data: data["google_id"] = f"gid_{uuid4()}"
 

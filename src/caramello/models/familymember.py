@@ -1,6 +1,6 @@
 from typing import Optional, List
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import EmailStr
 
@@ -11,7 +11,7 @@ class FamilyMember(SQLModel, table=True):
     user_id: Optional['int'] = Field(primary_key=True, foreign_key='user.id', default=None)
     family_id: Optional['int'] = Field(primary_key=True, foreign_key='family.id', default=None)
     role: 'str' = Field(max_length=20, default='member', nullable=False)
-    joined_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    joined_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
     user: 'User' = Relationship()
     family: 'Family' = Relationship()
