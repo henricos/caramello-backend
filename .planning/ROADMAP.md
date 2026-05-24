@@ -26,7 +26,7 @@ O Milestone 1 não é construção de features novas: é a correção da fundaç
   5. `.env.example` documenta `DATABASE_URL` com `familia_dev`/`familia_prod` e variáveis Keycloak
 **Plans**: 4 planos
 Plans:
-- [ ] 01-01-PLAN.md — Corrigir user.yaml e regenerar modelos (User Keycloak-aligned + datetime fix)
+- [x] 01-01-PLAN.md — Corrigir user.yaml e regenerar modelos (User Keycloak-aligned + datetime fix)
 - [ ] 01-02-PLAN.md — Remover artefatos obsoletos (schemas/, tests/generated/, api/v1/, arquivos vazios)
 - [ ] 01-03-PLAN.md — Configurar ruff/mypy, CORS e atualizar .env.example
 - [ ] 01-04-PLAN.md — Recriar migration Alembic (deletar antiga, gerar initial_schema)
@@ -84,7 +84,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infra Base | 0/4 | Not started | - |
+| 1. Infra Base | 0/4 | Planned | - |
 | 2. Stack Async | 0/? | Not started | - |
 | 3. Estrutura por Domínios e Autenticação | 0/? | Not started | - |
 | 4. Domínio Family | 0/? | Not started | - |
