@@ -24,7 +24,12 @@ O Milestone 1 não é construção de features novas: é a correção da fundaç
   3. `ruff check src/` e `mypy src/` passam sem erros — configurados em `pyproject.toml`
   4. Frontend React/Capacitor em `localhost` recebe respostas sem erro de CORS — `CORSMiddleware` presente em `main.py`
   5. `.env.example` documenta `DATABASE_URL` com `familia_dev`/`familia_prod` e variáveis Keycloak
-**Plans**: TBD
+**Plans**: 4 planos
+Plans:
+- [ ] 01-01-PLAN.md — Corrigir user.yaml e regenerar modelos (User Keycloak-aligned + datetime fix)
+- [ ] 01-02-PLAN.md — Remover artefatos obsoletos (schemas/, tests/generated/, api/v1/, arquivos vazios)
+- [ ] 01-03-PLAN.md — Configurar ruff/mypy, CORS e atualizar .env.example
+- [ ] 01-04-PLAN.md — Recriar migration Alembic (deletar antiga, gerar initial_schema)
 
 ### Phase 2: Stack Async
 **Goal**: Todas as operações de banco são genuinamente assíncronas — event loop nunca bloqueado, Alembic opera em modo async, DSL generator emite código async
@@ -79,7 +84,7 @@ O Milestone 1 não é construção de features novas: é a correção da fundaç
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infra Base | 0/? | Not started | - |
+| 1. Infra Base | 0/4 | Not started | - |
 | 2. Stack Async | 0/? | Not started | - |
 | 3. Estrutura por Domínios e Autenticação | 0/? | Not started | - |
 | 4. Domínio Family | 0/? | Not started | - |
