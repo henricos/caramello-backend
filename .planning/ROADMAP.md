@@ -27,8 +27,8 @@ O Milestone 1 não é construção de features novas: é a correção da fundaç
 **Plans**: 4 planos
 Plans:
 - [x] 01-01-PLAN.md — Corrigir user.yaml e regenerar modelos (User Keycloak-aligned + datetime fix)
-- [ ] 01-02-PLAN.md — Remover artefatos obsoletos (schemas/, tests/generated/, api/v1/, arquivos vazios)
-- [ ] 01-03-PLAN.md — Configurar ruff/mypy, CORS e atualizar .env.example
+- [x] 01-02-PLAN.md — Remover artefatos obsoletos (schemas/, tests/generated/, api/v1/, arquivos vazios)
+- [x] 01-03-PLAN.md — Configurar ruff/mypy, CORS e atualizar .env.example
 - [ ] 01-04-PLAN.md — Recriar migration Alembic (deletar antiga, gerar initial_schema)
 
 ### Phase 2: Stack Async
