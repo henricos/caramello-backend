@@ -1,6 +1,6 @@
 from typing import Optional, List
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import EmailStr
 from caramello.models.familymember import FamilyMember
@@ -14,8 +14,8 @@ class Family(SQLModel, table=True):
     name: 'str' = Field(max_length=100, nullable=False)
     description: Optional['str'] = Field(max_length=255, default=None)
     status: 'str' = Field(max_length=20, default='active', nullable=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
     members: list['User'] = Relationship(back_populates='families', link_model=FamilyMember)
     invitations: list['FamilyInvitation'] = Relationship(back_populates='family')

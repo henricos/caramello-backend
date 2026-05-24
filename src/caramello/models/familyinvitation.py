@@ -1,6 +1,6 @@
 from typing import Optional, List
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import EmailStr
 
@@ -14,7 +14,7 @@ class FamilyInvitation(SQLModel, table=True):
     inviter_id: 'int' = Field(foreign_key='user.id', nullable=False)
     invitee_email: EmailStr = Field(nullable=False)
     status: 'str' = Field(max_length=20, default='pending', nullable=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     expires_at: datetime = Field(nullable=False)
 
     family: 'Family' = Relationship(back_populates='invitations')

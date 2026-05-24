@@ -1,8 +1,8 @@
 # dsl/entities/user.yaml
-# Definition of the User entity, aligned with design guidelines.
+# Definition of the User entity, aligned with Keycloak authentication.
 
 name: User
-description: Represents a system user.
+description: Represents a system user, provisioned on first authentication via Keycloak.
 table_name: user
 
 fields:
@@ -18,45 +18,23 @@ fields:
     nullable: false
     description: "Unique public identifier (UUID)."
 
-  - name: full_name
+  - name: idp_sub
     type: str
-    max_length: 100
+    unique: true
     nullable: false
-    description: "User's full name."
+    description: "Subject claim from Keycloak JWT (sub). Used for JIT provisioning."
 
   - name: email
     type: EmailStr
     unique: true
     nullable: false
-    description: "Unique email address, used for login."
+    description: "Endereço de e-mail único do usuário."
 
-  - name: phone_number
+  - name: name
     type: str
-    max_length: 20
-    nullable: true
-    description: "Phone number (E.164 format recommended)."
-
-  - name: hashed_password
-    type: str
-    nullable: true
-    description: "Hashed password (null for users via OAuth)."
-
-  - name: google_id
-    type: str
-    unique: true
-    nullable: true
-    description: "User's unique Google ID (for OAuth)."
-
-  - name: avatar_url
-    type: str
-    nullable: true
-    description: "URL of the user's profile picture."
-
-  - name: is_active
-    type: bool
-    default: true
+    max_length: 100
     nullable: false
-    description: "Indicates if the user is active in the system."
+    description: "User's full name."
 
   - name: created_at
     type: datetime
