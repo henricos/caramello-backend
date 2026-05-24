@@ -33,4 +33,3 @@ class FamilyMemberUpdate(SQLModel):
     family_id: Optional['int'] = None
     role: Optional['str'] = None
     joined_at: Optional[datetime] = None
-

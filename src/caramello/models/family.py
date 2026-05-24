@@ -37,4 +37,3 @@ class FamilyUpdate(SQLModel):
     name: Optional['str'] = None
     description: Optional['str'] = None
     status: Optional['str'] = None
-
