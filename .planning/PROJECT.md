@@ -25,7 +25,6 @@ Um backend sólido, seguro e extensível onde cada novo domínio de negócio (fi
 
 <!-- Milestone 1 — Fundação e revisão geral. -->
 
-- [ ] Modelo `User` corrigido no DSL: remover `hashed_password`, `google_id`; adicionar `idp_sub` (JWT `sub` do Keycloak); PK UUID
 - [ ] Driver de banco migrado de `psycopg2-binary` para `asyncpg`; `session.py` reescrito para `AsyncSession`
 - [ ] DSL generator evoluído para suportar campo `domain` nos YAMLs e outputar em `src/caramello/domains/{domain}/`
 - [ ] Estrutura de código reorganizada para arquitetura por domínios (`domains/`, `shared/`)
@@ -35,10 +34,14 @@ Um backend sólido, seguro e extensível onde cada novo domínio de negócio (fi
 - [ ] Servidor MCP integrado via `fastapi-mcp` expondo serviços do domínio `familia`
 - [ ] Dockerfile e `compose.yaml` (padrão multi-stage, não-root user, inject via env — baseado em `hiring-pipeline`)
 - [ ] Infraestrutura de testes: `pytest` + `pytest-asyncio`, fixtures de banco isoladas, testes do domínio `familia`
-- [ ] `ruff` e `mypy` configurados em `pyproject.toml` (exigência de `docs/quality_rules.md`)
-- [ ] `.env.example` atualizado para `familia_dev` / `familia_prod` e variáveis do Keycloak
-- [ ] CORS configurado no `main.py`
-- [ ] Migração Alembic inicial recriada a partir do modelo correto
+
+### Validated in Phase 1 (2026-05-24)
+
+- ✓ Modelo `User` corrigido no DSL: `hashed_password`, `google_id` removidos; `idp_sub` (JWT `sub` do Keycloak) adicionado — `dsl/entities/user.yaml`, `src/caramello/models/user.py`
+- ✓ `ruff` e `mypy` configurados com postura strict em `pyproject.toml` — ambos passam sem erros
+- ✓ `.env.example` atualizado para `familia_dev` / `familia_prod` e variáveis do Keycloak
+- ✓ CORS configurado no `main.py` com `CORS_ORIGINS` lido do `settings`
+- ✓ Migração Alembic inicial recriada com schema correto (pending: validar no banco real via UAT)
 
 ### Out of Scope
 
@@ -101,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-23 after initialization*
+*Last updated: 2026-05-24 after Phase 1 completion (Infra Base)*
