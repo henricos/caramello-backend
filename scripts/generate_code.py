@@ -93,7 +93,7 @@ def get_field_definition(field: Dict[str, Any], is_optional: bool = False, force
         if field['default_factory'] == 'uuid4':
             field_args.append("default_factory=uuid4")
         elif field['default_factory'] == 'now_utc':
-            field_args.append("default_factory=datetime.utcnow")
+            field_args.append("default_factory=lambda: datetime.now(timezone.utc)")
     elif 'default' in field:
          val = field['default']
          if isinstance(val, str):
@@ -135,7 +135,7 @@ def generate_models(entity_data: Dict[str, Any]) -> str:
     imports = [
         "from typing import Optional, List",
         "from uuid import UUID, uuid4",
-        "from datetime import datetime",
+        "from datetime import datetime, timezone",
         "from sqlmodel import SQLModel, Field, Relationship",
         "from pydantic import EmailStr"
     ]
