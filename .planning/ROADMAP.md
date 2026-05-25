@@ -8,7 +8,7 @@ O Milestone 1 não é construção de features novas: é a correção da fundaç
 
 - [ ] **Phase 1: Infra Base** - Corrige modelo User, recria migration, configura ruff/mypy e CORS
 - [ ] **Phase 2: Stack Async** - Substitui psycopg2 por asyncpg, migra para AsyncSession e Alembic async, atualiza DSL generator
-- [x] **Phase 3: Estrutura por Domínios e Autenticação** - Reorganiza código para domains/shared, implementa shared/auth.py com Keycloak JWT e endpoint /user/me (completed 2026-05-25)
+- [x] **Phase 3: Estrutura por Domínios e Autenticação** - Reorganiza código para domains/shared, implementa shared/auth.py com Keycloak JWT e endpoint /user/me (completed 2026-05-25; gap closure via 03-06/03-07)
 - [ ] **Phase 4: Domínio Family** - Implementa todos os endpoints REST do domínio familia protegidos por auth
 - [ ] **Phase 5: MCP, Testes e Docker** - Integra fastapi-mcp, cria infraestrutura de testes isolados e containeriza a aplicação
 
@@ -58,17 +58,26 @@ Plans:
 **Requirements**: STRUCT-01, STRUCT-02, AUTH-01, AUTH-02, AUTH-03, USER-01
 **Success Criteria** (what must be TRUE):
   1. Código está em `src/caramello/user/`, `src/caramello/family/`, `src/caramello/shared/` — diretórios `models/` e `api/generated/` removidos
-  2. DSL generator com campo `domain` no YAML produz `models.py` e `schemas.py` dentro de `domains/{domain}/` sem editar arquivos gerados
+  2. DSL generator com campo `domain` no YAML produz `models.py` (ORM + schemas Read/Create/Update), `router.py` e `operations.py` dentro de `src/caramello/{domain}/` sem editar arquivos gerados
   3. `GET /user/me` com Bearer token Keycloak válido retorna `id`, `email`, `name` do usuário autenticado
   4. `GET /user/me` sem token retorna 401 — validação via `Depends(get_current_user)` em `shared/auth.py`
   5. Primeira request com token válido de novo usuário cria registro na tabela `users` automaticamente (JIT provisioning com `ON CONFLICT DO NOTHING`)
-**Plans**: 5 planos
+**Plans**: 7 planos (5 iniciais + 2 gap closure)
 Plans:
+**Wave 1**
 - [x] 03-01-PLAN.md — Wave 0: stubs de testes (test_generator, test_auth, test_user_operations, conftest)
 - [x] 03-02-PLAN.md — Wave 1: deps (PyJWT[crypto], httpx), Settings Keycloak, campo domain nos YAMLs, dsl/operations/user.yaml
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [x] 03-03-PLAN.md — Wave 2: evoluir scripts/generate_code.py (domain + operations + tipos modernos + auth no router)
 - [x] 03-04-PLAN.md — Wave 2: implementar src/caramello/shared/auth.py (JWKS cache + get_current_user + JIT provisioning)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [x] 03-05-PLAN.md — Wave 3: regenerar código, implementar /user/me, atualizar main.py + alembic + pyproject, remover paths antigos, checkpoint humano
+
+**Gap closure** *(após 03-VERIFICATION.md)*
+- [ ] 03-06-PLAN.md — Wave 1: corrigir generator para emitir `# noqa: UP037` (mapper bug), corrigir `_: User` em routers, destravar testes xfail/skip, ajustar ROADMAP SC2 (Gaps 1 e 3)
+- [ ] 03-07-PLAN.md — Wave 2 (autonomous: false): operador executa checklist E2E com Keycloak real + PostgreSQL, preenche 03-07-EVIDENCE.md (Gap 2)
 **UI hint**: no
 
 ### Phase 4: Domínio Family
@@ -102,6 +111,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Infra Base | 0/4 | Planned | - |
 | 2. Stack Async | 0/4 | Planned | - |
-| 3. Estrutura por Domínios e Autenticação | 5/5 | Complete   | 2026-05-25 |
+| 3. Estrutura por Domínios e Autenticação | 5/7 | Gap closure em progresso | 2026-05-25 (planos iniciais) |
 | 4. Domínio Family | 0/? | Not started | - |
 | 5. MCP, Testes e Docker | 0/? | Not started | - |
