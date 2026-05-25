@@ -177,7 +177,7 @@ async def get_current_user(
     # 5. JIT provisioning com ON CONFLICT DO NOTHING (D-12, AUTH-02)
     # Race-condition-safe: requests concorrentes do mesmo usuário não criam duplicatas.
     insert_stmt = (
-        pg_insert(User.__table__)
+        pg_insert(User.__table__)  # type: ignore[attr-defined]
         .values(idp_sub=idp_sub, email=email, name=name)
         .on_conflict_do_nothing(index_elements=["idp_sub"])
     )

@@ -63,4 +63,4 @@ class UserUpdate(SQLModel):
 # ---------------------------------------------------------------------------
 from caramello.family.models import FamilyMember as _FamilyMember  # noqa: E402
 
-User.__sqlmodel_relationships__["families"].link_model = _FamilyMember
+User.__sqlmodel_relationships__["families"].link_model = _FamilyMember  # type: ignore[attr-defined]
