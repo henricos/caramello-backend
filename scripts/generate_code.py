@@ -1,275 +1,308 @@
-import yaml
-import os
-from pathlib import Path
-from typing import Dict, Any, List, Set
-from caramello.core.config import settings
+"""DSL code generator for the Caramello backend.
 
-# Define base paths
+Reads `dsl/entities/*.yaml` and `dsl/operations/*.yaml`, emits code at
+`src/caramello/{domain}/` (models.py, router.py, operations.py).
+
+See .planning/phases/03-estrutura-por-dom-nios-e-autentica-o/03-RESEARCH.md
+for the design (Generator Evolution section).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import yaml
+
 ROOT_DIR = Path(__file__).parent.parent
 DSL_DIR = ROOT_DIR / "dsl"
 ENTITIES_DIR = DSL_DIR / "entities"
-MODELS_OUTPUT_DIR = ROOT_DIR / "src" / "caramello" / "models"
-API_OUTPUT_DIR = ROOT_DIR / "src" / "caramello" / "api" / "generated"
-TESTS_OUTPUT_DIR = ROOT_DIR / "tests" / "generated"
+OPERATIONS_DIR = DSL_DIR / "operations"
+SRC_DIR = ROOT_DIR / "src" / "caramello"
 
-# Standard Python types that don't need special imports or quotes
 STANDARD_TYPES = {"int", "str", "bool", "float", "list", "dict"}
 
+ANNOTATION_STUB = "# CARAMELLO-GENERATED: stub"
+ANNOTATION_IMPLEMENTED = "# CARAMELLO-GENERATED: implemented"
+
+
 def load_yaml(file_path: Path) -> Any:
-    """Loads a YAML file safely."""
+    """Carrega um arquivo YAML de forma segura."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             return yaml.safe_load(f)
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
         return None
 
-def map_type_to_python(dsl_type: str) -> str:
-    """Maps DSL types to Python/SQLModel types."""
-    clean_type = dsl_type.strip()
-    
-    # Handle list[T] or List[T]
-    if clean_type.lower().startswith("list["):
-        inner = clean_type[5:-1]
-        # Keep inner as string ref for forward declarations if it's an entity
-        if inner not in STANDARD_TYPES and inner not in ["UUID", "datetime", "EmailStr"]:
-             return f"list['{inner}']"
-        return f"list[{inner}]"
 
+def map_type_to_python(dsl_type: str) -> str:
+    """Maps DSL types to Python/SQLModel types (modern syntax)."""
+    clean_type = dsl_type.strip()
+    if clean_type.lower().startswith("list["):
+        inner = clean_type[5:-1].strip()
+        special = {"UUID", "datetime", "EmailStr"}
+        if inner not in STANDARD_TYPES and inner not in special:
+            return f'list["{inner}"]'
+        return f"list[{inner}]"
     type_map = {
         "uuid": "UUID",
         "string": "str",
+        "str": "str",
         "text": "str",
         "integer": "int",
+        "int": "int",
         "boolean": "bool",
+        "bool": "bool",
         "datetime": "datetime",
         "emailstr": "EmailStr",
     }
-    
     mapped = type_map.get(clean_type.lower())
     if mapped:
         return mapped
-        
-    # Assume it's an entity class name -> forward ref
-    return f"'{clean_type}'"
+    # Assume entity class name -> forward ref string
+    return f'"{clean_type}"'
 
-def get_field_definition(field: Dict[str, Any], is_optional: bool = False, force_optional: bool = False) -> str:
-    fname = field['name']
-    ftype = map_type_to_python(field['type'])
-    
-    # Determine nullability
-    is_nullable = field.get('nullable', True)
-    if field.get('primary_key'):
+
+def get_field_definition(field: dict[str, Any], force_optional: bool = False) -> str:
+    """Gera a definição de um campo SQLModel com Field(...)."""
+    fname = field["name"]
+    ftype = map_type_to_python(field["type"])
+    is_nullable = field.get("nullable", True)
+    if field.get("primary_key"):
         is_nullable = False
         force_optional = True
-    
     if force_optional:
         is_nullable = True
-        
-    # Construct type string
     type_str = ftype
-    
-    # Handle Optional wrapper
     if is_nullable:
-        # Check if it's a forward ref string, needing special handling?
-        # Standard typing: Optional['Entity'] is valid
-        if not type_str.startswith("Optional"):
-            type_str = f"Optional[{type_str}]"
-    
-    # Build Field() args
-    field_args = []
-    
-    if field.get('primary_key'):
+        type_str = f"{type_str} | None"
+    field_args: list[str] = []
+    if field.get("primary_key"):
         field_args.append("primary_key=True")
-    if field.get('foreign_key'):
-        field_args.append(f"foreign_key='{field['foreign_key']}'")
-    if field.get('unique'):
+    if field.get("foreign_key"):
+        field_args.append(f"foreign_key={field['foreign_key']!r}")
+    if field.get("unique"):
         field_args.append("unique=True")
-    if field.get('max_length'):
+    if field.get("max_length"):
         field_args.append(f"max_length={field['max_length']}")
-    
-    # Defaults
-    if field.get('default_factory'):
-        if field['default_factory'] == 'uuid4':
+    if field.get("default_factory"):
+        if field["default_factory"] == "uuid4":
             field_args.append("default_factory=uuid4")
-        elif field['default_factory'] == 'now_utc':
+        elif field["default_factory"] == "now_utc":
             field_args.append("default_factory=lambda: datetime.now(timezone.utc)")
-    elif 'default' in field:
-         val = field['default']
-         if isinstance(val, str):
-             field_args.append(f"default='{val}'")
-         else:
-             field_args.append(f"default={val}")
+    elif "default" in field:
+        val = field["default"]
+        if isinstance(val, str):
+            field_args.append(f"default={val!r}")
+        else:
+            field_args.append(f"default={val}")
     elif is_nullable or force_optional:
         field_args.append("default=None")
-        
-    # Nullable constraint in DB
     if not is_nullable:
         field_args.append("nullable=False")
-        
-    field_def = f"    {fname}: {type_str} = Field({', '.join(field_args)})"
-    return field_def
+    return f"    {fname}: {type_str} = Field({', '.join(field_args)})"
 
-def generate_relationships(relationships: List[Dict], entity_name: str) -> List[str]:
+
+def generate_relationships(
+    relationships: list[dict[str, Any]],
+    entity_name: str,
+    entity_domain: dict[str, str],
+) -> list[str]:
+    """Gera as linhas de Relationship() para uma entidade."""
     lines = []
     for rel in relationships:
-        rname = rel['name']
-        rtype = map_type_to_python(rel['type'])
-        
-        args = []
-        if rel.get('back_populates'):
-            args.append(f"back_populates='{rel['back_populates']}'")
-        if rel.get('link_model'):
+        rname = rel["name"]
+        rtype = map_type_to_python(rel["type"])
+
+        args: list[str] = []
+        if rel.get("back_populates"):
+            args.append(f"back_populates={rel['back_populates']!r}")
+        if rel.get("link_model"):
             args.append(f"link_model={rel['link_model']}")
-            
+
         lines.append(f"    {rname}: {rtype} = Relationship({', '.join(args)})")
     return lines
 
-def generate_models(entity_data: Dict[str, Any]) -> str:
-    name = entity_data['name']
-    table_name = entity_data['table_name']
-    fields = entity_data.get('fields', [])
-    relationships = entity_data.get('relationships', [])
-    description = entity_data.get('description', '')
 
-    imports = [
-        "from typing import Optional, List",
-        "from uuid import UUID, uuid4",
-        "from datetime import datetime, timezone",
-        "from sqlmodel import SQLModel, Field, Relationship",
-        "from pydantic import EmailStr"
-    ]
-    
-    # Check for link_model imports
+def generate_models(
+    entity_data: dict[str, Any],
+    entity_domain: dict[str, str],
+) -> str:
+    """Gera o bloco de 4 classes (Table, Read, Create, Update) para uma entidade."""
+    name = entity_data["name"]
+    table_name = entity_data["table_name"]
+    fields = entity_data.get("fields", [])
+    relationships = entity_data.get("relationships", [])
+    description = entity_data.get("description", "")
+    is_link = entity_data.get("is_link_model", False)
+    domain = entity_data.get("domain", "")
+
+    # Calcular quais imports serão necessários
+    needs_uuid = any(
+        f.get("type", "").lower() in ("uuid",) or f.get("default_factory") == "uuid4"
+        for f in fields
+    )
+    needs_datetime = any(
+        f.get("type", "").lower() == "datetime"
+        or f.get("default_factory") in ("now_utc",)
+        for f in fields
+    )
+    needs_emailstr = any(f.get("type", "").lower() == "emailstr" for f in fields)
+
+    # Imports cross-domain para link_models
+    cross_imports: list[str] = []
     for rel in relationships:
-        if rel.get('link_model'):
-            lm = rel['link_model']
-            imports.append(f"from caramello.models.{lm.lower()} import {lm}")
+        if rel.get("link_model"):
+            lm = rel["link_model"]
+            lm_domain = entity_domain.get(lm, "")
+            if lm_domain and lm_domain != domain:
+                cross_imports.append(
+                    f"from caramello.{lm_domain}.models import {lm}"
+                )
 
-    code = "\n".join(imports) + "\n\n"
+    # Imports cross-domain em relacionamentos (ex: User em family/models.py)
+    for rel in relationships:
+        rtype_raw = rel["type"].strip()
+        # Extrair nome base do tipo (sem list[...])
+        if rtype_raw.lower().startswith("list["):
+            inner = rtype_raw[5:-1].strip().strip('"')
+        else:
+            inner = rtype_raw.strip('"')
+        special2 = {"UUID", "datetime", "EmailStr"}
+        if inner and inner not in STANDARD_TYPES and inner not in special2:
+            rel_domain = entity_domain.get(inner, "")
+            if rel_domain and rel_domain != domain:
+                ci = f"from caramello.{rel_domain}.models import {inner}"
+                if ci not in cross_imports:
+                    cross_imports.append(ci)
 
-    # 1. Base Model (Common Fields)
-    # Exclude system fields (id, created_at, updated_at) and secrets (hashed_password) usually?
-    # Actually, Base usually has business fields. Let's separate carefully.
-    
-    base_fields = []
-    table_fields = [] # Extra fields just for table
-    
-    for f in fields:
-        fname = f['name']
-        # ID and Timestamp usually managed by system, but good to have in Table.
-        # UUID is common.
-        # Secrets like hashed_password should NOT be in Base if we use Base for Read/Create indiscriminately.
-        # Strategy:
-        # Base: Public regular fields (name, email, etc)
-        # Table: Base + ID + Timestamp + Secrets + Relationships
-        # Read: Base + ID + UUID + Timestamp
-        # Create: Base + Secrets (plain) - logic needed here.
-        
-        # Let's keep it simple: Define explicit sets.
-        pass
+    code = "from __future__ import annotations\n\n"
 
-    # Simplified generation strategy:
-    # Everything is defined in Table Model.
-    # Read/Create/Update are subsets generated dynamically.
-    
-    # -- MODEL (TABLE) --
+    # Imports de stdlib e terceiros
+    stdlib_imports: list[str] = []
+    if needs_datetime:
+        stdlib_imports.append("from datetime import datetime, timezone")
+    if needs_uuid:
+        stdlib_imports.append("from uuid import UUID, uuid4")
+    if stdlib_imports:
+        code += "\n".join(stdlib_imports) + "\n\n"
+
+    third_party: list[str] = []
+    if needs_emailstr:
+        third_party.append("from pydantic import EmailStr")
+    third_party.append("from sqlmodel import Field, Relationship, SQLModel")
+    code += "\n".join(third_party) + "\n"
+
+    if cross_imports:
+        code += "\n" + "\n".join(cross_imports) + "\n"
+
+    code += "\n\n"
+
+    # --- TABLE MODEL ---
     code += f"class {name}(SQLModel, table=True):\n"
-    code += f"    \"\"\"{description}\"\"\"\n"
-    code += f"    __tablename__ = \"{table_name}\"\n\n"
-    
+    code += f'    """{description}"""\n'
+    code += f'    __tablename__ = "{table_name}"\n\n'
+
     for f in fields:
         code += get_field_definition(f) + "\n"
-        
-    # Relationships
-    rel_lines = generate_relationships(relationships, name)
+
+    rel_lines = generate_relationships(relationships, name, entity_domain)
     if rel_lines:
         code += "\n" + "\n".join(rel_lines) + "\n"
-        
-    code += "\n"
-    
-    # -- READ MODEL --
-    # Omit sensitive fields (like hashed_password)
-    # Include all others + ID/UUID/Timestamps
-    code += f"class {name}Read(SQLModel):\n"
-    for f in fields:
-        if f['name'] in ["hashed_password", "id"]: continue
-        # Force optional? No, Read should reflect data state.
-        # We need types but without Field(table_args...)
-        # Just use simple annotation
-        ftype = map_type_to_python(f['type'])
-        if f.get('nullable', False) and not ftype.startswith("Optional"):
-            ftype = f"Optional[{ftype}]"
-        code += f"    {f['name']}: {ftype}\n"
+
     code += "\n"
 
-    # -- CREATE MODEL --
-    # Omit ID, CreatedAt, UpdatedAt (system managed)
-    # Include password (plain) if it exists as hashed_password? 
-    # For this generator, let's assume 'hashed_password' implies inputting 'password'. 
-    # But usually DSL defines 'hashed_password'. We'd need a 'password' field in Create.
-    # Let's just expose what is in DSL fields that are not system.
-    
-    code += f"class {name}Create(SQLModel):\n"
+    if is_link:
+        # Link models não têm Read/Create/Update
+        return code
+
+    # --- READ MODEL ---
+    code += f"class {name}Read(SQLModel):\n"
+    read_skip = {"id"}
+    any_read_field = False
     for f in fields:
-        if f['name'] in ['id', 'created_at', 'updated_at', 'uuid']: continue
-        
-        fname = f['name']
-        ftype = map_type_to_python(f['type'])
-        
-        # Special handling for password
-        if fname == 'hashed_password':
-            code += f"    password: str\n"
+        if f["name"] in read_skip:
             continue
-            
-        is_optional = f.get('nullable', False) or 'default' in f
-        if is_optional and not ftype.startswith("Optional"):
-            ftype = f"Optional[{ftype}]"
-            
+        any_read_field = True
+        ftype = map_type_to_python(f["type"])
+        nullable = f.get("nullable", True)
+        if nullable:
+            ftype = f"{ftype} | None"
+        code += f"    {f['name']}: {ftype}\n"
+    if not any_read_field:
+        code += "    pass\n"
+    code += "\n"
+
+    # --- CREATE MODEL ---
+    code += f"class {name}Create(SQLModel):\n"
+    create_skip = {"id", "created_at", "updated_at", "uuid"}
+    any_create_field = False
+    for f in fields:
+        if f["name"] in create_skip:
+            continue
+        any_create_field = True
+        fname = f["name"]
+        ftype = map_type_to_python(f["type"])
+        is_optional = (
+            f.get("nullable", False) or "default" in f or f.get("default_factory")
+        )
+        if is_optional:
+            ftype = f"{ftype} | None"
         line = f"    {fname}: {ftype}"
         if is_optional:
             line += " = None"
         code += line + "\n"
+    if not any_create_field:
+        code += "    pass\n"
     code += "\n"
 
-    # -- UPDATE MODEL --
-    # All fields optional
+    # --- UPDATE MODEL ---
     code += f"class {name}Update(SQLModel):\n"
+    update_skip = {"id", "uuid", "created_at", "updated_at"}
+    any_update_field = False
     for f in fields:
-        if f['name'] in ['id', 'uuid', 'created_at', 'updated_at']: continue
-        
-        fname = f['name']
-        ftype = map_type_to_python(f['type'])
-        
-        if fname == 'hashed_password':
-            code += f"    password: Optional[str] = None\n"
+        if f["name"] in update_skip:
             continue
-            
-        if not ftype.startswith("Optional"):
-            ftype = f"Optional[{ftype}]"
-            
-        code += f"    {fname}: {ftype} = None\n"
+        any_update_field = True
+        fname = f["name"]
+        ftype = map_type_to_python(f["type"])
+        code += f"    {fname}: {ftype} | None = None\n"
+    if not any_update_field:
+        code += "    pass\n"
     code += "\n"
 
     return code
 
-def generate_router(entity_data: Dict[str, Any]) -> str:
-    name = entity_data['name']
-    var_name = name.lower()
-    table_name = entity_data['table_name']
 
-    return f"""from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import select
+def generate_router(entity_data: dict[str, Any]) -> str:
+    """Gera o router CRUD async com auth para uma entidade."""
+    name = entity_data["name"]
+    var_name = name.lower()
+    table_name = entity_data["table_name"]
+    domain = entity_data.get("domain", "")
+
+    return f"""from __future__ import annotations
+
 from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from caramello.shared.auth import get_current_user
 from caramello.shared.database import get_session
-from caramello.models.{var_name} import {name}, {name}Read, {name}Create, {name}Update
+from caramello.{domain}.models import {name}, {name}Read, {name}Create, {name}Update
 
 router = APIRouter(prefix="/{table_name}", tags=["{name}"])
 
 
 @router.post("/", response_model={name}Read)
-async def create_{var_name}({var_name}_in: {name}Create, session: AsyncSession = Depends(get_session)):
+async def create_{var_name}(
+    {var_name}_in: {name}Create,
+    session: AsyncSession = Depends(get_session),
+    _: {name} = Depends(get_current_user),
+) -> {name}:
     db_obj = {name}.model_validate({var_name}_in)
     session.add(db_obj)
     await session.commit()
@@ -280,15 +313,20 @@ async def create_{var_name}({var_name}_in: {name}Create, session: AsyncSession =
 @router.get("/", response_model=list[{name}Read])
 async def read_{var_name}s(
     session: AsyncSession = Depends(get_session),
+    _: {name} = Depends(get_current_user),
     offset: int = 0,
     limit: int = Query(default=100, le=100),
-):
+) -> list[{name}]:
     result = await session.exec(select({name}).offset(offset).limit(limit))
-    return result.all()
+    return list(result.all())
 
 
 @router.get("/{{uuid}}", response_model={name}Read)
-async def read_{var_name}(uuid: UUID, session: AsyncSession = Depends(get_session)):
+async def read_{var_name}(
+    uuid: UUID,
+    session: AsyncSession = Depends(get_session),
+    _: {name} = Depends(get_current_user),
+) -> {name}:
     statement = select({name}).where({name}.uuid == uuid)
     result = await session.exec(statement)
     {var_name} = result.first()
@@ -298,17 +336,20 @@ async def read_{var_name}(uuid: UUID, session: AsyncSession = Depends(get_sessio
 
 
 @router.patch("/{{uuid}}", response_model={name}Read)
-async def update_{var_name}(uuid: UUID, {var_name}_in: {name}Update, session: AsyncSession = Depends(get_session)):
+async def update_{var_name}(
+    uuid: UUID,
+    {var_name}_in: {name}Update,
+    session: AsyncSession = Depends(get_session),
+    _: {name} = Depends(get_current_user),
+) -> {name}:
     statement = select({name}).where({name}.uuid == uuid)
     result = await session.exec(statement)
     db_obj = result.first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="{name} not found")
-
-    hero_data = {var_name}_in.model_dump(exclude_unset=True)
-    for key, value in hero_data.items():
+    update_data = {var_name}_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(db_obj, key, value)
-
     session.add(db_obj)
     await session.commit()
     await session.refresh(db_obj)
@@ -316,146 +357,316 @@ async def update_{var_name}(uuid: UUID, {var_name}_in: {name}Update, session: As
 
 
 @router.delete("/{{uuid}}")
-async def delete_{var_name}(uuid: UUID, session: AsyncSession = Depends(get_session)):
+async def delete_{var_name}(
+    uuid: UUID,
+    session: AsyncSession = Depends(get_session),
+    _: {name} = Depends(get_current_user),
+) -> dict[str, bool]:
     statement = select({name}).where({name}.uuid == uuid)
     result = await session.exec(statement)
     db_obj = result.first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="{name} not found")
-
     await session.delete(db_obj)
     await session.commit()
     return {{"ok": True}}
 """
 
-def generate_test(entity_data: Dict[str, Any]) -> str:
-    name = entity_data['name']
-    var_name = name.lower()
-    table_name = entity_data['table_name']
-    
-    # Need sample data for create
-    # Naive sample data generation
-    sample_data = {}
-    for f in entity_data.get('fields', []):
-        if f['name'] not in ['id', 'uuid', 'created_at', 'updated_at']:
-            # dumb defaults
-            if f['type'] == 'int': val = 1
-            elif f['type'] == 'str': val = "test_string"
-            elif f['type'] == 'EmailStr': val = "test@example.com"
-            elif f['type'] == 'bool': val = True
-            elif f['type'] == 'float': val = 1.0
-            elif f['type'] == 'datetime': val = "2026-01-01T00:00:00"
-            else: val = None
-            
-            if f['name'] == 'hashed_password':
-                sample_data['password'] = "secret123"
-            else:
-                sample_data[f['name']] = val
-    
-    return f"""import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import Session
-from uuid import uuid4
-from caramello.main import app
-from caramello.models.{var_name} import {name}
 
-@pytest.fixture(name="client")
-def client_fixture():
-    return TestClient(app)
+def generate_operations(op_data: dict[str, Any]) -> str:
+    """Gera stub de operations.py a partir de dsl/operations/{domain}.yaml."""
+    domain = op_data["domain"]
+    operations = op_data.get("operations", [])
+    # Deriva o nome da classe principal do domínio
+    domain_class = domain.title()
+    if domain == "user":
+        domain_class = "User"
 
-def test_create_{var_name}(client: TestClient):
-    # Dynamic sample data
-    data = {sample_data}
-    # Fix unique constraints
-    if "email" in data: data["email"] = f"test_{{uuid4()}}@example.com"
-    if "google_id" in data: data["google_id"] = f"gid_{{uuid4()}}"
-    if "uuid" in data: del data["uuid"] # Should not send UUID on create usually?
-    
-    response = client.post(
-        "/{table_name}/",
-        json=data
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["uuid"] is not None
+    header = f"""{ANNOTATION_STUB}
+from __future__ import annotations
 
-def test_read_{var_name}(client: TestClient):
-    # Dynamic sample data
-    data = {sample_data}
-    if "email" in data: data["email"] = f"test_{{uuid4()}}@example.com"
-    if "google_id" in data: data["google_id"] = f"gid_{{uuid4()}}"
-    
-    # Create first
-    create_res = client.post(
-        "/{table_name}/",
-        json=data
-    )
-    assert create_res.status_code == 200, create_res.text
-    uuid = create_res.json()["uuid"]
-    
-    response = client.get(f"/{table_name}/{{uuid}}")
-    assert response.status_code == 200
-    assert response.json()["uuid"] == uuid
+from fastapi import APIRouter, Depends
 
-def test_read_{var_name}_list(client: TestClient):
-    # Dynamic sample data
-    data = {sample_data}
-    if "email" in data: data["email"] = f"test_{{uuid4()}}@example.com"
-    if "google_id" in data: data["google_id"] = f"gid_{{uuid4()}}"
+from caramello.shared.auth import get_current_user
+from caramello.{domain}.models import {domain_class}, {domain_class}Read
 
-    client.post("/{table_name}/", json=data)
-    response = client.get("/{table_name}/")
-    assert response.status_code == 200
-    assert len(response.json()) > 0
+router = APIRouter(prefix="/{domain}", tags=["{domain_class}"])
+
 """
+    body_parts: list[str] = []
+    for op in operations:
+        name = op["name"]
+        method = op["method"].lower()
+        path = op["path"]
+        # Remove prefix do path para o decorator (prefix já está no APIRouter)
+        decorator_path = path
+        if decorator_path.startswith(f"/{domain}"):
+            decorator_path = decorator_path[len(f"/{domain}"):]
+        if not decorator_path:
+            decorator_path = "/"
+        description = op.get("description", "")
+        body_parts.append(
+            f'@router.{method}("{decorator_path}", response_model={domain_class}Read)\n'
+            f"async def {name}("
+            f"current_user: {domain_class} = Depends(get_current_user)"
+            f") -> {domain_class}:\n"
+            f'    """{description}"""\n'
+            f"    raise NotImplementedError\n"
+        )
+    return header + "\n\n".join(body_parts) + "\n"
 
-def main():
-    print("🚀 Starting Code Generation...")
-    
-    MODELS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    API_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    TESTS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
-    (MODELS_OUTPUT_DIR / "__init__.py").touch()
-    (API_OUTPUT_DIR / "__init__.py").touch()
-    (TESTS_OUTPUT_DIR / "__init__.py").touch()
-    
-    manifest_path = DSL_DIR / "manifest.yaml"
-    manifest = load_yaml(manifest_path)
-    
+
+def _consolidate_models(
+    entities: list[dict[str, Any]],
+    entity_domain: dict[str, str],
+) -> str:
+    """Consolida os modelos de todas as entidades de um domínio em um único arquivo."""
+    if not entities:
+        return ""
+
+    domain = entities[0].get("domain", "")
+
+    # Coletar imports únicos de cada entidade
+    all_imports: set[str] = set()
+    class_blocks: list[str] = []
+
+    for entity_data in entities:
+        block = generate_models(entity_data, entity_domain)
+        lines = block.split("\n")
+
+        # Separar imports do bloco de classes
+        import_lines: list[str] = []
+        class_lines: list[str] = []
+        in_classes = False
+
+        for line in lines:
+            if line.startswith("from __future__"):
+                # Sempre vai no topo — gerenciado separadamente
+                continue
+            if (
+                line.startswith("from ")
+                or line.startswith("import ")
+                or line == ""
+            ) and not in_classes:
+                circular = f"from caramello.{domain}.models import"
+                if (
+                    (line.startswith("from ") or line.startswith("import "))
+                    and circular not in line
+                ):
+                    import_lines.append(line)
+            elif line.startswith("class "):
+                in_classes = True
+                class_lines.append(line)
+            elif in_classes:
+                class_lines.append(line)
+
+        for imp in import_lines:
+            if imp:
+                all_imports.add(imp)
+
+        if class_lines:
+            # Remover linhas vazias no final
+            while class_lines and not class_lines[-1].strip():
+                class_lines.pop()
+            class_blocks.append("\n".join(class_lines))
+
+    # Montar arquivo final
+    result = "from __future__ import annotations\n\n"
+
+    # Ordenar imports: stdlib depois terceiros depois locais
+    stdlib = sorted(
+        i
+        for i in all_imports
+        if i.startswith("from datetime") or i.startswith("from uuid")
+    )
+    third_party = sorted(
+        i
+        for i in all_imports
+        if not i.startswith("from datetime")
+        and not i.startswith("from uuid")
+        and not i.startswith("from caramello")
+    )
+    local_imports = sorted(i for i in all_imports if i.startswith("from caramello"))
+
+    if stdlib:
+        result += "\n".join(stdlib) + "\n"
+    if third_party:
+        if stdlib:
+            result += "\n"
+        result += "\n".join(third_party) + "\n"
+    if local_imports:
+        result += "\n"
+        result += "\n".join(local_imports) + "\n"
+
+    result += "\n\n"
+    result += "\n\n\n".join(class_blocks)
+    result += "\n"
+
+    return result
+
+
+def _consolidate_routers(
+    domain: str,
+    non_link_entities: list[dict[str, Any]],
+) -> str:
+    """Consolida os routers de todas as entidades não-link de um domínio."""
+    if not non_link_entities:
+        return ""
+
+    # Coletar todos os imports únicos
+    all_imports: set[str] = set()
+    router_vars: list[str] = []
+    endpoint_blocks: list[str] = []
+
+    for entity_data in non_link_entities:
+        router_code = generate_router(entity_data)
+        lines = router_code.split("\n")
+
+        import_lines: list[str] = []
+        router_def_lines: list[str] = []
+        endpoint_lines: list[str] = []
+        in_endpoints = False
+        router_var = ""
+
+        for line in lines:
+            if line.startswith("from __future__"):
+                continue
+            is_import = line.startswith("from ") or line.startswith("import ")
+            if is_import and not in_endpoints:
+                import_lines.append(line)
+            elif line.startswith("router = APIRouter"):
+                # Renomear o router para evitar conflito de nomes
+                name = entity_data["name"]
+                var = f"{name.lower()}_router"
+                router_var = var
+                router_def_lines.append(line.replace("router = ", f"{var} = "))
+            elif in_endpoints or (
+                line.startswith("@") and not line.startswith("@router")
+            ):
+                in_endpoints = True
+                # Substituir @router. pelo nome específico
+                if line.startswith("@router."):
+                    line = line.replace("@router.", f"@{router_var}.")
+                endpoint_lines.append(line)
+            elif router_def_lines and line.startswith("@router"):
+                in_endpoints = True
+                line = line.replace("@router.", f"@{router_var}.")
+                endpoint_lines.append(line)
+            elif router_def_lines:
+                # Estamos após a definição do router
+                if line.startswith("@"):
+                    in_endpoints = True
+                    line = line.replace("@router.", f"@{router_var}.")
+                    endpoint_lines.append(line)
+                else:
+                    endpoint_lines.append(line)
+
+        for imp in import_lines:
+            if imp:
+                all_imports.add(imp)
+
+        if router_var:
+            router_vars.append(router_var)
+            router_def = "\n".join(router_def_lines)
+            # Remover linhas vazias no final dos endpoints
+            while endpoint_lines and not endpoint_lines[-1].strip():
+                endpoint_lines.pop()
+            endpoint_block = "\n".join(endpoint_lines)
+            endpoint_blocks.append(f"{router_def}\n\n{endpoint_block}")
+
+    # Montar arquivo final
+    result = "from __future__ import annotations\n\n"
+
+    stdlib = sorted(i for i in all_imports if i.startswith("from uuid"))
+    third_party = sorted(
+        i
+        for i in all_imports
+        if not i.startswith("from uuid") and not i.startswith("from caramello")
+    )
+    local_imports = sorted(i for i in all_imports if i.startswith("from caramello"))
+
+    if stdlib:
+        result += "\n".join(stdlib) + "\n"
+    if third_party:
+        if stdlib:
+            result += "\n"
+        result += "\n".join(third_party) + "\n"
+    if local_imports:
+        result += "\n"
+        result += "\n".join(local_imports) + "\n"
+
+    result += "\n\n"
+    result += "\n\n\n".join(endpoint_blocks)
+    result += "\n\n\n"
+
+    # Router raiz que agrega todos
+    result += "router = APIRouter()\n"
+    for var in router_vars:
+        result += f"router.include_router({var})\n"
+    result += "\n"
+
+    return result
+
+
+def main() -> None:
+    """Ponto de entrada do generator DSL."""
+    print("Starting Code Generation...")
+
+    manifest = load_yaml(DSL_DIR / "manifest.yaml")
     if not manifest:
         return
+    entity_files: list[str] = manifest.get("x-caramello-entities", [])
 
-    entity_ids = manifest.get('x-caramello-entities', [])
-    
-    for entity_file in entity_ids:
-        print(f"Processing {entity_file}...")
-        entity_path = ENTITIES_DIR / entity_file
-        data = load_yaml(entity_path)
-        if not data: continue
-        
-        name = data['name']
-        is_link = data.get('is_link_model', False)
-        
-        # 1. Model
-        model_code = generate_models(data)
-        with open(MODELS_OUTPUT_DIR / f"{name.lower()}.py", 'w') as f:
-            f.write(model_code)
-            
-        if is_link:
+    # Passo 1: construir entity_domain antes de gerar nada
+    entity_domain: dict[str, str] = {}
+    entities_by_domain: dict[str, list[dict[str, Any]]] = {}
+    for entity_file in entity_files:
+        data = load_yaml(ENTITIES_DIR / entity_file)
+        if not data:
             continue
-            
-        # 2. Router (Only for Main Entities)
-        router_code = generate_router(data)
-        with open(API_OUTPUT_DIR / f"{name.lower()}_router.py", 'w') as f:
-            f.write(router_code)
-            
-        # 3. Tests
-        test_code = generate_test(data)
-        with open(TESTS_OUTPUT_DIR / f"test_{name.lower()}.py", 'w') as f:
-            f.write(test_code)
-            
-    print("✅ Generation Complete.")
+        domain = data.get("domain")
+        if not domain:
+            raise ValueError(f"{entity_file} missing 'domain' field")
+        entity_domain[data["name"]] = domain
+        entities_by_domain.setdefault(domain, []).append(data)
+
+    # Passo 2: gerar models.py e router.py por domínio
+    for domain, entities in entities_by_domain.items():
+        domain_dir = SRC_DIR / domain
+        domain_dir.mkdir(parents=True, exist_ok=True)
+        (domain_dir / "__init__.py").touch()
+
+        # models.py: concatenar classes de todas as entidades do domínio
+        models_code = _consolidate_models(entities, entity_domain)
+        (domain_dir / "models.py").write_text(models_code)
+        print(f"  wrote {domain_dir}/models.py")
+
+        # router.py: concatenar routers das entidades não-link
+        non_link = [e for e in entities if not e.get("is_link_model")]
+        if non_link:
+            router_code = _consolidate_routers(domain, non_link)
+            (domain_dir / "router.py").write_text(router_code)
+            print(f"  wrote {domain_dir}/router.py")
+
+    # Passo 3: gerar operations.py por domínio (respeitando anotação)
+    if OPERATIONS_DIR.exists():
+        for op_file in sorted(OPERATIONS_DIR.glob("*.yaml")):
+            op_data = load_yaml(op_file)
+            if not op_data:
+                continue
+            domain = op_data["domain"]
+            ops_path = SRC_DIR / domain / "operations.py"
+            if ops_path.exists():
+                first_line = ops_path.read_text().splitlines()[0].strip()
+                if first_line == ANNOTATION_IMPLEMENTED:
+                    print(f"  skipping {ops_path} (implemented)")
+                    continue
+            ops_code = generate_operations(op_data)
+            ops_path.write_text(ops_code)
+            print(f"  wrote {ops_path}")
+
+    print("Generation Complete.")
+
 
 if __name__ == "__main__":
     main()
