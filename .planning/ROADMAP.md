@@ -8,7 +8,7 @@ O Milestone 1 não é construção de features novas: é a correção da fundaç
 
 - [ ] **Phase 1: Infra Base** - Corrige modelo User, recria migration, configura ruff/mypy e CORS
 - [ ] **Phase 2: Stack Async** - Substitui psycopg2 por asyncpg, migra para AsyncSession e Alembic async, atualiza DSL generator
-- [ ] **Phase 3: Estrutura por Domínios e Autenticação** - Reorganiza código para domains/shared, implementa shared/auth.py com Keycloak JWT e endpoint /user/me
+- [x] **Phase 3: Estrutura por Domínios e Autenticação** - Reorganiza código para domains/shared, implementa shared/auth.py com Keycloak JWT e endpoint /user/me (completed 2026-05-25)
 - [ ] **Phase 4: Domínio Family** - Implementa todos os endpoints REST do domínio familia protegidos por auth
 - [ ] **Phase 5: MCP, Testes e Docker** - Integra fastapi-mcp, cria infraestrutura de testes isolados e containeriza a aplicação
 
@@ -68,7 +68,7 @@ Plans:
 - [x] 03-02-PLAN.md — Wave 1: deps (PyJWT[crypto], httpx), Settings Keycloak, campo domain nos YAMLs, dsl/operations/user.yaml
 - [x] 03-03-PLAN.md — Wave 2: evoluir scripts/generate_code.py (domain + operations + tipos modernos + auth no router)
 - [x] 03-04-PLAN.md — Wave 2: implementar src/caramello/shared/auth.py (JWKS cache + get_current_user + JIT provisioning)
-- [ ] 03-05-PLAN.md — Wave 3: regenerar código, implementar /user/me, atualizar main.py + alembic + pyproject, remover paths antigos, checkpoint humano
+- [x] 03-05-PLAN.md — Wave 3: regenerar código, implementar /user/me, atualizar main.py + alembic + pyproject, remover paths antigos, checkpoint humano
 **UI hint**: no
 
 ### Phase 4: Domínio Family
@@ -102,6 +102,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Infra Base | 0/4 | Planned | - |
 | 2. Stack Async | 0/4 | Planned | - |
-| 3. Estrutura por Domínios e Autenticação | 0/5 | Planned | - |
+| 3. Estrutura por Domínios e Autenticação | 5/5 | Complete   | 2026-05-25 |
 | 4. Domínio Family | 0/? | Not started | - |
 | 5. MCP, Testes e Docker | 0/? | Not started | - |

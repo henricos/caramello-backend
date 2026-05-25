@@ -23,18 +23,18 @@ Requisitos do Milestone 1 — Fundação e revisão geral do projeto.
 
 ### Autenticação e Autorização
 
-- [ ] **AUTH-01**: Endpoints protegidos rejeitam requests sem Bearer token Keycloak válido com 401 — validação local via JWKS sem round-trip ao Keycloak por request
-- [ ] **AUTH-02**: Usuário é criado automaticamente no banco na primeira request com token válido (just-in-time provisioning) — operação atômica com `ON CONFLICT DO NOTHING`
-- [ ] **AUTH-03**: `shared/auth.py` isola completamente a lógica de validação JWT — qualquer endpoint usa `Depends(get_current_user)` para se proteger
+- [x] **AUTH-01**: Endpoints protegidos rejeitam requests sem Bearer token Keycloak válido com 401 — validação local via JWKS sem round-trip ao Keycloak por request
+- [x] **AUTH-02**: Usuário é criado automaticamente no banco na primeira request com token válido (just-in-time provisioning) — operação atômica com `ON CONFLICT DO NOTHING`
+- [x] **AUTH-03**: `shared/auth.py` isola completamente a lógica de validação JWT — qualquer endpoint usa `Depends(get_current_user)` para se proteger
 
 ### Estrutura por Domínios
 
-- [ ] **STRUCT-01**: Código organizado por domínio de negócio (`src/caramello/user/`, `src/caramello/family/`, `src/caramello/shared/`) em vez de camadas técnicas planas (`models/`, `api/generated/`) — routers gerados migrados para a nova estrutura
-- [ ] **STRUCT-02**: DSL generator produz `models.py` e `schemas.py` dentro do diretório do domínio correto quando o YAML contém o campo `domain` — sem editar arquivos gerados diretamente
+- [x] **STRUCT-01**: Código organizado por domínio de negócio (`src/caramello/user/`, `src/caramello/family/`, `src/caramello/shared/`) em vez de camadas técnicas planas (`models/`, `api/generated/`) — routers gerados migrados para a nova estrutura
+- [x] **STRUCT-02**: DSL generator produz `models.py` e `schemas.py` dentro do diretório do domínio correto quando o YAML contém o campo `domain` — sem editar arquivos gerados diretamente
 
 ### Domínio User
 
-- [ ] **USER-01**: Usuário autenticado pode consultar seu próprio perfil (`GET /user/me`) — retorna `id`, `email`, `name`
+- [x] **USER-01**: Usuário autenticado pode consultar seu próprio perfil (`GET /user/me`) — retorna `id`, `email`, `name`
 
 ### Domínio Family
 
