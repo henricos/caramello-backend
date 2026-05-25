@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
-    """TestClient da app FastAPI, importado tarde para evitar erros em waves anteriores."""
+    """TestClient da app FastAPI, importado tarde para evitar erros em waves anteriores."""  # noqa: E501
     from caramello.main import app
+
     return TestClient(app)
