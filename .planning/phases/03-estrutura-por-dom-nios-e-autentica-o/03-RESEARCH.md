@@ -696,17 +696,17 @@ Esta fase é uma reorganização de codebase (rename/refactor), mas não há run
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Valor real do claim `aud` no Keycloak existente (D-02)**
    - O que sabemos: CONTEXT.md D-02 diz para verificar antes de ativar validação de audience
-   - O que é incerto: Se Keycloak emite `aud=["account"]`, `aud=client_id`, ou array com múltiplos valores
-   - Recomendação: No plan, incluir uma task explícita de "inspecionar token JWT real" (decode base64 do payload sem verificar assinatura) antes de implementar a validação de audience. Começar com `options={"verify_aud": False}` e ativar depois de confirmar.
+   - O que era incerto: Se Keycloak emite `aud=["account"]`, `aud=client_id`, ou array com múltiplos valores
+   - **RESOLVED:** Inspeção do token real delegada ao checkpoint humano do Plan 05 Task 7 Passo 7. `shared/auth.py` inicia com `options={"verify_aud": False}` conforme D-02 — ativar após confirmar o valor real do claim `aud` no Keycloak da infra existente.
 
 2. **`session.execute()` vs `session.exec()` para INSERT dialect-specific**
    - O que sabemos: `session.exec()` é a interface SQLModel; `session.execute()` é SQLAlchemy nativo
-   - O que é incerto: SQLModel 0.0.38 AsyncSession aceita `session.execute(pg_insert_stmt)` diretamente?
-   - Recomendação: Testar na implementação; se não funcionar, usar `await session.connection()` para acesso ao `Connection` nativo.
+   - O que era incerto: SQLModel 0.0.38 AsyncSession aceita `session.execute(pg_insert_stmt)` diretamente?
+   - **RESOLVED:** Usar `session.execute(stmt)` (SQLAlchemy nativo) para dialect-specific PostgreSQL INSERT. Fallback documentado: se `session.execute()` não funcionar com AsyncSession, usar `await session.connection()` para acesso ao `Connection` nativo. Code examples incluídos nos planos.
 
 ---
 
