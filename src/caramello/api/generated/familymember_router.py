@@ -1,27 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
-from typing import List
-from uuid import UUID
-from datetime import datetime
-from caramello.database.session import get_session
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+from caramello.shared.database import get_session
 from caramello.models.familymember import FamilyMember
 
-router = APIRouter(prefix="/family_members", tags=["FamilyMember"])
+router = APIRouter(prefix="/family_member", tags=["FamilyMember"])
 
-@router.post("/", response_model=FamilyMember)
-def create_familymember(familymember: FamilyMember, session: Session = Depends(get_session)):
-    session.add(familymember)
-    session.commit()
-    session.refresh(familymember)
-    return familymember
 
-@router.get("/", response_model=List[FamilyMember])
-def read_familymembers(session: Session = Depends(get_session), offset: int = 0, limit: int = 100):
-    return session.exec(select(FamilyMember).offset(offset).limit(limit)).all()
+@router.get("/", response_model=list[FamilyMember])
+async def read_familymembers(
+    session: AsyncSession = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=100, le=100),
+):
+    result = await session.exec(select(FamilyMember).offset(offset).limit(limit))
+    return result.all()
+
 
 @router.get("/{user_id}", response_model=FamilyMember)
-def read_familymember(user_id: int, session: Session = Depends(get_session)):
-    familymember = session.get(FamilyMember, user_id)
+async def read_familymember(user_id: int, session: AsyncSession = Depends(get_session)):
+    statement = select(FamilyMember).where(FamilyMember.user_id == user_id)
+    result = await session.exec(statement)
+    familymember = result.first()
     if not familymember:
         raise HTTPException(status_code=404, detail="FamilyMember not found")
     return familymember
