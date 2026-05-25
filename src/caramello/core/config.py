@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     # CORS — list of allowed origins (comma-separated in env var)
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    # Keycloak Configuration (Required) — provisioned na infra existente
+    # JWKS URL será construída em shared/auth.py como
+    # f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
+    KEYCLOAK_URL: str
+    KEYCLOAK_REALM: str
+    KEYCLOAK_CLIENT_ID: str
+
     def model_post_init(self, __context: object) -> None:
         """Constrói DATABASE_URL a partir dos campos individuais."""
         password = f":{self.DB_PASSWORD}" if self.DB_PASSWORD else ""

@@ -11,31 +11,59 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DSL_ENTITIES_DIR = REPO_ROOT / "dsl" / "entities"
+DSL_OPERATIONS_DIR = REPO_ROOT / "dsl" / "operations"
 
 
 def test_user_yaml_has_domain_field():
     """Wave 1 (Plan 02): dsl/entities/user.yaml contém `domain: user`."""
-    data = yaml.safe_load((REPO_ROOT / "dsl/entities/user.yaml").read_text())
-    assert data.get("domain") == "user", "user.yaml deve declarar domain: user"
+    data = yaml.safe_load((DSL_ENTITIES_DIR / "user.yaml").read_text())
+    assert data.get("domain") == "user", (
+        f"user.yaml deve declarar domain: user; encontrado: {data.get('domain')!r}"
+    )
 
 
 def test_family_yamls_have_domain_field():
     """Wave 1 (Plan 02): family*.yaml declaram domain: family."""
     for fname in ("family.yaml", "family_member.yaml", "family_invitation.yaml"):
-        data = yaml.safe_load((REPO_ROOT / f"dsl/entities/{fname}").read_text())
-        assert data.get("domain") == "family", f"{fname} deve declarar domain: family"
+        data = yaml.safe_load((DSL_ENTITIES_DIR / fname).read_text())
+        assert data.get("domain") == "family", (
+            f"{fname} deve declarar domain: family; encontrado: {data.get('domain')!r}"
+        )
 
 
 def test_operations_user_yaml_exists():
-    """Wave 1 (Plan 02): dsl/operations/user.yaml existe e define operação get_me."""
-    path = REPO_ROOT / "dsl/operations/user.yaml"
-    assert path.exists(), "dsl/operations/user.yaml deve existir"
+    """Wave 1 (Plan 02): dsl/operations/user.yaml existe e define operação get_me em /user/me."""
+    path = DSL_OPERATIONS_DIR / "user.yaml"
+    assert path.exists(), f"dsl/operations/user.yaml deve existir em {path}"
     data = yaml.safe_load(path.read_text())
-    assert data.get("domain") == "user"
+    assert data.get("domain") == "user", (
+        f"domain deve ser 'user'; encontrado: {data.get('domain')!r}"
+    )
     ops = data.get("operations", [])
-    assert any(
-        op.get("name") == "get_me" and op.get("path") == "/user/me" for op in ops
-    ), "Operação get_me em /user/me deve estar definida"
+    assert len(ops) >= 1, f"deve ter pelo menos 1 operação; encontradas: {len(ops)}"
+    op_names = [op["name"] for op in ops]
+    assert "get_me" in op_names, f"operação 'get_me' não encontrada em {op_names}"
+    get_me = next(op for op in ops if op["name"] == "get_me")
+    assert get_me.get("method") == "GET", (
+        f"get_me.method deve ser 'GET'; encontrado: {get_me.get('method')!r}"
+    )
+    assert get_me.get("path") == "/user/me", (
+        f"get_me.path deve ser '/user/me'; encontrado: {get_me.get('path')!r}"
+    )
+    assert get_me.get("description"), "get_me.description não pode ser vazio"
+
+
+def test_schema_yaml_has_domain_property():
+    """Wave 1 (Plan 02): dsl/schema.yaml reconhece o campo domain como propriedade obrigatória."""
+    schema_path = REPO_ROOT / "dsl" / "schema.yaml"
+    schema = yaml.safe_load(schema_path.read_text())
+    assert "domain" in schema.get("properties", {}), (
+        "schema.yaml deve listar 'domain' em properties"
+    )
+    assert "domain" in schema.get("required", []), (
+        "schema.yaml deve listar 'domain' em required"
+    )
 
 
 @pytest.mark.xfail(
