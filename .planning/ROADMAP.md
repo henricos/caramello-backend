@@ -43,7 +43,7 @@ Plans:
 **Plans**: 4 planos
 Plans:
 **Wave 1**
-- [ ] 02-01-PLAN.md — Trocar driver: remover psycopg2-binary, adicionar asyncpg, atualizar sqlmodel para 0.0.38
+- [x] 02-01-PLAN.md — Trocar driver: remover psycopg2-binary, adicionar asyncpg, atualizar sqlmodel para 0.0.38
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 02-02-PLAN.md — Criar shared/database.py (engine + factory + get_session async) e ajustar prefixo postgresql+asyncpg em config.py
