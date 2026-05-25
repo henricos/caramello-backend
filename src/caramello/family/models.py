@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
-if TYPE_CHECKING:
-    from caramello.user.models import User
+from caramello.user.models import User
 
 
 class FamilyMember(SQLModel, table=True):
-    """Association table connecting Users and Families.
-
-    Defines the role of each member.
+    """
+    Association table connecting Users and Families, defining the role of each member.
     """
 
     __tablename__ = "family_member"
@@ -27,6 +24,9 @@ class FamilyMember(SQLModel, table=True):
     joined_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+    user: User = Relationship()
+    family: Family = Relationship()
 
 
 class Family(SQLModel, table=True):

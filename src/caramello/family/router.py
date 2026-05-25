@@ -122,9 +122,7 @@ async def read_familyinvitations(
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[FamilyInvitation]:
-    result = await session.exec(
-        select(FamilyInvitation).offset(offset).limit(limit)
-    )
+    result = await session.exec(select(FamilyInvitation).offset(offset).limit(limit))
     return list(result.all())
 
 

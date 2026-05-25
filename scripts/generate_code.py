@@ -108,8 +108,14 @@ def generate_relationships(
     relationships: list[dict[str, Any]],
     entity_name: str,
     entity_domain: dict[str, str],
+    skip_link_models: set[str] | None = None,
 ) -> list[str]:
-    """Gera as linhas de Relationship() para uma entidade."""
+    """Gera as linhas de Relationship() para uma entidade.
+
+    skip_link_models: set de nomes de link_model que serão late-bound (não emitir
+    no Relationship() inline para evitar NameError por import circular).
+    """
+    skip = skip_link_models or set()
     lines = []
     for rel in relationships:
         rname = rel["name"]
@@ -118,8 +124,9 @@ def generate_relationships(
         args: list[str] = []
         if rel.get("back_populates"):
             args.append(f"back_populates={rel['back_populates']!r}")
-        if rel.get("link_model"):
-            args.append(f"link_model={rel['link_model']}")
+        lm = rel.get("link_model")
+        if lm and lm not in skip:
+            args.append(f"link_model={lm}")
 
         lines.append(f"    {rname}: {rtype} = Relationship({', '.join(args)})")
     return lines
@@ -128,6 +135,7 @@ def generate_relationships(
 def generate_models(
     entity_data: dict[str, Any],
     entity_domain: dict[str, str],
+    skip_link_models: set[str] | None = None,
 ) -> str:
     """Gera o bloco de 4 classes (Table, Read, Create, Update) para uma entidade."""
     name = entity_data["name"]
@@ -201,13 +209,22 @@ def generate_models(
 
     # --- TABLE MODEL ---
     code += f"class {name}(SQLModel, table=True):\n"
-    code += f'    """{description}"""\n'
+    # Docstring: usa formato multi-linha quando necessário para evitar E501.
+    # Linha única: '    """texto"""' tem 4+3+len(desc)+3 chars.
+    _single_line = f'    """{description}"""'
+    if len(_single_line) <= 88:
+        code += f'    """{description}"""\n'
+    else:
+        # Multi-line: texto na linha seguinte
+        code += f'    """\n    {description}\n    """\n'
     code += f'    __tablename__ = "{table_name}"\n\n'
 
     for f in fields:
         code += get_field_definition(f) + "\n"
 
-    rel_lines = generate_relationships(relationships, name, entity_domain)
+    rel_lines = generate_relationships(
+        relationships, name, entity_domain, skip_link_models
+    )
     if rel_lines:
         code += "\n" + "\n".join(rel_lines) + "\n"
 
@@ -416,22 +433,86 @@ router = APIRouter(prefix="/{domain}", tags=["{domain_class}"])
     return header + "\n\n".join(body_parts) + "\n"
 
 
+def _build_domain_fk_graph(
+    all_entities: list[dict[str, Any]],
+    entity_domain: dict[str, str],
+) -> dict[str, set[str]]:
+    """Constrói grafo de dependências reais entre domínios via FKs nos fields.
+
+    Retorna: {domain_A: {domain_B}} — domain_A tem FK para domain_B.
+    """
+    # Mapear table_name → domain
+    table_to_domain: dict[str, str] = {}
+    for entity_data in all_entities:
+        table_to_domain[entity_data["table_name"]] = entity_data["domain"]
+
+    graph: dict[str, set[str]] = {}
+    for entity_data in all_entities:
+        src_domain = entity_data["domain"]
+        for field in entity_data.get("fields", []):
+            fk = field.get("foreign_key", "")
+            if fk:
+                # FK format: "table.column" e.g. "user.id"
+                fk_table = fk.split(".")[0]
+                dst_domain = table_to_domain.get(fk_table, "")
+                if dst_domain and dst_domain != src_domain:
+                    graph.setdefault(src_domain, set()).add(dst_domain)
+    return graph
+
+
 def _consolidate_models(
     entities: list[dict[str, Any]],
     entity_domain: dict[str, str],
+    all_entities: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Consolida os modelos de todas as entidades de um domínio em um único arquivo."""
+    """Consolida os modelos de todas as entidades de um domínio em um único arquivo.
+
+    Detecta ciclos de import entre domínios e usa TYPE_CHECKING + late-bind
+    para imports que causariam ImportError circular.
+    """
     if not entities:
         return ""
 
     domain = entities[0].get("domain", "")
 
+    # Reordenar entidades: link_models primeiro, depois as demais.
+    # Garante que FamilyMember seja definido antes de Family.
+    entities = sorted(entities, key=lambda e: (0 if e.get("is_link_model") else 1))
+
+    # Calcular grafo de dependências entre domínios para detectar ciclos
+    fk_graph: dict[str, set[str]] = {}
+    if all_entities:
+        fk_graph = _build_domain_fk_graph(all_entities, entity_domain)
+
+    def _would_create_cycle(import_domain: str) -> bool:
+        """Retorna True se importar de import_domain criaria um ciclo."""
+        # Ciclo: domain importa import_domain E import_domain já importa domain
+        import_domain_imports_from = fk_graph.get(import_domain, set())
+        # Se import_domain tem FK para domain, então import cross-domain é ciclo
+        return domain in import_domain_imports_from
+
     # Coletar imports únicos de cada entidade
     all_imports: set[str] = set()
+    late_bind_imports: set[str] = set()  # imports que causariam ciclo → TYPE_CHECKING
+    # late_bind_assignments: (entity, rel_name, link_model_class)
+    late_bind_assignments: list[tuple[str, str, str]] = []
     class_blocks: list[str] = []
 
     for entity_data in entities:
-        block = generate_models(entity_data, entity_domain)
+        # Pré-calcular quais link_models desta entidade serão late-bound
+        entity_skip_link_models: set[str] = set()
+        for rel in entity_data.get("relationships", []):
+            lm = rel.get("link_model")
+            if not lm:
+                continue
+            lm_domain = entity_domain.get(lm, "")
+            if lm_domain and lm_domain != domain and _would_create_cycle(lm_domain):
+                entity_skip_link_models.add(lm)
+                ent_name = entity_data["name"]
+                rel_name = rel["name"]
+                late_bind_assignments.append((ent_name, rel_name, lm))
+
+        block = generate_models(entity_data, entity_domain, entity_skip_link_models)
         lines = block.split("\n")
 
         # Separar imports do bloco de classes
@@ -441,7 +522,6 @@ def _consolidate_models(
 
         for line in lines:
             if line.startswith("from __future__"):
-                # Sempre vai no topo — gerenciado separadamente
                 continue
             if (
                 line.startswith("from ")
@@ -461,8 +541,17 @@ def _consolidate_models(
                 class_lines.append(line)
 
         for imp in import_lines:
-            if imp:
-                all_imports.add(imp)
+            if not imp:
+                continue
+            # Verificar se este import cross-domain criaria ciclo
+            if imp.startswith("from caramello."):
+                parts = imp.split(".")
+                if len(parts) >= 2:
+                    imp_domain = parts[1]  # caramello.{domain}.models
+                    if _would_create_cycle(imp_domain):
+                        late_bind_imports.add(imp)
+                        continue
+            all_imports.add(imp)
 
         if class_lines:
             # Remover linhas vazias no final
@@ -472,6 +561,10 @@ def _consolidate_models(
 
     # Montar arquivo final
     result = "from __future__ import annotations\n\n"
+
+    # Imports TYPE_CHECKING para tipos que causariam ciclo
+    if late_bind_imports:
+        result += "from typing import TYPE_CHECKING\n"
 
     # Ordenar imports: stdlib depois terceiros depois locais
     stdlib = sorted(
@@ -498,9 +591,41 @@ def _consolidate_models(
         result += "\n"
         result += "\n".join(local_imports) + "\n"
 
+    # Bloco TYPE_CHECKING para imports que causariam ciclo
+    if late_bind_imports:
+        result += "\n"
+        result += "if TYPE_CHECKING:\n"
+        for imp in sorted(late_bind_imports):
+            result += f"    {imp}\n"
+        result += "\n"
+
     result += "\n\n"
     result += "\n\n\n".join(class_blocks)
     result += "\n"
+
+    # Bloco de late-bind para link_models que causariam ciclo
+    if late_bind_assignments:
+        result += "\n\n"
+        result += "# ---------------------------------------------------------------\n"
+        result += "# Late-bind de link_models cross-domain — evita import circular.\n"
+        result += "# ---------------------------------------------------------------\n"
+        # Agrupar por domínio de destino
+        by_domain: dict[str, list[tuple[str, str, str]]] = {}
+        for ent, rel, cls in late_bind_assignments:
+            lm_domain = entity_domain.get(cls, "")
+            by_domain.setdefault(lm_domain, []).append((ent, rel, cls))
+        for lm_domain, assignments in sorted(by_domain.items()):
+            # Extrair classes únicas a importar
+            classes = sorted({cls for _, _, cls in assignments})
+            result += f"from caramello.{lm_domain}.models import "
+            result += ", ".join(f"{c} as _{c}" for c in classes)
+            result += "  # noqa: E402\n"
+            for ent, rel, cls in assignments:
+                result += (
+                    f'{ent}.__sqlmodel_relationships__["{rel}"]'
+                    f".link_model = _{cls}"
+                    "  # type: ignore[attr-defined]\n"
+                )
 
     return result
 
@@ -630,6 +755,11 @@ def main() -> None:
         entity_domain[data["name"]] = domain
         entities_by_domain.setdefault(domain, []).append(data)
 
+    # Coletar todas as entidades em lista plana para análise de ciclos
+    all_entities_flat = [
+        e for domain_entities in entities_by_domain.values() for e in domain_entities
+    ]
+
     # Passo 2: gerar models.py e router.py por domínio
     for domain, entities in entities_by_domain.items():
         domain_dir = SRC_DIR / domain
@@ -637,7 +767,7 @@ def main() -> None:
         (domain_dir / "__init__.py").touch()
 
         # models.py: concatenar classes de todas as entidades do domínio
-        models_code = _consolidate_models(entities, entity_domain)
+        models_code = _consolidate_models(entities, entity_domain, all_entities_flat)
         (domain_dir / "models.py").write_text(models_code)
         print(f"  wrote {domain_dir}/models.py")
 
@@ -665,7 +795,29 @@ def main() -> None:
             ops_path.write_text(ops_code)
             print(f"  wrote {ops_path}")
 
+    # Passo 4: formatar código gerado com ruff (fix + format) para garantir conformidade
+    _run_ruff_fix(SRC_DIR)
+
     print("Generation Complete.")
+
+
+def _run_ruff_fix(src_dir: Path) -> None:
+    """Executa ruff --fix e ruff format nos arquivos gerados."""
+    import subprocess
+
+    dirs = [str(src_dir / d) for d in ("user", "family") if (src_dir / d).exists()]
+    if not dirs:
+        return
+    # 1. Aplicar fixes automáticos (isort, UP037, etc.)
+    subprocess.run(
+        ["python", "-m", "ruff", "check", "--fix", "--unsafe-fixes", *dirs],
+        capture_output=True,
+    )
+    # 2. Formatar (line length)
+    subprocess.run(
+        ["python", "-m", "ruff", "format", *dirs],
+        capture_output=True,
+    )
 
 
 if __name__ == "__main__":

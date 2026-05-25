@@ -53,14 +53,9 @@ class UserUpdate(SQLModel):
     name: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# Late-bind do link_model para o relacionamento M:M User <-> Family.
-# FamilyMember (definido em caramello.family.models) não pode ser importado
-# diretamente acima porque criaria um ciclo: family → user → family.
-# A solução é importar FamilyMember apenas aqui, após a definição de User,
-# e associá-lo via RelationshipInfo.link_model.
-# Isso garante que SQLModel/SQLAlchemy saiba montar a query M:M corretamente.
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------
+# Late-bind de link_models cross-domain — evita import circular.
+# ---------------------------------------------------------------
 from caramello.family.models import FamilyMember as _FamilyMember  # noqa: E402
 
 User.__sqlmodel_relationships__["families"].link_model = _FamilyMember  # type: ignore[attr-defined]
