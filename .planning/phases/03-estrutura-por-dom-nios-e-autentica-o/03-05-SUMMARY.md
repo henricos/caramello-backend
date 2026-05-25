@@ -53,7 +53,7 @@ decisions:
 metrics:
   duration: "~90 minutos"
   completed_date: "2026-05-25"
-  tasks_completed: 6
+  tasks_completed: 7
   tasks_total: 7
   files_created: 5
   files_modified: 7
@@ -74,7 +74,7 @@ metrics:
 | 3 (generator fix) | Corrigir generator para evitar imports circulares + ruff-fix | 42c2f3c | scripts/generate_code.py + arquivos gerados |
 | 5 | Implementar GET /user/me — anotação implemented | 42c2f3c | src/caramello/user/operations.py |
 | 6 | Remover diretórios obsoletos + main.py com lifespan | 76d34b9 | src/caramello/main.py + remoção de 17 arquivos |
-| 7 | Checkpoint humano E2E | — | Aguardando operador |
+| 7 | Checkpoint humano E2E | Aprovado (diferido) | Verificação E2E adiada para depois — operador aprovou sem testar agora |
 
 ## Verificação Final
 
@@ -163,9 +163,9 @@ Nenhum stub identificado. O `user/operations.py` está marcado como `implemented
 
 ## Status do Checkpoint (Task 7)
 
-O agente executou tasks 1-6 automaticamente. O **Task 7 aguarda verificação humana E2E** com Keycloak real e banco PostgreSQL.
+O operador **aprovou** o checkpoint diferindo a verificação E2E para depois. A Phase 3 está fechada do ponto de vista de implementação — todos os checks automatizados passaram (ruff, mypy, pytest).
 
-Itens a verificar pelo operador:
+A verificação E2E com Keycloak real e banco PostgreSQL continua pendente como item diferido:
 1. Boot da app com `uv run uvicorn caramello.main:app --reload` — JWKS fetch no startup
 2. `GET /user/me` sem token → 401/403
 3. `GET /user/me` com Bearer token Keycloak válido → 200 com uuid/email/name/idp_sub
