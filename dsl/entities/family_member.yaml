@@ -2,6 +2,7 @@
 # Definition of the FamilyMember association table.
 
 name: FamilyMember
+domain: family
 description: "Association table connecting Users and Families, defining the role of each member."
 table_name: family_member
 is_link_model: true # Indicates it is an association model for a M:M relationship

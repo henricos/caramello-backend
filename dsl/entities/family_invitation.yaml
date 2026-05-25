@@ -2,6 +2,7 @@
 # Definition of the FamilyInvitation entity.
 
 name: FamilyInvitation
+domain: family
 description: "Manages the invitation flow for families."
 table_name: family_invitation
 
