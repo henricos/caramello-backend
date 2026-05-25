@@ -50,7 +50,7 @@ Plans:
 - [x] 02-03-PLAN.md — Migrar alembic/env.py para modo online async com async_engine_from_config + NullPool + dispose
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 02-04-PLAN.md — Atualizar generate_router() para template async, regenerar 4 routers, deletar database/session.py legado
+- [x] 02-04-PLAN.md — Atualizar generate_router() para template async, regenerar 4 routers, deletar database/session.py legado
 
 ### Phase 3: Estrutura por Domínios e Autenticação
 **Goal**: Código organizado por domínio de negócio, camada de auth isolada em shared/auth.py, e usuário autenticado pode consultar seu próprio perfil
