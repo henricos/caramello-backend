@@ -40,7 +40,12 @@ Plans:
   2. `shared/database.py` usa `create_async_engine` + `async_sessionmaker` + `AsyncSession` de `sqlalchemy.ext.asyncio`
   3. `alembic/env.py` usa `async_engine_from_config` com `NullPool` — `alembic upgrade head` conclui sem travar
   4. DSL generator produz routers com `async def` — endpoints gerados não bloqueiam o event loop
-**Plans**: TBD
+**Plans**: 4 planos
+Plans:
+- [ ] 02-01-PLAN.md — Trocar driver: remover psycopg2-binary, adicionar asyncpg, atualizar sqlmodel para 0.0.38
+- [ ] 02-02-PLAN.md — Criar shared/database.py (engine + factory + get_session async) e ajustar prefixo postgresql+asyncpg em config.py
+- [ ] 02-03-PLAN.md — Migrar alembic/env.py para modo online async com async_engine_from_config + NullPool + dispose
+- [ ] 02-04-PLAN.md — Atualizar generate_router() para template async, regenerar 4 routers, deletar database/session.py legado
 
 ### Phase 3: Estrutura por Domínios e Autenticação
 **Goal**: Código organizado por domínio de negócio, camada de auth isolada em shared/auth.py, e usuário autenticado pode consultar seu próprio perfil
@@ -85,7 +90,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infra Base | 0/4 | Planned | - |
-| 2. Stack Async | 0/? | Not started | - |
+| 2. Stack Async | 0/4 | Planned | - |
 | 3. Estrutura por Domínios e Autenticação | 0/? | Not started | - |
 | 4. Domínio Family | 0/? | Not started | - |
 | 5. MCP, Testes e Docker | 0/? | Not started | - |
