@@ -66,8 +66,8 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Wave 0: stubs de testes (test_generator, test_auth, test_user_operations, conftest)
 - [x] 03-02-PLAN.md — Wave 1: deps (PyJWT[crypto], httpx), Settings Keycloak, campo domain nos YAMLs, dsl/operations/user.yaml
-- [ ] 03-03-PLAN.md — Wave 2: evoluir scripts/generate_code.py (domain + operations + tipos modernos + auth no router)
-- [ ] 03-04-PLAN.md — Wave 2: implementar src/caramello/shared/auth.py (JWKS cache + get_current_user + JIT provisioning)
+- [x] 03-03-PLAN.md — Wave 2: evoluir scripts/generate_code.py (domain + operations + tipos modernos + auth no router)
+- [x] 03-04-PLAN.md — Wave 2: implementar src/caramello/shared/auth.py (JWKS cache + get_current_user + JIT provisioning)
 - [ ] 03-05-PLAN.md — Wave 3: regenerar código, implementar /user/me, atualizar main.py + alembic + pyproject, remover paths antigos, checkpoint humano
 **UI hint**: no
 
