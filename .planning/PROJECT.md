@@ -104,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-24 after Phase 1 completion (Infra Base)*
+*Last updated: 2026-05-25 after Phase 2 completion (Stack Async) — asyncpg driver, shared/database.py async, alembic async, 4 routers async regenerados. ruff/mypy passam. Próxima fase: estrutura por domínios e autenticação.*
