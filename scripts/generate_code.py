@@ -109,13 +109,19 @@ def generate_relationships(
     entity_name: str,
     entity_domain: dict[str, str],
     skip_link_models: set[str] | None = None,
+    late_bound_types: set[str] | None = None,
 ) -> list[str]:
     """Gera as linhas de Relationship() para uma entidade.
 
     skip_link_models: set de nomes de link_model que serão late-bound (não emitir
     no Relationship() inline para evitar NameError por import circular).
+    late_bound_types: set de classes referenciadas no rel.type que estão apenas
+    sob TYPE_CHECKING (não disponíveis em runtime). Necessário para emitir
+    `# noqa: UP037` e impedir que `ruff --unsafe-fixes` remova as aspas da
+    anotação `list["Foo"]`, o que quebraria o mapper SQLAlchemy.
     """
     skip = skip_link_models or set()
+    late_bound = late_bound_types or set()
     lines = []
     for rel in relationships:
         rname = rel["name"]
@@ -128,7 +134,21 @@ def generate_relationships(
         if lm and lm not in skip:
             args.append(f"link_model={lm}")
 
-        lines.append(f"    {rname}: {rtype} = Relationship({', '.join(args)})")
+        # Detectar se rtype referencia classe late-bound (sob TYPE_CHECKING).
+        # Nesse caso anotar `# noqa: UP037` para impedir que ruff
+        # `--unsafe-fixes` (rule UP037) remova as aspas. `Family` em
+        # `list["Family"]` precisa permanecer string para o mapper SQLAlchemy
+        # resolver via class registry em runtime.
+        rtype_raw = rel["type"].strip()
+        if rtype_raw.lower().startswith("list["):
+            inner = rtype_raw[5:-1].strip().strip('"')
+        else:
+            inner = rtype_raw.strip('"')
+        needs_noqa = inner in late_bound
+        line = f"    {rname}: {rtype} = Relationship({', '.join(args)})"
+        if needs_noqa:
+            line += "  # noqa: UP037"
+        lines.append(line)
     return lines
 
 
@@ -136,6 +156,7 @@ def generate_models(
     entity_data: dict[str, Any],
     entity_domain: dict[str, str],
     skip_link_models: set[str] | None = None,
+    late_bound_types: set[str] | None = None,
 ) -> str:
     """Gera o bloco de 4 classes (Table, Read, Create, Update) para uma entidade."""
     name = entity_data["name"]
@@ -223,7 +244,7 @@ def generate_models(
         code += get_field_definition(f) + "\n"
 
     rel_lines = generate_relationships(
-        relationships, name, entity_domain, skip_link_models
+        relationships, name, entity_domain, skip_link_models, late_bound_types
     )
     if rel_lines:
         code += "\n" + "\n".join(rel_lines) + "\n"
@@ -512,7 +533,33 @@ def _consolidate_models(
                 rel_name = rel["name"]
                 late_bind_assignments.append((ent_name, rel_name, lm))
 
-        block = generate_models(entity_data, entity_domain, entity_skip_link_models)
+        # Extrair nomes de classes que entrarão em TYPE_CHECKING (late-bound).
+        # Necessário para que generate_relationships emita `# noqa: UP037` nas
+        # linhas cujo tipo referencia essas classes (UP037 removeria as aspas
+        # de `list["Family"]` e quebraria o mapper SQLAlchemy).
+        entity_late_bound: set[str] = set()
+        for rel in entity_data.get("relationships", []):
+            rtype_raw = rel["type"].strip()
+            if rtype_raw.lower().startswith("list["):
+                inner = rtype_raw[5:-1].strip().strip('"')
+            else:
+                inner = rtype_raw.strip('"')
+            special3 = {"UUID", "datetime", "EmailStr"}
+            if inner and inner not in STANDARD_TYPES and inner not in special3:
+                rel_domain = entity_domain.get(inner, "")
+                if (
+                    rel_domain
+                    and rel_domain != domain
+                    and _would_create_cycle(rel_domain)
+                ):
+                    entity_late_bound.add(inner)
+
+        block = generate_models(
+            entity_data,
+            entity_domain,
+            entity_skip_link_models,
+            entity_late_bound,
+        )
         lines = block.split("\n")
 
         # Separar imports do bloco de classes
