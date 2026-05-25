@@ -257,65 +257,74 @@ def generate_router(entity_data: Dict[str, Any]) -> str:
     name = entity_data['name']
     var_name = name.lower()
     table_name = entity_data['table_name']
-    
+
     return f"""from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
-from typing import List
+from sqlmodel import select
 from uuid import UUID
-from caramello.database.session import get_session
+from sqlmodel.ext.asyncio.session import AsyncSession
+from caramello.shared.database import get_session
 from caramello.models.{var_name} import {name}, {name}Read, {name}Create, {name}Update
 
 router = APIRouter(prefix="/{table_name}", tags=["{name}"])
 
+
 @router.post("/", response_model={name}Read)
-def create_{var_name}({var_name}_in: {name}Create, session: Session = Depends(get_session)):
+async def create_{var_name}({var_name}_in: {name}Create, session: AsyncSession = Depends(get_session)):
     db_obj = {name}.model_validate({var_name}_in)
     session.add(db_obj)
-    session.commit()
-    session.refresh(db_obj)
+    await session.commit()
+    await session.refresh(db_obj)
     return db_obj
 
-@router.get("/", response_model=List[{name}Read])
-def read_{var_name}s(
-    session: Session = Depends(get_session),
+
+@router.get("/", response_model=list[{name}Read])
+async def read_{var_name}s(
+    session: AsyncSession = Depends(get_session),
     offset: int = 0,
-    limit: int = Query(default=100, le=100)
+    limit: int = Query(default=100, le=100),
 ):
-    return session.exec(select({name}).offset(offset).limit(limit)).all()
+    result = await session.exec(select({name}).offset(offset).limit(limit))
+    return result.all()
+
 
 @router.get("/{{uuid}}", response_model={name}Read)
-def read_{var_name}(uuid: UUID, session: Session = Depends(get_session)):
+async def read_{var_name}(uuid: UUID, session: AsyncSession = Depends(get_session)):
     statement = select({name}).where({name}.uuid == uuid)
-    {var_name} = session.exec(statement).first()
+    result = await session.exec(statement)
+    {var_name} = result.first()
     if not {var_name}:
         raise HTTPException(status_code=404, detail="{name} not found")
     return {var_name}
 
+
 @router.patch("/{{uuid}}", response_model={name}Read)
-def update_{var_name}(uuid: UUID, {var_name}_in: {name}Update, session: Session = Depends(get_session)):
+async def update_{var_name}(uuid: UUID, {var_name}_in: {name}Update, session: AsyncSession = Depends(get_session)):
     statement = select({name}).where({name}.uuid == uuid)
-    db_obj = session.exec(statement).first()
+    result = await session.exec(statement)
+    db_obj = result.first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="{name} not found")
-        
+
     hero_data = {var_name}_in.model_dump(exclude_unset=True)
     for key, value in hero_data.items():
         setattr(db_obj, key, value)
-        
+
     session.add(db_obj)
-    session.commit()
-    session.refresh(db_obj)
+    await session.commit()
+    await session.refresh(db_obj)
     return db_obj
 
+
 @router.delete("/{{uuid}}")
-def delete_{var_name}(uuid: UUID, session: Session = Depends(get_session)):
+async def delete_{var_name}(uuid: UUID, session: AsyncSession = Depends(get_session)):
     statement = select({name}).where({name}.uuid == uuid)
-    db_obj = session.exec(statement).first()
+    result = await session.exec(statement)
+    db_obj = result.first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="{name} not found")
-        
-    session.delete(db_obj)
-    session.commit()
+
+    await session.delete(db_obj)
+    await session.commit()
     return {{"ok": True}}
 """
 

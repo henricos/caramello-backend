@@ -37,3 +37,4 @@ class UserUpdate(SQLModel):
     idp_sub: Optional['str'] = None
     email: Optional[EmailStr] = None
     name: Optional['str'] = None
+

@@ -42,3 +42,4 @@ class FamilyInvitationUpdate(SQLModel):
     invitee_email: Optional[EmailStr] = None
     status: Optional['str'] = None
     expires_at: Optional[datetime] = None
+
