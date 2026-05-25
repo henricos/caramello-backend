@@ -453,17 +453,15 @@ async def delete_user(uuid: UUID, session: AsyncSession = Depends(get_session)):
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **mypy com `AsyncSession` do SQLModel**
+1. **mypy com `AsyncSession` do SQLModel** — RESOLVED: critério de aceitação `uv run mypy src/` adicionado explicitamente nas Plans 02-02 e 02-04. `ignore_missing_imports = true` já configurado mascara erros de stub.
    - O que sabemos: mypy com `disallow_untyped_defs = true` (configuração atual) vai verificar o tipo de retorno de `get_session()`. O type hint `AsyncGenerator[AsyncSession, None]` é necessário.
-   - O que é incerto: se mypy levanta erros específicos com a `AsyncSession` do SQLModel (há issues históricos no GitHub sobre isso). A configuração atual tem `ignore_missing_imports = true` que pode mascarar problemas.
-   - Recomendação: O planner deve incluir `uv run mypy src/` como critério de aceitação explícito após o Wave que cria `shared/database.py`, antes de continuar.
+   - O que era incerto: se mypy levanta erros específicos com a `AsyncSession` do SQLModel. Mitigado por `ignore_missing_imports = true` e verificação explícita nos planos.
 
-2. **asyncpg-stubs para mypy**
+2. **asyncpg-stubs para mypy** — RESOLVED: `ignore_missing_imports = true` mascara ausência de stubs. Fallback documentado: se mypy reclamar, adicionar `asyncpg-stubs` como dev dependency.
    - O que sabemos: `asyncpg-stubs` não está instalado. `ignore_missing_imports = true` deve mascarar erros de stub.
-   - O que é incerto: se a ausência de stubs causa erros em algum path de código que passa por asyncpg.
-   - Recomendação: Não instalar por padrão; se mypy reclamar, adicionar `asyncpg-stubs` como dev dependency.
+   - O que era incerto: se a ausência de stubs causa erros em algum path de código que passa por asyncpg.
 
 ---
 
