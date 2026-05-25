@@ -320,6 +320,18 @@ def generate_router(entity_data: dict[str, Any]) -> str:
     table_name = entity_data["table_name"]
     domain = entity_data.get("domain", "")
 
+    # Import de User necessário para `_: User = Depends(get_current_user)`.
+    # No domain 'user', a classe já é importada via linha principal de modelos.
+    if domain == "user":
+        user_import_line = ""
+    else:
+        user_import_line = "from caramello.user.models import User\n"
+
+    domain_import = (
+        f"from caramello.{domain}.models"
+        f" import {name}, {name}Read, {name}Create, {name}Update"
+    )
+
     return f"""from __future__ import annotations
 
 from uuid import UUID
@@ -330,7 +342,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from caramello.shared.auth import get_current_user
 from caramello.shared.database import get_session
-from caramello.{domain}.models import {name}, {name}Read, {name}Create, {name}Update
+{user_import_line}{domain_import}
 
 router = APIRouter(prefix="/{table_name}", tags=["{name}"])
 
@@ -339,7 +351,7 @@ router = APIRouter(prefix="/{table_name}", tags=["{name}"])
 async def create_{var_name}(
     {var_name}_in: {name}Create,
     session: AsyncSession = Depends(get_session),
-    _: {name} = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> {name}:
     db_obj = {name}.model_validate({var_name}_in)
     session.add(db_obj)
@@ -351,7 +363,7 @@ async def create_{var_name}(
 @router.get("/", response_model=list[{name}Read])
 async def read_{var_name}s(
     session: AsyncSession = Depends(get_session),
-    _: {name} = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[{name}]:
@@ -363,7 +375,7 @@ async def read_{var_name}s(
 async def read_{var_name}(
     uuid: UUID,
     session: AsyncSession = Depends(get_session),
-    _: {name} = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> {name}:
     statement = select({name}).where({name}.uuid == uuid)
     result = await session.exec(statement)
@@ -378,7 +390,7 @@ async def update_{var_name}(
     uuid: UUID,
     {var_name}_in: {name}Update,
     session: AsyncSession = Depends(get_session),
-    _: {name} = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> {name}:
     statement = select({name}).where({name}.uuid == uuid)
     result = await session.exec(statement)
@@ -398,7 +410,7 @@ async def update_{var_name}(
 async def delete_{var_name}(
     uuid: UUID,
     session: AsyncSession = Depends(get_session),
-    _: {name} = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select({name}).where({name}.uuid == uuid)
     result = await session.exec(statement)
