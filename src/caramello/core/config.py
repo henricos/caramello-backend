@@ -30,7 +30,7 @@ class Settings(BaseSettings):
         password = f":{self.DB_PASSWORD}" if self.DB_PASSWORD else ""
         port = f":{self.DB_PORT}" if self.DB_PORT else ""
         self.DATABASE_URL = (
-            f"postgresql://{self.DB_USER}{password}@{self.DB_HOST}{port}/{self.DB_NAME}"
+            f"postgresql+asyncpg://{self.DB_USER}{password}@{self.DB_HOST}{port}/{self.DB_NAME}"
         )
 
 
