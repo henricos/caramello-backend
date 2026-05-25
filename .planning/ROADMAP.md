@@ -46,8 +46,8 @@ Plans:
 - [x] 02-01-PLAN.md — Trocar driver: remover psycopg2-binary, adicionar asyncpg, atualizar sqlmodel para 0.0.38
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 02-02-PLAN.md — Criar shared/database.py (engine + factory + get_session async) e ajustar prefixo postgresql+asyncpg em config.py
-- [ ] 02-03-PLAN.md — Migrar alembic/env.py para modo online async com async_engine_from_config + NullPool + dispose
+- [x] 02-02-PLAN.md — Criar shared/database.py (engine + factory + get_session async) e ajustar prefixo postgresql+asyncpg em config.py
+- [x] 02-03-PLAN.md — Migrar alembic/env.py para modo online async com async_engine_from_config + NullPool + dispose
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 02-04-PLAN.md — Atualizar generate_router() para template async, regenerar 4 routers, deletar database/session.py legado
