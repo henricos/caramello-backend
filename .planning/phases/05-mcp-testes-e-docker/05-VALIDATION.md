@@ -20,7 +20,7 @@ created: 2026-05-26
 | **Framework** | pytest 9.0.1 + pytest-asyncio 1.4.0 (a instalar no Wave 0) |
 | **Config file** | `pyproject.toml` `[tool.pytest.ini_options]` |
 | **Quick run command** | `uv run pytest -m "not integration"` |
-| **Full suite command** | `uv run pytest` (requer `caramello_test` disponível) |
+| **Full suite command** | `uv run pytest` (requer `caramello_dev` disponível) |
 | **Estimated runtime** | ~5s (quick) / ~30s (full) |
 
 ---

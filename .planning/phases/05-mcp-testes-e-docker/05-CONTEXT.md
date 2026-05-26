@@ -11,10 +11,9 @@ Entregar a app containerizada, testada com isolamento de banco, e expondo uma fe
 **Entregáveis concretos:**
 - `Dockerfile` multi-stage, non-root user, sem secrets nos layers de build
 - `compose.yaml` — app only (PG externo), config via env vars, `APP_VERSION` como build arg exposto no campo `version` da OpenAPI spec
-- Infraestrutura de testes: banco real `caramello_test`, transaction rollback por teste, `@pytest.mark.integration` para coexistir com os unit tests AsyncMock existentes
-- `bin/manage_db --env test` para gerenciar `caramello_test` (reset + migrate)
-- 1 ferramenta MCP de exemplo (`get_my_families`) — implementação manual em `src/caramello/mcp/tools.py`, chamando services extraídos de `operations.py`
-- Docs/nomenclatura de banco atualizados: `caramello` (prod), `caramello_dev` (dev), `caramello_test` (test)
+- Infraestrutura de testes: testes de integração contra `caramello_dev` com transaction rollback por teste, `@pytest.mark.integration` para coexistir com os unit tests AsyncMock existentes — sem banco separado de testes *(revisado)*
+- 1 ferramenta MCP de exemplo (`list_my_families`) — exposta via endpoint REST existente `GET /families/families` com `include_operations`, sem `tools.py` manual *(revisado — constraint da lib fastapi-mcp)*
+- Docs/nomenclatura de banco atualizados: `caramello` (prod), `caramello_dev` (dev + testes via rollback)
 
 **Fora de escopo desta fase:**
 - Ferramentas MCP de escrita (create_family, pre_register_member) — M2+
@@ -42,17 +41,17 @@ Entregar a app containerizada, testada com isolamento de banco, e expondo uma fe
 
 ### Testes — Infraestrutura e Isolamento
 
-- **D-TEST-01:** Banco real `caramello_test` para testes de integração. Banco separado de `caramello_dev` — não contamina o banco de desenvolvimento em nenhuma circunstância.
+- **D-TEST-01:** Testes de integração usam o banco existente `caramello_dev` — sem banco separado `caramello_test`. Isolamento garantido via transaction rollback por teste: cada teste reverte ao final sem deixar dados. O banco `caramello_dev` não é contaminado porque nenhuma transação é commitada. *(Revisado: banco separado descartado — caramello_dev já existe e o rollback oferece isolamento suficiente.)*
 
 - **D-TEST-02:** Isolamento via **transaction rollback por teste**. Cada teste abre uma transação, executa as operações, e reverte ao final — banco sempre limpo entre testes sem custo de truncate/recreate. Requer `pytest-asyncio` e fixtures async com `AsyncSession`.
 
-- **D-TEST-03:** `bin/manage_db --env test` gerencia o banco `caramello_test`. Comandos: `bin/manage_db reset --env test` (DROP + CREATE + migrate), `bin/manage_db migrate --env test` (só alembic upgrade head). Pytest assume banco já preparado — não gerencia o ciclo de vida do banco.
+- **D-TEST-03:** Pytest roda contra `caramello_dev` usando as mesmas variáveis de ambiente do dev (`.env`). Não há `bin/manage_db --env test` — `caramello_dev` já existe e `bin/manage_db upgrade` já aplica as migrations. Pytest assume banco já preparado com schema atualizado.
 
 - **D-TEST-04:** Testes de integração marcados com `@pytest.mark.integration`. Coexistem com os unit tests existentes (AsyncMock em `test_family_operations.py`, `test_auth.py`). Execução:
-  - `uv run pytest` — roda todos os testes (unit + integration; requer PG com `caramello_test`)
+  - `uv run pytest` — roda todos os testes (unit + integration; requer PG com `caramello_dev`)
   - `uv run pytest -m 'not integration'` — roda só unit tests (sem PG necessário)
 
-- **D-TEST-05:** Testes de integração do domínio family cobrem (TEST-02): criar família, pré-registrar membro, listar membros. Usam `dependency_overrides` para simular usuário autenticado (TEST-03) + banco real `caramello_test` para as queries.
+- **D-TEST-05:** Testes de integração do domínio family cobrem (TEST-02): criar família, pré-registrar membro, listar membros. Usam `dependency_overrides` para simular usuário autenticado (TEST-03) + banco real `caramello_dev` para as queries.
 
 ### Docker — Containerização
 
@@ -66,10 +65,9 @@ Entregar a app containerizada, testada com isolamento de banco, e expondo uma fe
 
 - **D-NAMING-01:** Corrigir divergência entre docs e realidade. Os bancos reais se chamam:
   - `caramello` (produção)
-  - `caramello_dev` (desenvolvimento)
-  - `caramello_test` (testes — a criar)
+  - `caramello_dev` (desenvolvimento — também usado para testes de integração via rollback)
 
-  Atualizar: `.env.example`, `REQUIREMENTS.md` (referências a `familia_dev`/`familia_prod`), e `docs/apps-platform.md` §5.
+  Atualizar: `.env.example`, `REQUIREMENTS.md` (referências a `familia_dev`/`familia_prod`), e `docs/apps-platform.md` §5. *(Revisado: `caramello_test` removido — não há banco separado de testes.)*
 
 </decisions>
 

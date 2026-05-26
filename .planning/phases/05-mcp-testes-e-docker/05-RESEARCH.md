@@ -19,9 +19,9 @@
 - D-MCP-05: Auth MCP via Bearer token, mesmo `get_current_user()` dos endpoints REST.
 
 **Testes — Infraestrutura**
-- D-TEST-01: Banco real `caramello_test` para testes de integração.
+- D-TEST-01: Banco real `caramello_dev` para testes de integração.
 - D-TEST-02: Transaction rollback por teste.
-- D-TEST-03: `bin/manage_db --env test` gerencia `caramello_test`.
+- D-TEST-03: Testes usam `caramello_dev` diretamente — sem `bin/manage_db --env test`. Schema gerenciado pelo mesmo `bin/manage_db upgrade` do dev.
 - D-TEST-04: `@pytest.mark.integration` para testes que dependem de PG real.
 - D-TEST-05: Testes de integração cobrem criar família, pré-registrar membro, listar membros.
 
@@ -31,7 +31,7 @@
 - D-DOCKER-03: `APP_VERSION` no campo `version` da OpenAPI spec via `os.getenv("APP_VERSION", "0.0.0")`.
 
 **Nomenclatura de Banco**
-- D-NAMING-01: Renomear para `caramello` (prod), `caramello_dev` (dev), `caramello_test` (test). Atualizar `.env.example`, `REQUIREMENTS.md` e `docs/apps-platform.md §5`.
+- D-NAMING-01: Bancos: `caramello` (prod), `caramello_dev` (dev — também usado para testes via rollback). Atualizar `.env.example`, `REQUIREMENTS.md` e `docs/apps-platform.md §5`. Sem banco `caramello_test`.
 
 ### Claude's Discretion
 
@@ -77,7 +77,7 @@ Nenhuma área de discrição explicitamente definida — todas as decisões est�
 | DEPLOY-01 | Imagem Docker reproducível com Dockerfile multi-stage, non-root user, sem secrets | Padrão confirmado; Python 3.12-slim como base runtime [VERIFIED: Docker Hub] |
 | DEPLOY-02 | `docker compose up` com configuração via env vars, sem hardcode | `compose.yaml` alinhado com `docs/deploy.md`; env vars `DB_*` e Keycloak já definidos |
 | DEPLOY-03 | `APP_VERSION` como build arg na OpenAPI spec | `FastAPI(version=os.getenv("APP_VERSION", "0.0.0"))` + `ARG APP_VERSION` no Dockerfile |
-| TEST-01 | Testes contra banco isolado `caramello_test` com rollback por teste | pytest-asyncio 1.4.0 + AsyncSession + transaction rollback via savepoint |
+| TEST-01 | Testes contra banco isolado `caramello_dev` com rollback por teste | pytest-asyncio 1.4.0 + AsyncSession + transaction rollback via savepoint |
 | TEST-02 | Cobertura de casos de sucesso do domínio family | Testes async com `AsyncClient` + banco real + `dependency_overrides` para auth |
 | TEST-03 | `dependency_overrides` para simular usuário autenticado sem Keycloak real | Padrão já estabelecido em `test_family_operations.py`; replicar com AsyncSession real |
 
@@ -89,7 +89,7 @@ Nenhuma área de discrição explicitamente definida — todas as decisões est�
 
 A Phase 5 entrega três frentes: integração MCP, infraestrutura de testes com banco real e isolamento por rollback, e containerização Docker. O ponto mais crítico desta fase é a correção da abordagem de integração MCP: `fastapi-mcp` não suporta ferramentas customizadas fora de endpoints FastAPI — a ferramenta `get_my_families` é exposta via o endpoint REST existente filtrado por `include_operations`.
 
-Para testes, o padrão de transaction rollback por teste com `pytest-asyncio` e `AsyncSession` é bem estabelecido: usa `create_savepoint` para aninhamento de transações e garante que o banco `caramello_test` está sempre limpo entre testes sem custo de truncate. A dependência `pytest-asyncio` (1.4.0 disponível) ainda não está instalada.
+Para testes, o padrão de transaction rollback por teste com `pytest-asyncio` e `AsyncSession` é bem estabelecido: usa `create_savepoint` para aninhamento de transações e garante que o banco `caramello_dev` está sempre limpo entre testes sem custo de truncate. A dependência `pytest-asyncio` (1.4.0 disponível) ainda não está instalada.
 
 Para Docker, o padrão é Dockerfile multi-stage com `python:3.12-slim` como base runtime, non-root user, e `compose.yaml` alinhado com o exemplo já documentado em `docs/deploy.md`. O `APP_VERSION` é injetado como `ARG` no Dockerfile e lido via `os.getenv()` no `main.py`.
 
@@ -105,7 +105,7 @@ Para Docker, o padrão é Dockerfile multi-stage com `python:3.12-slim` como bas
 | Auth Bearer token em MCP | API/Backend | — | `AuthConfig` + `headers=["authorization"]` propaga para `get_current_user()` |
 | Ferramenta `get_my_families` | API/Backend | — | É o endpoint REST existente `GET /families/families`, filtrado por `include_operations` |
 | Lógica de negócio `families/services.py` | API/Backend | — | Extraída de `operations.py`; chamada por endpoints REST (e indirectamente pelo MCP) |
-| Testes de integração | — (infra de teste) | — | `caramello_test` + rollback por teste; não é tier de produção |
+| Testes de integração | — (infra de teste) | — | `caramello_dev` + rollback por teste; não é tier de produção |
 | Infraestrutura Docker | Container | — | Dockerfile multi-stage + `compose.yaml` |
 | `APP_VERSION` na spec OpenAPI | API/Backend | — | `FastAPI(version=os.getenv(...))` + build arg |
 
@@ -195,7 +195,7 @@ Test Runner (pytest)
         │ @pytest.mark.integration
         ▼
 [conftest.py — fixtures async]
-        │ engine → caramello_test
+        │ engine → caramello_dev
         ▼
 [AsyncSession com savepoint (create_savepoint)]
         │ rollback ao final do teste
@@ -204,7 +204,7 @@ Test Runner (pytest)
         │ dependency_overrides[get_current_user] = lambda: fake_user
         │ dependency_overrides[get_session] = override_session
         ▼
-[Endpoint REST → families/services.py → PostgreSQL caramello_test]
+[Endpoint REST → families/services.py → PostgreSQL caramello_dev]
 ```
 
 ### Estrutura de Projeto Recomendada
@@ -314,7 +314,7 @@ async def list_my_families(
 
 ### Pattern 3: Fixtures Async com Transaction Rollback
 
-**O que é:** Engine separado apontando para `caramello_test`, sessão por teste que usa savepoint para rollback sem custo de DROP/CREATE.
+**O que é:** Engine separado apontando para `caramello_dev`, sessão por teste que usa savepoint para rollback sem custo de DROP/CREATE.
 
 **Quando usar:** em todos os testes marcados com `@pytest.mark.integration`.
 
@@ -332,13 +332,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from httpx import AsyncClient, ASGITransport
 
 # URL do banco de teste — constrói a partir das mesmas vars do .env,
-# substituindo apenas DB_NAME por caramello_test
+# substituindo apenas DB_NAME por caramello_dev
 TEST_DB_URL = (
     f"postgresql+asyncpg://{os.getenv('DB_USER', 'postgres')}"
     f":{os.getenv('DB_PASSWORD', 'postgres')}"
     f"@{os.getenv('DB_HOST', 'localhost')}"
     f":{os.getenv('DB_PORT', '5432')}"
-    f"/caramello_test"
+    f"/caramello_dev"
 )
 
 @pytest_asyncio.fixture(scope="session")
@@ -471,7 +471,7 @@ app = FastAPI(
 - **Usar `TestClient` síncrono em testes de integração async:** `TestClient` não suporta `async def` nos fixtures. Usar `httpx.AsyncClient` com `ASGITransport`.
 - **Compartilhar `AsyncSession` entre testes:** cada teste deve ter sua própria sessão com rollback independente.
 - **Secrets como `ARG` no Dockerfile:** `ARG` fica visível no histórico de layers via `docker history`. Credenciais de banco e Keycloak devem ser passadas como env vars em tempo de runtime, não durante o build.
-- **Hardcode de `DB_NAME=caramello_test` no `alembic/env.py`:** alembic lê `settings.DATABASE_URL`, que constrói a URL a partir de `DB_NAME`. Para rodar migrations no banco de teste, basta exportar `DB_NAME=caramello_test` antes de chamar `alembic`.
+- **Hardcode de `DB_NAME=caramello_dev` no `alembic/env.py`:** alembic lê `settings.DATABASE_URL`, que constrói a URL a partir de `DB_NAME`. Para rodar migrations no banco de teste, basta exportar `DB_NAME=caramello_dev` antes de chamar `alembic`.
 
 ---
 
@@ -610,9 +610,9 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
-# Se --env test, sobrescreve DB_NAME para caramello_test
+# Se --env test, sobrescreve DB_NAME para caramello_dev
 if [[ "$ENV_FLAG" == "test" ]]; then
-  export DB_NAME="caramello_test"
+  export DB_NAME="caramello_dev"
 fi
 ```
 
@@ -672,7 +672,7 @@ services:
 | Secrets/env vars | `.env` tem `DB_NAME=familia_dev`; `.env.example` tem `DB_NAME=familia_dev` | Atualizar `.env.example` para `caramello_dev`; operador atualiza `.env` manualmente |
 | Build artifacts | N/A — sem binários compilados | Nenhum |
 
-**Atenção:** O banco `caramello_test` é novo — precisa ser criado via `bin/manage_db init --env test` antes de rodar os testes de integração. Isso é responsabilidade do operador, não do teste em si (D-TEST-03).
+**Atenção:** O banco `caramello_dev` é novo — precisa ser criado via `bin/manage_db init --env test` antes de rodar os testes de integração. Isso é responsabilidade do operador, não do teste em si (D-TEST-03).
 
 ---
 
@@ -692,8 +692,8 @@ services:
 3. **`caramello_dev` vs `familia_dev` — migração de dados**
    - O que sabemos: D-NAMING-01 define `caramello_dev` como novo nome, mas o banco físico atual é `familia_dev`. Renomear exige operação de banco (não é só código).
    - O que está unclear: se o operador tem dados de dev que precisa preservar ou se pode criar um banco limpo.
-   - Recomendação: o plano deve incluir uma tarefa documentada "operador cria `caramello_dev` e `caramello_test` via `bin/setup_db` ou SQL direto" — não automatizar a migração de dados de dev.
-   - RESOLVED: Plano 05-06 Task 3 (checkpoint humano) documenta as instruções para o operador criar `caramello_dev` e `caramello_test` manualmente via `bin/setup_db` ou SQL. Não há migração automática de dados.
+   - Recomendação: o plano deve incluir uma tarefa documentada "operador cria `caramello_dev` e `caramello_dev` via `bin/setup_db` ou SQL direto" — não automatizar a migração de dados de dev.
+   - RESOLVED: Plano 05-06 Task 3 (checkpoint humano) documenta as instruções para o operador criar `caramello_dev` e `caramello_dev` manualmente via `bin/setup_db` ou SQL. Não há migração automática de dados.
 
 ---
 
@@ -703,7 +703,7 @@ services:
 |-------------|--------------|------------|--------|---------|
 | Docker Engine | DEPLOY-01, DEPLOY-02 | ✓ | 29.4.3 | — |
 | Docker Compose v2 | DEPLOY-02 | ✓ | 5.1.3 | — |
-| PostgreSQL | TEST-01, TEST-02 (banco `caramello_test`) | Indisponível neste ambiente CI | — | Testes de integração marcados `@pytest.mark.integration` são pulados automaticamente sem PG |
+| PostgreSQL | TEST-01, TEST-02 (banco `caramello_dev`) | Indisponível neste ambiente CI | — | Testes de integração marcados `@pytest.mark.integration` são pulados automaticamente sem PG |
 | `fastapi-mcp` | MCP-01, MCP-02 | ✗ (não instalada) | 0.4.0 disponível | — |
 | `pytest-asyncio` | TEST-01, TEST-02 | ✗ (não instalada) | 1.4.0 disponível | — |
 
@@ -712,7 +712,7 @@ services:
 **Dependências faltando sem fallback (bloqueiam execução):**
 - `fastapi-mcp` — necessária para MCP-01 e MCP-02. Instalar com `uv add fastapi-mcp`.
 - `pytest-asyncio` — necessária para TEST-01 e TEST-02. Instalar com `uv add --group dev pytest-asyncio`.
-- PostgreSQL com banco `caramello_test` — necessário para TEST-01 e TEST-02. Operador deve criar via `bin/manage_db init --env test` (após evolução do script).
+- PostgreSQL com banco `caramello_dev` — necessário para TEST-01 e TEST-02. Operador deve criar via `bin/manage_db init --env test` (após evolução do script).
 
 ---
 
@@ -725,7 +725,7 @@ services:
 | Framework | pytest 9.0.1 + pytest-asyncio 1.4.0 (a instalar) |
 | Config file | `pyproject.toml` `[tool.pytest.ini_options]` |
 | Comando rápido | `uv run pytest -m "not integration"` |
-| Suite completa | `uv run pytest` (requer `caramello_test` disponível) |
+| Suite completa | `uv run pytest` (requer `caramello_dev` disponível) |
 
 ### Phase Requirements → Test Map
 
@@ -736,14 +736,14 @@ services:
 | DEPLOY-01 | `docker build` completa sem erro | smoke (manual) | `docker build --build-arg APP_VERSION=test .` | ❌ Wave 0: verificação no plano Docker |
 | DEPLOY-02 | `docker compose up` com env vars | smoke (manual) | — | ❌ manual |
 | DEPLOY-03 | `APP_VERSION` aparece em `/openapi.json` | integration | `uv run pytest tests/test_api/test_version.py -x` | ❌ Wave 0 |
-| TEST-01 | Banco `caramello_test` isolado com rollback | meta-teste / fixture | Confirmado por execução bem-sucedida dos testes de integração | ❌ Wave 0: conftest.py |
+| TEST-01 | Banco `caramello_dev` isolado com rollback | meta-teste / fixture | Confirmado por execução bem-sucedida dos testes de integração | ❌ Wave 0: conftest.py |
 | TEST-02 | Criar família via endpoint, listar membros | integration | `uv run pytest tests/test_api/test_families_integration.py -m integration -x` | ❌ Wave 0 |
 | TEST-03 | `dependency_overrides` mock de auth sem Keycloak | integration | (incluído em TEST-02) | ❌ Wave 0 |
 
 ### Sampling Rate
 
 - **Por task commit:** `uv run pytest -m "not integration"` (unit tests sem PG, < 5s)
-- **Por wave merge:** `uv run pytest` (suite completa, requer `caramello_test`)
+- **Por wave merge:** `uv run pytest` (suite completa, requer `caramello_dev`)
 - **Phase gate:** Suite completa verde antes de `/gsd-verify-work`
 
 ### Wave 0 Gaps
@@ -785,7 +785,7 @@ services:
 - **Stack obrigatório:** Python 3.10+, FastAPI async, SQLModel/SQLAlchemy async, PostgreSQL. SQLite **não suportado**.
 - **Package manager:** `uv` — instalar dependências com `uv add`, não `pip install` direto.
 - **Código gerado:** arquivos em `src/caramello/models/` e `src/caramello/api/generated/` **não devem ser editados**. `families/services.py` é código manual — não gerado.
-- **Nomenclatura de banco:** após D-NAMING-01, usar `caramello` (prod), `caramello_dev` (dev), `caramello_test` (test). Atualizar `CLAUDE.md §Constraints` também faz parte da limpeza de documentação.
+- **Nomenclatura de banco:** após D-NAMING-01, usar `caramello` (prod), `caramello_dev` (dev), `caramello_dev` (test). Atualizar `CLAUDE.md §Constraints` também faz parte da limpeza de documentação.
 - **Idioma:** código e configs em inglês; commits, docs narrativos e comentários explicativos em pt-BR.
 - **Commits:** Conventional Commits, pt-BR, presente do indicativo terceira pessoa.
 - **Qualidade:** `ruff check src/` e `mypy src/` devem passar sem erros em todo código novo.
@@ -798,7 +798,7 @@ services:
 |---|-------|-------|----------------|
 | A1 | O Dockerfile usa `python:3.12-slim` como base runtime | Standard Stack / Pattern 4 | Imagem maior se usar `python:3.12`; versão menor se usar `3.11-slim` — verificar contra política do operador |
 | A2 | `uv pip install -e .` dentro do Dockerfile instala corretamente sem acesso ao `uv.lock` no contexto de build | Pattern 4 | Pode precisar de `COPY uv.lock` explícito ou usar `uv sync` — testar no `docker build` |
-| A3 | O banco `caramello_test` deve ser criado com o mesmo schema do dev — via `alembic upgrade head` com `DB_NAME=caramello_test` | Runtime State Inventory | Alembic lê de `settings.DATABASE_URL`; se `settings` for singleton inicializado no import, sobrescrever `DB_NAME` via env antes do import é necessário |
+| A3 | O banco `caramello_dev` deve ser criado com o mesmo schema do dev — via `alembic upgrade head` com `DB_NAME=caramello_dev` | Runtime State Inventory | Alembic lê de `settings.DATABASE_URL`; se `settings` for singleton inicializado no import, sobrescrever `DB_NAME` via env antes do import é necessário |
 | A4 | `join_transaction_mode="create_savepoint"` funciona com `asyncpg` na versão atual do SQLAlchemy | Pattern 3 | Se não funcionar, fallback: `await session.begin_nested()` explícito — testar no Wave 0 |
 
 ---
