@@ -25,15 +25,18 @@ Um backend sólido, seguro e extensível onde cada novo domínio de negócio (fi
 
 <!-- Milestone 1 — Fundação e revisão geral. -->
 
-- [ ] Driver de banco migrado de `psycopg2-binary` para `asyncpg`; `session.py` reescrito para `AsyncSession`
-- [ ] DSL generator evoluído para suportar campo `domain` nos YAMLs e outputar em `src/caramello/domains/{domain}/`
-- [ ] Estrutura de código reorganizada para arquitetura por domínios (`domains/`, `shared/`)
-- [ ] Domínio `familia` implementado como piloto: `Family`, `FamilyMember`, `FamilyInvitation` + User provisioning
-- [ ] Camada de autenticação JWT via Keycloak: `shared/auth.py` com validação de token e just-in-time provisioning
-- [ ] Endpoints REST do domínio `familia` implementados e protegidos por auth
 - [ ] Servidor MCP integrado via `fastapi-mcp` expondo serviços do domínio `familia`
 - [ ] Dockerfile e `compose.yaml` (padrão multi-stage, não-root user, inject via env — baseado em `hiring-pipeline`)
 - [ ] Infraestrutura de testes: `pytest` + `pytest-asyncio`, fixtures de banco isoladas, testes do domínio `familia`
+
+### Validated in Phase 4 (2026-05-26)
+
+- ✓ DSL generator evoluído com suporte a campo `domain`, URL `/{domain}/{table-with-hyphens}`, `DOMAIN_TO_ENTITY_NAME` — `scripts/generate_code.py`
+- ✓ Estrutura de código reorganizada para arquitetura por domínios (`src/caramello/users/`, `src/caramello/families/`, `src/caramello/shared/`)
+- ✓ Domínio `families` implementado: `Family`, `FamilyMember`, `FamilyInvitation` (redesenhada com `email`+`status`) + User provisioning
+- ✓ Endpoints REST do domínio `families` implementados e protegidos por auth (FAMILY-01/02/03/07 entregues; FAMILY-04/05/06 diferidos para M2)
+- ✓ Camada de autenticação JWT via Keycloak: `shared/auth.py` com validação de token, just-in-time provisioning e auto-join (D-02)
+- ✓ Migration Alembic para redesenho de `family_invitation` criada (`20260526_1500_redesign_family_invitation_pre_register.py`)
 
 ### Validated in Phase 1 (2026-05-24)
 
@@ -104,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-25 after Phase 2 completion (Stack Async) — asyncpg driver, shared/database.py async, alembic async, 4 routers async regenerados. ruff/mypy passam. Próxima fase: estrutura por domínios e autenticação.*
+*Last updated: 2026-05-26 after Phase 4 completion (Domínio Family) — domínio families com 6 endpoints operacionais, auto-join via Keycloak, migration Alembic, DSL generator evoluído para arquitetura por domínios. 31 testes passando. Próxima fase: MCP, testes e Docker.*
