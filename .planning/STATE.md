@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 complete (03-05 done — Task 7 E2E deferred by operator approval)
-last_updated: "2026-05-25T23:47:02.048Z"
-last_activity: 2026-05-25 -- Phase 03 execution started
+stopped_at: "03-07 Task 2 — checkpoint:human-action (operador deve executar checklist E2E e preencher 03-07-EVIDENCE.md)"
+last_updated: "2026-05-26T00:00:00.000Z"
+last_activity: "2026-05-26 -- 03-07 Task 1 concluída (smoke_e2e.py criado); aguardando ação do operador na Task 2"
 progress:
   total_phases: 5
   completed_phases: 2
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-23)
 ## Current Position
 
 Phase: 03 (estrutura-por-dom-nios-e-autentica-o) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 03
-Last activity: 2026-05-25 -- Phase 03 execution started
+Plan: 07 of 07 — checkpoint:human-action em Task 2
+Status: Aguardando ação do operador (E2E verification)
+Last activity: "2026-05-26 -- 03-07 Task 1 concluída; checkpoint na Task 2"
 
 Progress: [██████████] 100% (Phase 3)
 

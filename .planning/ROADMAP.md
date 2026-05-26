@@ -111,6 +111,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Infra Base | 0/4 | Planned | - |
 | 2. Stack Async | 0/4 | Planned | - |
-| 3. Estrutura por Domínios e Autenticação | 5/7 | Gap closure em progresso | 2026-05-25 (planos iniciais) |
+| 3. Estrutura por Domínios e Autenticação | 6/7 | In Progress|  |
 | 4. Domínio Family | 0/? | Not started | - |
 | 5. MCP, Testes e Docker | 0/? | Not started | - |
