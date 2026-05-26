@@ -67,9 +67,11 @@ def test_schema_yaml_has_domain_property():
 
 
 def test_user_models_in_user_domain():
-    """Plano 03-06: src/caramello/user/models.py contém class User (mapper fix)."""
-    models_path = REPO_ROOT / "src/caramello/user/models.py"
-    assert models_path.exists(), "user/models.py deve existir após regeneração"
+    """Plano 04-03: src/caramello/users/models.py contém class User (mapper fix)."""
+    models_path = REPO_ROOT / "src/caramello/users/models.py"
+    assert models_path.exists(), (
+        "users/models.py deve existir após regeneração (plano 04-03)"
+    )
     content = models_path.read_text()
     assert "class User(SQLModel, table=True):" in content
     # Intencionalmente sem from __future__ import annotations: com from __future__,
@@ -78,8 +80,8 @@ def test_user_models_in_user_domain():
 
 
 def test_family_models_consolidated():
-    """Plano 03-06: family/models.py contém Family, FamilyMember e FamilyInvitation."""
-    models_path = REPO_ROOT / "src/caramello/family/models.py"
+    """Plano 04-03: families/models.py contém Family, FamilyMember, FamilyInvitation."""  # noqa: E501
+    models_path = REPO_ROOT / "src/caramello/families/models.py"
     assert models_path.exists()
     content = models_path.read_text()
     assert "class Family(SQLModel, table=True):" in content
@@ -88,8 +90,8 @@ def test_family_models_consolidated():
 
 
 def test_generated_code_uses_modern_types():
-    """Plano 03-06: código gerado usa `str | None` e `list[T]`, não Optional/List."""
-    models_path = REPO_ROOT / "src/caramello/user/models.py"
+    """Plano 04-03: código gerado usa `str | None` e `list[T]`, não Optional/List."""
+    models_path = REPO_ROOT / "src/caramello/users/models.py"
     content = models_path.read_text()
     assert "Optional[" not in content, "código gerado não deve usar Optional[X]"
     assert "from typing import Optional" not in content
@@ -99,16 +101,16 @@ def test_generated_code_uses_modern_types():
 
 
 def test_generated_router_requires_auth():
-    """Plano 03-06: router gerado importa get_current_user e usa Depends."""
-    router_path = REPO_ROOT / "src/caramello/user/router.py"
+    """Plano 04-03: router gerado importa get_current_user e usa Depends."""
+    router_path = REPO_ROOT / "src/caramello/users/router.py"
     content = router_path.read_text()
     assert "from caramello.shared.auth import get_current_user" in content
     assert "Depends(get_current_user)" in content
 
 
 def test_user_operations_stub_or_implemented():
-    """Plano 03-05: user/operations.py existe com anotação stub ou implemented."""
-    ops_path = REPO_ROOT / "src/caramello/user/operations.py"
+    """Plano 04-03: users/operations.py existe com anotação stub ou implemented."""
+    ops_path = REPO_ROOT / "src/caramello/users/operations.py"
     assert ops_path.exists()
     first_line = ops_path.read_text().splitlines()[0].strip()
     assert first_line in (
@@ -118,9 +120,15 @@ def test_user_operations_stub_or_implemented():
 
 
 def test_legacy_paths_removed():
-    """Plano 03-05: src/caramello/models e src/caramello/api/generated removidos."""
+    """Plano 04-03: src/caramello/models, api/generated, user/ e family/ removidos."""
     assert not (REPO_ROOT / "src/caramello/models").exists()
     assert not (REPO_ROOT / "src/caramello/api").exists()
+    assert not (REPO_ROOT / "src/caramello/user").exists(), (
+        "src/caramello/user deve ter sido removido na Phase 4"
+    )
+    assert not (REPO_ROOT / "src/caramello/family").exists(), (
+        "src/caramello/family deve ter sido removido na Phase 4"
+    )
 
 
 def test_user_yaml_domain_is_users():
