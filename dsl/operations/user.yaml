@@ -1,10 +1,10 @@
 # dsl/operations/user.yaml
-# Operações de negócio do domínio user.
-# Gera src/caramello/user/operations.py (stub que será implementado nesta fase — D-10).
+# Operações de negócio do domínio users.
+# Gera src/caramello/users/operations.py (stub que será implementado na Phase 3 — D-10).
 
-domain: user
+domain: users
 operations:
   - name: get_me
     method: GET
-    path: /user/me
+    path: /users/me
     description: "Retorna o perfil do usuário autenticado."

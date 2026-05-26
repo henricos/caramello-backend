@@ -1,0 +1,35 @@
+# dsl/operations/family.yaml
+# Operações de negócio do domínio families (Phase 4 — D-05, D-07).
+# Gera src/caramello/families/operations.py (stub que será implementado no plano 04-04).
+
+domain: families
+operations:
+  - name: registry_family
+    method: POST
+    path: /families/registry
+    description: "Cria família e registra o usuário autenticado como owner (role='owner')."
+
+  - name: list_my_families
+    method: GET
+    path: /families/families
+    description: "Lista famílias das quais o usuário autenticado é membro."
+
+  - name: get_family_detail
+    method: GET
+    path: /families/families/{family_uuid}
+    description: "Retorna detalhes de uma família se o usuário for membro; 403 se não for."
+
+  - name: pre_register_member
+    method: POST
+    path: /families/families/{family_uuid}/pre-register
+    description: "Owner pré-registra email para adesão automática. Não-owner recebe 403."
+
+  - name: list_members
+    method: GET
+    path: /families/families/{family_uuid}/members
+    description: "Lista membros da família (qualquer membro pode ver)."
+
+  - name: remove_member
+    method: DELETE
+    path: /families/families/{family_uuid}/members/{user_uuid}
+    description: "Remove membro da família (owner only). Não-owner recebe 403."
