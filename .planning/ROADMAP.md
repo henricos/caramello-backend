@@ -76,7 +76,7 @@ Plans:
 - [x] 03-05-PLAN.md — Wave 3: regenerar código, implementar /user/me, atualizar main.py + alembic + pyproject, remover paths antigos, checkpoint humano
 
 **Gap closure** *(após 03-VERIFICATION.md)*
-- [ ] 03-06-PLAN.md — Wave 1: corrigir generator para emitir `# noqa: UP037` (mapper bug), corrigir `_: User` em routers, destravar testes xfail/skip, ajustar ROADMAP SC2 (Gaps 1 e 3)
+- [x] 03-06-PLAN.md — Wave 1: corrigir generator para emitir `# noqa: UP037` (mapper bug), corrigir `_: User` em routers, destravar testes xfail/skip, ajustar ROADMAP SC2 (Gaps 1 e 3)
 - [ ] 03-07-PLAN.md — Wave 2 (autonomous: false): operador executa checklist E2E com Keycloak real + PostgreSQL, preenche 03-07-EVIDENCE.md (Gap 2)
 **UI hint**: no
 
