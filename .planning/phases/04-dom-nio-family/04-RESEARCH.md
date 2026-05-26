@@ -553,22 +553,26 @@ operations:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Comportamento do `session.flush()` com asyncpg e autoincrement**
+> **Status:** Todas as questões abertas foram resolvidas durante a revisão de planejamento (2026-05-26).
+> As resoluções estão refletidas nos planos 04-03 (Sub-task 1E para Q2) e 04-04 (Task 1 behavior nota
+> para Q1; Task 2 behavior nota para Q3).
+
+1. **Comportamento do `session.flush()` com asyncpg e autoincrement** — **RESOLVED**
    - O que sabemos: SQLAlchemy async com asyncpg suporta `flush()` para obter PKs geradas antes do commit
    - O que não está claro: se o SQLModel tem quirks que mudam esse comportamento com `table=True` models
-   - Recomendação: testar no Wave 2 com um caso simples antes de comitar ao padrão; alternativa é usar `RETURNING id` via pg_insert se flush não funcionar
+   - **Resolução:** SQLModel sobre SQLAlchemy async com asyncpg SUPORTA `flush()` para obter PK autoincrement antes do commit. Este é o padrão estabelecido em todo o codebase Caramello (ver `src/caramello/shared/auth.py` — mesmo padrão de provisioning é usado em JIT). Não há quirk especial em SQLModel `table=True` que altere o comportamento. Plano 04-04 Task 1 usa `await session.flush()` antes de criar o FamilyMember dependente, e essa nota explícita foi adicionada ao bloco `<behavior>` da task.
 
-2. **Como o generator trata `domain: families` em `generate_operations()`**
+2. **Como o generator trata `domain: families` em `generate_operations()`** — **RESOLVED**
    - O que sabemos: `generate_operations()` linha 448 usa `domain.title()` para derivar o class name → `Families` (plural com maiúscula) que não corresponde a nenhuma classe
    - O que não está claro: se isso vai causar erro de geração ou apenas stubs com import incorreto
-   - Recomendação: inspecionar o stub gerado após `bin/generate_code` e corrigir manualmente os imports no `operations.py` antes de implementar; a anotação `stub` permite sobrescrever
+   - **Resolução:** O stub é GERADO com sucesso (não há erro de geração), porém com imports inválidos (`FamiliesRead`, `FamiliesCreate`, `FamiliesUpdate` — classes que não existem em `caramello.families.models`). Qualquer tentativa de importar o módulo gerado dispara `ImportError`. Plano 04-03 Sub-task 1E foi adicionada para fazer correção cirúrgica imediatamente após `bin/generate_code`: `sed` substitui `Families*` → `Family*` no arquivo gerado, e verify confirma `import caramello.families.operations` sem erro. A anotação `stub` permanece intacta para que o plano 04-04 possa reescrever o arquivo completo.
 
-3. **Comportamento de `FamilyInvitation.email` para usuários JÁ autenticados (não primeiro login)**
+3. **Comportamento de `FamilyInvitation.email` para usuários JÁ autenticados (não primeiro login)** — **RESOLVED**
    - O que sabemos: o auto-join busca `email == token_email AND status == "pending_login"` em TODA chamada a `get_current_user()`
    - O que não está claro: se o auto-join deve rodar apenas no "primeiro login" (quando o User é criado) ou em toda chamada
-   - Recomendação: conforme D-02, o auto-join acontece em toda chamada enquanto existir um invitation `pending_login`; após a primeira execução, o status muda para `"joined"` e não roda mais — design correto
+   - **Resolução:** Conforme D-02, o auto-join roda em toda chamada a `get_current_user()`, mas a guarda `status == "pending_login"` garante idempotência: na primeira execução, o `FamilyMember(role="member")` é criado e `FamilyInvitation.status` é atualizado para `"joined"`. Em chamadas subsequentes, o SELECT (`WHERE email AND status == "pending_login"`) retorna `None` — o bloco de auto-join é simplesmente pulado, sem custo adicional além de um SELECT trivial. Não há risco de duplicação de FamilyMember por logins repetidos do mesmo usuário. Plano 04-04 Task 2 incorpora essa nota explícita no `<behavior>`.
 
 ---
 

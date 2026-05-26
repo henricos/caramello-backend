@@ -91,7 +91,22 @@ Plans:
   4. `POST /family/invitations/{code}/join` registra solicitação pendente para o usuário autenticado
   5. `PATCH /family/invitations/{id}` permite owner aprovar ou rejeitar — solicitação aprovada adiciona membro; solicitação rejeitada não adiciona
   6. `DELETE /family/families/{id}/members/{user_id}` remove membro — apenas owner consegue; todos os endpoints retornam 401 sem token
-**Plans**: TBD
+
+**Plans**: 4 planos (1 wave por plano — sequenciais)
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Wave 0: stubs de testes (test_family_operations + test_auth.auto_join + test_generator)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — Evoluir DSL: domains plurais (users/families), redesign FamilyInvitation, dsl/operations/family.yaml, generator com URL plural + hifens
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-03-PLAN.md — Regenerar código (users/ + families/), deletar diretórios antigos, atualizar main.py + alembic/env.py + migration Alembic
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-04-PLAN.md — Implementar families/operations.py (6 endpoints) + estender shared/auth.py com auto-join (D-02) + finalizar ROADMAP/REQUIREMENTS (FAMILY-04/05/06 deferidos M2)
+
+> **Nota:** os Success Criteria acima refletem o fluxo original (código de convite reutilizável FAMILY-04/05/06). Após Plano 04-04, este bloco passa a refletir o fluxo de pré-cadastro por email (D-01/D-02 em 04-CONTEXT.md) — FAMILY-04/05/06 deferidos para M2 conforme D-04.
 
 ### Phase 5: MCP, Testes e Docker
 **Goal**: Aplicação containerizada, testada com isolamento de banco, e expondo ferramentas MCP protegidas por auth — pronta para deploy

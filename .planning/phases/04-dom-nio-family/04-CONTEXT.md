@@ -33,9 +33,9 @@ Implementar os endpoints REST do domínio `families` — CRUD gerado com novo pa
 
 - **D-02:** Auto-join integrado em `get_current_user()` em `shared/auth.py`. Fluxo: após JIT provisioning do `User`, busca `FamilyInvitation` com `email == token_email AND status == "pending_login"`. Se existir: cria `FamilyMember(user_id=current_user.id, family_id=inv.family_id, role="member", joined_at=now)` e atualiza `FamilyInvitation.status = "joined"`. Operação atômica na mesma sessão. O auto-join acontece de forma transparente no primeiro login da pessoa.
 
-- **D-03:** Keycloak — duplo cadastro manual para Phase 4. Owner registra a pessoa no Keycloak manualmente (via admin console do Keycloak) E pré-cadastra o email na Caramello API via endpoint de negócio. A Caramello API não chama o Keycloak Admin API nesta fase. Integração Keycloak Admin API deferida para M2+.
+- **D-03** `[informational]`: Keycloak — duplo cadastro manual para Phase 4. Owner registra a pessoa no Keycloak manualmente (via admin console do Keycloak) E pré-cadastra o email na Caramello API via endpoint de negócio. A Caramello API não chama o Keycloak Admin API nesta fase. Integração Keycloak Admin API deferida para M2+.
 
-- **D-04:** Fluxo FAMILY-04/05/06 original (código de convite reutilizável + POST /family/invitations/{code}/join + PATCH approve/reject) deferido para M2 como expansão de produto. Registrar no ROADMAP.md como requisito deferido.
+- **D-04** `[informational]`: Fluxo FAMILY-04/05/06 original (código de convite reutilizável + POST /family/invitations/{code}/join + PATCH approve/reject) deferido para M2 como expansão de produto. Rastreabilidade formal via `requirements_deferred` no frontmatter do plano 04-04 e atualização de ROADMAP.md/REQUIREMENTS.md pela Task 2 do 04-04.
 
 ### Endpoints de Negócio (family/operations.py)
 
@@ -53,7 +53,7 @@ Implementar os endpoints REST do domínio `families` — CRUD gerado com novo pa
 
 ### CRUD Gerado e Escopo de Acesso
 
-- **D-08:** CRUD gerado permanece com auth básico (token válido exigido em todos os endpoints — `Depends(get_current_user)` no template). Sem filtros automáticos por família ou role nesta fase. CRUD é considerado "nível de acesso interno/admin" — o frontend usa os endpoints de negócio.
+- **D-08** `[informational]`: CRUD gerado permanece com auth básico (token válido exigido em todos os endpoints — `Depends(get_current_user)` no template). Sem filtros automáticos por família ou role nesta fase. CRUD é considerado "nível de acesso interno/admin" — o frontend usa os endpoints de negócio.
 
 - **D-08-DEFERRED (CONCEITO ARQUITETURAL — NÃO PERDER):**
   **Family-scoped CRUD automático** — visão para M2+:
@@ -93,7 +93,7 @@ Implementar os endpoints REST do domínio `families` — CRUD gerado com novo pa
   - `/families/registry` — Criar família + owner
   - `/families/families/{uuid}/members` — Membros de uma família
 
-- **D-12:** FamilyMember permanece como `is_link_model: true` no DSL. Sem CRUD gerado para ele. Operações de membership (listar, remover) ficam em `families/operations.py`.
+- **D-12** `[informational]`: FamilyMember permanece como `is_link_model: true` no DSL. Sem CRUD gerado para ele. Operações de membership (listar, remover) ficam em `families/operations.py`.
 
 ### Role de Owner
 
