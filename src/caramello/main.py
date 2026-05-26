@@ -45,8 +45,12 @@ app.add_middleware(
 )
 
 # Routers por domínio
-app.include_router(user_router.router)
+# IMPORTANTE: user_operations deve ser registrado ANTES de user_router para que
+# rotas estáticas como GET /user/me tenham prioridade sobre GET /user/{uuid}.
+# FastAPI faz correspondência em ordem de registro; rotas estáticas devem vir
+# antes das rotas com parâmetro para evitar que /user/me seja interpretado como uuid.
 app.include_router(user_operations.router)
+app.include_router(user_router.router)
 app.include_router(family_router.router)
 
 

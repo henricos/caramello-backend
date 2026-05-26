@@ -9,7 +9,6 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.xfail(reason="Wave 3 (Plan 04) cria shared/auth.py", strict=False)
 def test_auth_module():
     """AUTH-03: get_current_user é importável de caramello.shared.auth."""
     from caramello.shared.auth import (
@@ -18,10 +17,6 @@ def test_auth_module():
     )
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) registra router /user/me e habilita auth",
-    strict=False,
-)
 def test_me_unauthenticated(client):
     """AUTH-01: GET /user/me sem token retorna 401 (ou 403 do HTTPBearer)."""
     response = client.get("/user/me")
@@ -31,10 +26,6 @@ def test_me_unauthenticated(client):
     )
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) habilita auth em todos os routers CRUD",
-    strict=False,
-)
 def test_user_crud_requires_auth(client):
     """D-11 / AUTH-01: GET /user/ (CRUD) sem token retorna 401/403."""
     response = client.get("/user/")
@@ -42,10 +33,6 @@ def test_user_crud_requires_auth(client):
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) implementa JIT provisioning — requer banco real",
-    strict=False,
-)
 def test_jit_provisioning():
     """AUTH-02: primeira request com token válido cria registro na tabela users.
 
@@ -53,13 +40,13 @@ def test_jit_provisioning():
     real configurado via .env. Phase 5 entrega banco isolado (TEST-01).
     Até lá, este teste roda apenas em ambiente local com banco e Keycloak reais.
     """
-    pytest.skip("Requer Keycloak real e banco isolado (Phase 5)")
+    pytest.skip(
+        "Requer Keycloak real e banco PostgreSQL configurado via .env "
+        "(executado manualmente pelo operador no plano 03-07; "
+        "banco isolado vem na Phase 5)"
+    )
 
 
-@pytest.mark.xfail(
-    reason="Wave 3 (Plan 04) define algorithm=['RS256']",
-    strict=False,
-)
 def test_jwt_decode_only_accepts_rs256():
     """Threat T-3-03: jwt.decode em shared/auth.py declara algorithms=['RS256']."""
     from pathlib import Path

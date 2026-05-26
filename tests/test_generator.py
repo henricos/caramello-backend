@@ -66,25 +66,19 @@ def test_schema_yaml_has_domain_property():
     )
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) regenera com novo generator",
-    strict=False,
-)
 def test_user_models_in_user_domain():
-    """Wave 4 (Plan 05): após regeneração, src/caramello/user/models.py contém class User."""  # noqa: E501
+    """Plano 03-06: src/caramello/user/models.py contém class User (mapper fix)."""
     models_path = REPO_ROOT / "src/caramello/user/models.py"
     assert models_path.exists(), "user/models.py deve existir após regeneração"
     content = models_path.read_text()
     assert "class User(SQLModel, table=True):" in content
-    assert "from __future__ import annotations" in content
+    # Intencionalmente sem from __future__ import annotations: com from __future__,
+    # list["Family"] vira string lazy e SA não consegue resolver o tipo no mapper.
+    assert "from __future__ import annotations" not in content
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) regenera com novo generator",
-    strict=False,
-)
 def test_family_models_consolidated():
-    """Wave 4 (Plan 05): family/models.py contém Family, FamilyMember e FamilyInvitation."""  # noqa: E501
+    """Plano 03-06: family/models.py contém Family, FamilyMember e FamilyInvitation."""
     models_path = REPO_ROOT / "src/caramello/family/models.py"
     assert models_path.exists()
     content = models_path.read_text()
@@ -93,38 +87,27 @@ def test_family_models_consolidated():
     assert "class FamilyInvitation(SQLModel, table=True):" in content
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) regenera com novo generator",
-    strict=False,
-)
 def test_generated_code_uses_modern_types():
-    """Wave 4 (Plan 05): código gerado usa `str | None` e `list[T]`, não `Optional`/`List`."""  # noqa: E501
+    """Plano 03-06: código gerado usa `str | None` e `list[T]`, não `Optional`/`List`."""
     models_path = REPO_ROOT / "src/caramello/user/models.py"
     content = models_path.read_text()
     assert "Optional[" not in content, "código gerado não deve usar Optional[X]"
     assert "from typing import Optional" not in content
     assert "from typing import List" not in content
-    assert "from __future__ import annotations" in content
+    # Intencionalmente sem from __future__ import annotations (mapper fix 03-06)
+    assert "from __future__ import annotations" not in content
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) regenera router com Depends(get_current_user)",
-    strict=False,
-)
 def test_generated_router_requires_auth():
-    """Wave 4 (Plan 05): router gerado importa get_current_user e usa Depends."""
+    """Plano 03-06: router gerado importa get_current_user e usa Depends."""
     router_path = REPO_ROOT / "src/caramello/user/router.py"
     content = router_path.read_text()
     assert "from caramello.shared.auth import get_current_user" in content
     assert "Depends(get_current_user)" in content
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) gera stub de operations.py",
-    strict=False,
-)
 def test_user_operations_stub_or_implemented():
-    """Wave 4 (Plan 05): user/operations.py existe com anotação stub ou implemented."""
+    """Plano 03-05: user/operations.py existe com anotação stub ou implemented."""
     ops_path = REPO_ROOT / "src/caramello/user/operations.py"
     assert ops_path.exists()
     first_line = ops_path.read_text().splitlines()[0].strip()
@@ -134,11 +117,7 @@ def test_user_operations_stub_or_implemented():
     ), f"Primeira linha deve ser anotação CARAMELLO-GENERATED; foi: {first_line!r}"
 
 
-@pytest.mark.xfail(
-    reason="Wave 4 (Plan 05) remove diretórios antigos",
-    strict=False,
-)
 def test_legacy_paths_removed():
-    """Wave 4 (Plan 05): src/caramello/models e src/caramello/api/generated foram removidos."""  # noqa: E501
+    """Plano 03-05: src/caramello/models e src/caramello/api/generated foram removidos."""
     assert not (REPO_ROOT / "src/caramello/models").exists()
     assert not (REPO_ROOT / "src/caramello/api").exists()

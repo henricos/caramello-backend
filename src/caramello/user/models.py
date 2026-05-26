@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -28,8 +26,10 @@ class User(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
 
-    families: list[Family] = Relationship(back_populates="members")
-    sent_invitations: list[FamilyInvitation] = Relationship(back_populates="inviter")
+    families: list["Family"] = Relationship(
+        back_populates="members", sa_relationship_kwargs={"secondary": "family_member"}
+    )  # noqa: UP037
+    sent_invitations: list["FamilyInvitation"] = Relationship(back_populates="inviter")  # noqa: UP037
 
 
 class UserRead(SQLModel):
@@ -51,11 +51,3 @@ class UserUpdate(SQLModel):
     idp_sub: str | None = None
     email: EmailStr | None = None
     name: str | None = None
-
-
-# ---------------------------------------------------------------
-# Late-bind de link_models cross-domain — evita import circular.
-# ---------------------------------------------------------------
-from caramello.family.models import FamilyMember as _FamilyMember  # noqa: E402
-
-User.__sqlmodel_relationships__["families"].link_model = _FamilyMember  # type: ignore[attr-defined]
