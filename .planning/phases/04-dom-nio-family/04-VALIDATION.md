@@ -2,8 +2,8 @@
 phase: 4
 slug: dom-nio-family
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-26
 ---
 
@@ -38,11 +38,11 @@ created: 2026-05-26
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 04-generator-url | 01 | 1 | D-09, D-10 | — | N/A | unit | `uv run pytest tests/test_generator.py::test_router_url_has_domain_prefix_and_hyphens -x` | ❌ Wave 0 | ⬜ pending |
+| 04-generator-url | 01 | 1 | D-09, D-10 | — | N/A | unit | `uv run pytest tests/test_generator.py::test_router_url_has_domain_prefix_and_hyphens -x` | ✅ Wave 0 done | ⬜ pending |
 | 04-alembic-migration | 02 | 2 | D-01 | — | N/A | manual | `uv run alembic upgrade head` (sem erro) | N/A | ⬜ pending |
 | 04-families-models | 02 | 2 | D-01, FAMILY-01 | — | N/A | unit | `uv run pytest tests/ -x -q` | N/A | ⬜ pending |
-| 04-families-operations | 03 | 3 | FAMILY-01, FAMILY-02, FAMILY-03, FAMILY-07 | T-04-01 | Endpoint retorna 403 sem owner role; retorna 401 sem token | unit (mock) | `uv run pytest tests/test_family_operations.py -x` | ❌ Wave 0 | ⬜ pending |
-| 04-auto-join | 04 | 3 | D-02 | — | Auto-join só ocorre para convites pending_login | unit (mock) | `uv run pytest tests/test_auth.py::test_auto_join_on_login -x` | ❌ Wave 0 | ⬜ pending |
+| 04-families-operations | 03 | 3 | FAMILY-01, FAMILY-02, FAMILY-03, FAMILY-07 | T-04-01 | Endpoint retorna 403 sem owner role; retorna 401 sem token | unit (mock) | `uv run pytest tests/test_family_operations.py -x` | ✅ Wave 0 done | ⬜ pending |
+| 04-auto-join | 04 | 3 | D-02 | — | Auto-join só ocorre para convites pending_login | unit (mock) | `uv run pytest tests/test_auth.py::test_auto_join_on_login -x` | ✅ Wave 0 done | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -50,9 +50,9 @@ created: 2026-05-26
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_family_operations.py` — stubs para FAMILY-01, 02, 03, 07 usando `app.dependency_overrides[get_current_user]` (padrão de `tests/test_user_operations.py`)
-- [ ] `tests/test_auth.py` — adicionar `test_auto_join_on_login` ao arquivo existente
-- [ ] `tests/test_generator.py` — adicionar `test_router_url_has_domain_prefix_and_hyphens` ao arquivo existente
+- [x] ✅ `tests/test_family_operations.py` — stubs para FAMILY-01, 02, 03, 07 usando `app.dependency_overrides[get_current_user]` (padrão de `tests/test_user_operations.py`) — concluído no plano 04-01 Task 1
+- [x] ✅ `tests/test_auth.py` — `test_auto_join_on_login` adicionado — concluído no plano 04-01 Task 2
+- [x] ✅ `tests/test_generator.py` — `test_router_url_has_domain_prefix_and_hyphens` (+5 invariantes) adicionados — concluído no plano 04-01 Task 2
 
 ---
 
