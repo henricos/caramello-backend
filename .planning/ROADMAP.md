@@ -81,16 +81,18 @@ Plans:
 **UI hint**: no
 
 ### Phase 4: Domínio Family
-**Goal**: Usuário autenticado pode criar e gerenciar famílias, convidar membros e controlar adesões — todos os endpoints do domínio family funcionais e protegidos
+**Goal**: Usuário autenticado pode criar e gerenciar famílias, pré-registrar membros por email e controlar adesões — todos os endpoints do domínio family funcionais e protegidos
 **Depends on**: Phase 3
-**Requirements**: FAMILY-01, FAMILY-02, FAMILY-03, FAMILY-04, FAMILY-05, FAMILY-06, FAMILY-07
-**Success Criteria** (what must be TRUE):
-  1. `POST /family/families` cria família e torna o usuário autenticado owner automaticamente
-  2. `GET /family/families` lista apenas famílias das quais o usuário é membro
-  3. `POST /family/families/{id}/invitations` gera código de convite reutilizável — apenas owner consegue; não-owner recebe 403
-  4. `POST /family/invitations/{code}/join` registra solicitação pendente para o usuário autenticado
-  5. `PATCH /family/invitations/{id}` permite owner aprovar ou rejeitar — solicitação aprovada adiciona membro; solicitação rejeitada não adiciona
-  6. `DELETE /family/families/{id}/members/{user_id}` remove membro — apenas owner consegue; todos os endpoints retornam 401 sem token
+**Requirements**: FAMILY-01, FAMILY-02, FAMILY-03, FAMILY-07 (implementados); FAMILY-04, FAMILY-05, FAMILY-06 (deferidos para M2 — ver D-04 em 04-CONTEXT.md)
+**Success Criteria** (what must be TRUE — atualizado em Phase 4 para refletir CONTEXT.md):
+  1. `POST /families/registry` cria família e torna o usuário autenticado owner (role="owner") (FAMILY-01)
+  2. `GET /families/families` lista apenas famílias das quais o usuário é membro (FAMILY-02)
+  3. `GET /families/families/{uuid}` retorna 200 se o usuário é membro; 403 caso contrário (FAMILY-03)
+  4. `POST /families/families/{uuid}/pre-register` registra email para auto-join — apenas owner consegue; não-owner recebe 403 (D-07)
+  5. Primeiro login de email pré-registrado adiciona automaticamente como FamilyMember(role="member") — auto-join transparente em `get_current_user()` (D-02)
+  6. `GET /families/families/{uuid}/members` lista membros se o requisitante é membro; 403 senão
+  7. `DELETE /families/families/{uuid}/members/{user_uuid}` remove membro — apenas owner consegue (FAMILY-07); endpoints sem token retornam 401
+  8. FAMILY-04, FAMILY-05, FAMILY-06 (código convite reutilizável + join request + aprovação) DEFERIDOS para M2 conforme D-04
 
 **Plans**: 4 planos (1 wave por plano — sequenciais)
 Plans:
@@ -104,9 +106,7 @@ Plans:
 - [x] 04-03-PLAN.md — Regenerar código (users/ + families/), deletar diretórios antigos, atualizar main.py + alembic/env.py + migration Alembic
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 04-04-PLAN.md — Implementar families/operations.py (6 endpoints) + estender shared/auth.py com auto-join (D-02) + finalizar ROADMAP/REQUIREMENTS (FAMILY-04/05/06 deferidos M2)
-
-> **Nota:** os Success Criteria acima refletem o fluxo original (código de convite reutilizável FAMILY-04/05/06). Após Plano 04-04, este bloco passa a refletir o fluxo de pré-cadastro por email (D-01/D-02 em 04-CONTEXT.md) — FAMILY-04/05/06 deferidos para M2 conforme D-04.
+- [x] 04-04-PLAN.md — Implementar families/operations.py (6 endpoints) + estender shared/auth.py com auto-join (D-02) + finalizar ROADMAP/REQUIREMENTS (FAMILY-04/05/06 deferidos M2)
 
 ### Phase 5: MCP, Testes e Docker
 **Goal**: Aplicação containerizada, testada com isolamento de banco, e expondo ferramentas MCP protegidas por auth — pronta para deploy

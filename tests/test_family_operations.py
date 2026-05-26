@@ -44,7 +44,6 @@ def test_families_operations_module_exists():
 def test_operations_annotation_is_implemented():
     """Plano 04-04: primeira linha == # CARAMELLO-GENERATED: implemented."""
     pytest.importorskip("caramello.families.operations")
-    pytest.xfail("Plano 04-04 ainda não rodou — anotação ainda é stub")
     from pathlib import Path
 
     ops_path = (
@@ -94,7 +93,6 @@ def test_registry_creates_family_and_owner():
     Verifica que a operação adiciona 1 Family e 1 FamilyMember com role='owner'.
     """
     pytest.importorskip("caramello.families.operations")
-    pytest.xfail("Plano 04-04 ainda não rodou — operations.py é stub")  # noqa: E501
     from fastapi.testclient import TestClient
 
     from caramello.families.models import (  # type: ignore[import-not-found]
@@ -121,7 +119,9 @@ def test_registry_creates_family_and_owner():
 
     mock_session = AsyncMock()
     mock_session.exec.side_effect = _exec
-    mock_session.add.side_effect = lambda o: added.append(o)
+    # session.add() é SÍNCRONO em SQLAlchemy async — usar MagicMock para que
+    # o side_effect seja executado imediatamente (sem await)
+    mock_session.add = MagicMock(side_effect=lambda o: added.append(o))
     mock_session.flush = AsyncMock(
         side_effect=lambda: setattr(added[0], "id", 1) if added else None
     )
@@ -158,7 +158,6 @@ def test_registry_creates_family_and_owner():
 def test_list_families_only_mine():
     """FAMILY-02: GET /families/families filtra por membership do usuário."""
     pytest.importorskip("caramello.families.operations")
-    pytest.xfail("Plano 04-04 ainda não rodou — operations.py é stub")  # noqa: E501
     from fastapi.testclient import TestClient
 
     from caramello.families.models import Family  # type: ignore[import-not-found]
@@ -207,7 +206,6 @@ def test_list_families_only_mine():
 def test_get_family_detail_non_member_returns_403():
     """FAMILY-03: GET /families/families/{uuid} retorna 403 se usuário não é membro."""
     pytest.importorskip("caramello.families.operations")
-    pytest.xfail("Plano 04-04 ainda não rodou — operations.py é stub")  # noqa: E501
     from fastapi.testclient import TestClient
 
     from caramello.main import app
@@ -243,7 +241,6 @@ def test_get_family_detail_non_member_returns_403():
 def test_pre_register_member_non_owner_returns_403():
     """D-07: POST /families/families/{uuid}/pre-register retorna 403 sem owner role."""
     pytest.importorskip("caramello.families.operations")
-    pytest.xfail("Plano 04-04 ainda não rodou — operations.py é stub")  # noqa: E501
     from fastapi.testclient import TestClient
 
     from caramello.main import app
@@ -281,7 +278,6 @@ def test_pre_register_member_non_owner_returns_403():
 def test_remove_member_non_owner_returns_403():
     """FAMILY-07: DELETE members requer role==owner; sem owner retorna 403."""
     pytest.importorskip("caramello.families.operations")
-    pytest.xfail("Plano 04-04 ainda não rodou — operations.py é stub")  # noqa: E501
     from fastapi.testclient import TestClient
 
     from caramello.main import app

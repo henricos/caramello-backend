@@ -70,9 +70,6 @@ def test_auto_join_on_login():
     - invitation.status é marcado como "joined"
     """
     pytest.importorskip("caramello.families.models")
-    pytest.xfail(
-        "Plano 04-04 ainda não rodou — auto-join não implementado em shared/auth.py"
-    )
     from unittest.mock import AsyncMock, MagicMock, patch
 
     from caramello.families.models import FamilyInvitation, FamilyMember
@@ -116,7 +113,9 @@ def test_auto_join_on_login():
     mock_session = AsyncMock()
     mock_session.exec.side_effect = _exec
     mock_session.execute = AsyncMock()
-    mock_session.add.side_effect = lambda o: added.append(o)
+    # session.add() é SÍNCRONO em SQLAlchemy async — usar MagicMock para que
+    # o side_effect seja executado imediatamente (sem await)
+    mock_session.add = MagicMock(side_effect=lambda o: added.append(o))
     mock_session.commit = AsyncMock()
 
     # Mockar JWT decode + JWKS cache para evitar tocar Keycloak real
