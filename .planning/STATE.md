@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: ready_to_plan
 stopped_at: "03-07 Task 2 — checkpoint:human-action (operador deve executar checklist E2E e preencher 03-07-EVIDENCE.md)"
 last_updated: "2026-05-26T00:00:00.000Z"
 last_activity: "2026-05-26 -- 03-07 Task 1 concluída (smoke_e2e.py criado); aguardando ação do operador na Task 2"
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 15
   completed_plans: 13
-  percent: 87
+  percent: 60
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-23)
 
 ## Current Position
 
-Phase: 03 (estrutura-por-dom-nios-e-autentica-o) — EXECUTING
-Plan: 07 of 07 — checkpoint:human-action em Task 2
-Status: Aguardando ação do operador (E2E verification)
-Last activity: "2026-05-26 -- 03-07 Task 1 concluída; checkpoint na Task 2"
+Phase: 4
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-26
 
 Progress: [██████████] 100% (Phase 3)
 
@@ -36,7 +36,7 @@ Progress: [██████████] 100% (Phase 3)
 
 **Velocity:**
 
-- Total plans completed: 8
+- Total plans completed: 15
 - Average duration: —
 - Total execution time: —
 
@@ -46,6 +46,7 @@ Progress: [██████████] 100% (Phase 3)
 |-------|-------|-------|----------|
 | 01 | 4 | - | - |
 | 02 | 4 | - | - |
+| 03 | 7 | - | - |
 
 **Recent Trend:** N/A — nenhum plano executado ainda
 
