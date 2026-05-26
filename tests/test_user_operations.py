@@ -1,21 +1,21 @@
-"""Testes para src/caramello/user/operations.py — USER-01.
+"""Testes para src/caramello/users/operations.py — USER-01.
 
-GET /user/me requer auth válida + banco real (JIT provisioning).
+GET /users/me requer auth válida + banco real (JIT provisioning).
 Estratégia para CI: usar app.dependency_overrides para mockar get_current_user.
 """
 from __future__ import annotations
 
 
 def test_get_me_returns_user_fields():
-    """USER-01: GET /user/me retorna id, email, name (via mock de get_current_user)."""
+    """USER-01: GET /users/me retorna id, email, name (via mock de get_current_user)."""
     from datetime import datetime, timezone
     from uuid import uuid4
 
-    from caramello.shared.auth import get_current_user
-    from caramello.user.models import User
     from fastapi.testclient import TestClient
 
     from caramello.main import app
+    from caramello.shared.auth import get_current_user
+    from caramello.users.models import User
 
     fake_user = User(
         id=42,
@@ -35,7 +35,7 @@ def test_get_me_returns_user_fields():
         # Usar TestClient sem context manager para evitar disparo do lifespan
         # (que tenta conectar ao Keycloak via fetch_jwks).
         client = TestClient(app)
-        response = client.get("/user/me")
+        response = client.get("/users/me")
         assert response.status_code == 200, response.text
         body = response.json()
         # UserRead exclui id interno; expõe uuid, email, name (ver dsl/entities/user.yaml)  # noqa: E501
@@ -51,7 +51,7 @@ def test_operations_annotation_is_implemented():
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[1]
-    ops_path = repo_root / "src/caramello/user/operations.py"
+    ops_path = repo_root / "src/caramello/users/operations.py"
     first_line = ops_path.read_text().splitlines()[0].strip()
     assert first_line == "# CARAMELLO-GENERATED: implemented", (
         f"Anotação deve ser 'implemented' após Wave 4; foi: {first_line!r}"

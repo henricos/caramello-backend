@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from caramello.family.models import (
+from caramello.families.models import (
     Family,
     FamilyCreate,
     FamilyInvitation,
@@ -18,9 +18,9 @@ from caramello.family.models import (
 )
 from caramello.shared.auth import get_current_user
 from caramello.shared.database import get_session
-from caramello.user.models import User
+from caramello.users.models import User
 
-family_router = APIRouter(prefix="/family", tags=["Family"])
+family_router = APIRouter(prefix="/families/family", tags=["Family"])
 
 
 @family_router.post("/", response_model=FamilyRead)
@@ -99,7 +99,7 @@ async def delete_family(
 
 
 familyinvitation_router = APIRouter(
-    prefix="/family_invitation", tags=["FamilyInvitation"]
+    prefix="/families/family-invitation", tags=["FamilyInvitation"]
 )
 
 

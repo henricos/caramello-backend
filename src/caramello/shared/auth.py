@@ -34,7 +34,7 @@ from caramello.core.config import settings
 from caramello.shared.database import get_session
 
 if TYPE_CHECKING:
-    from caramello.user.models import User
+    from caramello.users.models import User
 
 # ----------------------------------------------------------------------
 # Estado de módulo — análogo ao `engine` singleton em shared/database.py
@@ -112,7 +112,7 @@ async def get_current_user(
     """
     # Import lazy do User para evitar import circular
     # (TYPE_CHECKING resolve estaticamente)
-    from caramello.user.models import User
+    from caramello.users.models import User
 
     token = credentials.credentials
 

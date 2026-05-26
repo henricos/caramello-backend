@@ -8,9 +8,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from caramello.shared.auth import get_current_user
 from caramello.shared.database import get_session
-from caramello.user.models import User, UserCreate, UserRead, UserUpdate
+from caramello.users.models import User, UserCreate, UserRead, UserUpdate
 
-user_router = APIRouter(prefix="/user", tags=["User"])
+user_router = APIRouter(prefix="/users/user", tags=["User"])
 
 
 @user_router.post("/", response_model=UserRead)

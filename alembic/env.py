@@ -19,12 +19,12 @@ if config.config_file_name is not None:
 from sqlmodel import SQLModel  # noqa: E402
 
 from caramello.core.config import settings  # noqa: E402
-from caramello.user.models import User  # noqa: E402, F401
-from caramello.family.models import (  # noqa: E402, F401
+from caramello.families.models import (  # noqa: E402, F401
     Family,
-    FamilyMember,
     FamilyInvitation,
+    FamilyMember,
 )
+from caramello.users.models import User  # noqa: E402, F401
 
 target_metadata = SQLModel.metadata
 
