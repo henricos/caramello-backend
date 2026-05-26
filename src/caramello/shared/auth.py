@@ -106,6 +106,8 @@ async def get_current_user(
       5. INSERT ON CONFLICT DO NOTHING — operação atômica (D-12, AUTH-02).
       6. SELECT do User para retornar (ON CONFLICT DO NOTHING não retorna
          a linha — pitfall #5).
+      7. AUTO-JOIN (Phase 4 D-02): busca FamilyInvitation pendente por email;
+         se existe, cria FamilyMember(role="member") + atualiza invitation.status.
 
     Aud claim: D-02 manda iniciar com verify_aud=False; uma task de
     inspeção de token real (Plan 05) decide quando ativar.
@@ -193,4 +195,31 @@ async def get_current_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Falha ao provisionar usuário",
         )
+
+    # 7. AUTO-JOIN (Phase 4 D-02): se existe FamilyInvitation pendente com este email,
+    # adicionar o usuário automaticamente como FamilyMember(role="member").
+    # Import lazy para evitar ciclo entre shared/ e families/ (pitfall #3 RESEARCH.md).
+    from caramello.families.models import (  # noqa: PLC0415
+        FamilyInvitation,
+        FamilyMember,
+    )
+
+    inv_result = await session.exec(
+        select(FamilyInvitation).where(
+            FamilyInvitation.email == email,
+            FamilyInvitation.status == "pending_login",
+        )
+    )
+    pending_inv = inv_result.first()
+    if pending_inv is not None:
+        new_member = FamilyMember(
+            user_id=user.id,
+            family_id=pending_inv.family_id,
+            role="member",
+        )
+        session.add(new_member)
+        pending_inv.status = "joined"
+        session.add(pending_inv)
+        await session.commit()
+
     return user

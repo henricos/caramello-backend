@@ -38,13 +38,15 @@ Requisitos do Milestone 1 — Fundação e revisão geral do projeto.
 
 ### Domínio Family
 
-- [ ] **FAMILY-01**: Usuário autenticado pode criar uma família e torna-se owner automaticamente (`POST /family/families`)
-- [ ] **FAMILY-02**: Usuário autenticado pode listar suas famílias (`GET /family/families`)
-- [ ] **FAMILY-03**: Usuário autenticado pode consultar detalhes de uma família da qual é membro (`GET /family/families/{id}`)
-- [ ] **FAMILY-04**: Owner pode gerar código de convite reutilizável para a família (`POST /family/families/{id}/invitations`)
-- [ ] **FAMILY-05**: Usuário autenticado pode usar convite para solicitar entrada em família — solicitação fica pendente (`POST /family/invitations/{code}/join`)
-- [ ] **FAMILY-06**: Owner pode aprovar ou rejeitar solicitações de entrada pendentes (`PATCH /family/invitations/{id}`)
-- [ ] **FAMILY-07**: Owner pode listar e remover membros da família (`GET /family/families/{id}/members`, `DELETE /family/families/{id}/members/{user_id}`)
+- [x] **FAMILY-01**: Usuário autenticado pode criar uma família e torna-se owner automaticamente (`POST /families/registry`)
+- [x] **FAMILY-02**: Usuário autenticado pode listar suas famílias (`GET /families/families`)
+- [x] **FAMILY-03**: Usuário autenticado pode consultar detalhes de uma família da qual é membro (`GET /families/families/{uuid}`)
+- [ ] **FAMILY-04**: Owner pode gerar código de convite reutilizável para a família — DEFERIDO M2 (D-04)
+- [ ] **FAMILY-05**: Usuário autenticado pode usar convite para solicitar entrada em família — DEFERIDO M2 (D-04)
+- [ ] **FAMILY-06**: Owner pode aprovar ou rejeitar solicitações de entrada pendentes — DEFERIDO M2 (D-04)
+- [x] **FAMILY-07**: Owner pode remover membros da família (`DELETE /families/families/{uuid}/members/{user_uuid}`) e listar (`GET /families/families/{uuid}/members`)
+
+> **Nota Phase 4 (D-04):** Os requisitos FAMILY-04, FAMILY-05 e FAMILY-06 (fluxo de código de convite reutilizável + join request + aprovação manual) foram deferidos para o Milestone 2 — eles caracterizam um produto público com múltiplas famílias de terceiros, fora do escopo do M1 (grupo fechado 1-5 usuários). Em substituição, a Phase 4 implementa o fluxo de **pré-cadastro por email** (D-01, D-02) que é equivalente em valor para o grupo familiar e mais simples operacionalmente.
 
 ### MCP — Model Context Protocol
 
@@ -131,13 +133,13 @@ Reconhecidos mas deferidos para milestones futuros.
 | STRUCT-01 | Phase 3 | Pendente |
 | STRUCT-02 | Phase 3 | Pendente |
 | USER-01 | Phase 3 | Pendente |
-| FAMILY-01 | Phase 4 | Pendente |
-| FAMILY-02 | Phase 4 | Pendente |
-| FAMILY-03 | Phase 4 | Pendente |
-| FAMILY-04 | Phase 4 | Pendente |
-| FAMILY-05 | Phase 4 | Pendente |
-| FAMILY-06 | Phase 4 | Pendente |
-| FAMILY-07 | Phase 4 | Pendente |
+| FAMILY-01 | Phase 4 | Implementado (04-04) |
+| FAMILY-02 | Phase 4 | Implementado (04-04) |
+| FAMILY-03 | Phase 4 | Implementado (04-04) |
+| FAMILY-04 | Phase 4 → M2 | Deferred (D-04) |
+| FAMILY-05 | Phase 4 → M2 | Deferred (D-04) |
+| FAMILY-06 | Phase 4 → M2 | Deferred (D-04) |
+| FAMILY-07 | Phase 4 | Implementado (04-04) |
 | MCP-01 | Phase 5 | Pendente |
 | MCP-02 | Phase 5 | Pendente |
 | DEPLOY-01 | Phase 5 | Pendente |
