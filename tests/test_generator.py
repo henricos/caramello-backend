@@ -16,19 +16,19 @@ DSL_OPERATIONS_DIR = REPO_ROOT / "dsl" / "operations"
 
 
 def test_user_yaml_has_domain_field():
-    """Wave 1 (Plan 02): dsl/entities/user.yaml contém `domain: user`."""
+    """Phase 3 -> Phase 4: dsl/entities/user.yaml contém `domain: user` (Phase 3) ou `domain: users` (Phase 4+)."""
     data = yaml.safe_load((DSL_ENTITIES_DIR / "user.yaml").read_text())
-    assert data.get("domain") == "user", (
-        f"user.yaml deve declarar domain: user; encontrado: {data.get('domain')!r}"
+    assert data.get("domain") in ("user", "users"), (
+        f"user.yaml deve declarar domain: user|users; encontrado: {data.get('domain')!r}"
     )
 
 
 def test_family_yamls_have_domain_field():
-    """Wave 1 (Plan 02): family*.yaml declaram domain: family."""
+    """Phase 3 -> Phase 4: family*.yaml declaram domain: family (Phase 3) ou families (Phase 4+)."""
     for fname in ("family.yaml", "family_member.yaml", "family_invitation.yaml"):
         data = yaml.safe_load((DSL_ENTITIES_DIR / fname).read_text())
-        assert data.get("domain") == "family", (
-            f"{fname} deve declarar domain: family; encontrado: {data.get('domain')!r}"
+        assert data.get("domain") in ("family", "families"), (
+            f"{fname} deve declarar domain: family|families; encontrado: {data.get('domain')!r}"
         )
 
 
@@ -37,8 +37,8 @@ def test_operations_user_yaml_exists():
     path = DSL_OPERATIONS_DIR / "user.yaml"
     assert path.exists(), f"dsl/operations/user.yaml deve existir em {path}"
     data = yaml.safe_load(path.read_text())
-    assert data.get("domain") == "user", (
-        f"domain deve ser 'user'; encontrado: {data.get('domain')!r}"
+    assert data.get("domain") in ("user", "users"), (
+        f"domain deve ser 'user' ou 'users'; encontrado: {data.get('domain')!r}"
     )
     ops = data.get("operations", [])
     assert len(ops) >= 1, f"deve ter pelo menos 1 operação; encontradas: {len(ops)}"
@@ -48,8 +48,8 @@ def test_operations_user_yaml_exists():
     assert get_me.get("method") == "GET", (
         f"get_me.method deve ser 'GET'; encontrado: {get_me.get('method')!r}"
     )
-    assert get_me.get("path") == "/user/me", (
-        f"get_me.path deve ser '/user/me'; encontrado: {get_me.get('path')!r}"
+    assert get_me.get("path") in ("/user/me", "/users/me"), (
+        f"get_me.path deve ser '/user/me' ou '/users/me'; encontrado: {get_me.get('path')!r}"
     )
     assert get_me.get("description"), "get_me.description não pode ser vazio"
 

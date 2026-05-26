@@ -25,6 +25,17 @@ STANDARD_TYPES = {"int", "str", "bool", "float", "list", "dict"}
 ANNOTATION_STUB = "# CARAMELLO-GENERATED: stub"
 ANNOTATION_IMPLEMENTED = "# CARAMELLO-GENERATED: implemented"
 
+# Mapeia o domain (do DSL, possivelmente plural) para o nome canônico da entidade
+# canônica desse domínio. Necessário porque domain.title() produz nomes incorretos
+# para domínios plurais (ex: "families".title() == "Families", mas a classe é "Family").
+# Quando um novo domínio for adicionado (ex: "finances" → "Transaction"), incluir aqui.
+DOMAIN_TO_ENTITY_NAME: dict[str, str] = {
+    "user": "User",
+    "users": "User",
+    "family": "Family",
+    "families": "Family",
+}
+
 
 def load_yaml(file_path: Path) -> Any:
     """Carrega um arquivo YAML de forma segura."""
@@ -336,6 +347,7 @@ def generate_router(entity_data: dict[str, Any]) -> str:
     var_name = name.lower()
     table_name = entity_data["table_name"]
     domain = entity_data.get("domain", "")
+    url_table_name = table_name.replace("_", "-")
 
     # Import de User necessário para `_: User = Depends(get_current_user)`.
     # No domain 'user', a classe já é importada via linha principal de modelos.
@@ -361,7 +373,7 @@ from caramello.shared.auth import get_current_user
 from caramello.shared.database import get_session
 {user_import_line}{domain_import}
 
-router = APIRouter(prefix="/{table_name}", tags=["{name}"])
+router = APIRouter(prefix="/{domain}/{url_table_name}", tags=["{name}"])
 
 
 @router.post("/", response_model={name}Read)
@@ -444,10 +456,15 @@ def generate_operations(op_data: dict[str, Any]) -> str:
     """Gera stub de operations.py a partir de dsl/operations/{domain}.yaml."""
     domain = op_data["domain"]
     operations = op_data.get("operations", [])
-    # Deriva o nome da classe principal do domínio
-    domain_class = domain.title()
-    if domain == "user":
-        domain_class = "User"
+    # Deriva o nome da classe canônica do domínio via mapeamento explícito.
+    # NÃO usar domain.title(): para "families" produziria "Families" (classe
+    # inexistente).
+    if domain not in DOMAIN_TO_ENTITY_NAME:
+        raise ValueError(
+            f"domain {domain!r} não mapeado em DOMAIN_TO_ENTITY_NAME. "
+            f"Adicione a entrada para o domínio antes de gerar operations.py."
+        )
+    domain_class = DOMAIN_TO_ENTITY_NAME[domain]
 
     header = f"""{ANNOTATION_STUB}
 from __future__ import annotations
@@ -882,7 +899,11 @@ def _run_ruff_fix(src_dir: Path) -> None:
     """Executa ruff --fix e ruff format nos arquivos gerados."""
     import subprocess
 
-    dirs = [str(src_dir / d) for d in ("user", "family") if (src_dir / d).exists()]
+    dirs = [
+        str(src_dir / d)
+        for d in ("user", "family", "users", "families")
+        if (src_dir / d).exists()
+    ]
     if not dirs:
         return
     # 1. Aplicar fixes automáticos (isort, UP037, etc.)
