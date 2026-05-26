@@ -2,7 +2,7 @@
 # Definition of the Family entity.
 
 name: Family
-domain: family
+domain: families
 description: "Represents a family group in the system."
 table_name: family
 

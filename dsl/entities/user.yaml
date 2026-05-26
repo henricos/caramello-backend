@@ -2,7 +2,7 @@
 # Definition of the User entity, aligned with Keycloak authentication.
 
 name: User
-domain: user
+domain: users
 description: Represents a system user, provisioned on first authentication via Keycloak.
 table_name: user
 

@@ -1,9 +1,10 @@
 # dsl/entities/family_invitation.yaml
 # Definition of the FamilyInvitation entity.
+# Redesenhada na Phase 4 (D-01): de "convite por email com expiração" para "pré-registro de membro".
 
 name: FamilyInvitation
-domain: family
-description: "Manages the invitation flow for families."
+domain: families
+description: "Pré-registro de membro de família por email (D-01)."
 table_name: family_invitation
 
 fields:
@@ -31,28 +32,23 @@ fields:
     nullable: false
     description: "ID of the user who sent the invitation."
 
-  - name: invitee_email
-    type: EmailStr
+  - name: email
+    type: str
     nullable: false
-    description: "Email of the invited user."
+    description: "Email para matching automático no login (pré-registro D-01)."
 
   - name: status
     type: str
     max_length: 20
-    default: "pending"
+    default: "pending_login"
     nullable: false
-    description: "Status of the invitation (pending, accepted, declined)."
+    description: "Status do pré-registro: pending_login ou joined (D-01)."
 
   - name: created_at
     type: datetime
     default_factory: now_utc
     nullable: false
     description: "Timestamp of the invitation's creation."
-
-  - name: expires_at
-    type: datetime
-    nullable: false
-    description: "Timestamp of the invitation's expiration."
 
 relationships:
   - name: family
