@@ -6,7 +6,7 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from caramello.family.models import Family, FamilyInvitation
+    from caramello.families.models import Family, FamilyInvitation
 
 
 class User(SQLModel, table=True):

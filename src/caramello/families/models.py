@@ -1,10 +1,9 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
-from caramello.user.models import User
+from caramello.users.models import User
 
 
 class FamilyMember(SQLModel, table=True):
@@ -72,7 +71,7 @@ class FamilyUpdate(SQLModel):
 
 
 class FamilyInvitation(SQLModel, table=True):
-    """Manages the invitation flow for families."""
+    """Pré-registro de membro de família por email (D-01)."""
 
     __tablename__ = "family_invitation"
 
@@ -80,12 +79,11 @@ class FamilyInvitation(SQLModel, table=True):
     uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
     family_id: int = Field(foreign_key="family.id", nullable=False)
     inviter_id: int = Field(foreign_key="user.id", nullable=False)
-    invitee_email: EmailStr = Field(nullable=False)
-    status: str = Field(max_length=20, default="pending", nullable=False)
+    email: str = Field(nullable=False)
+    status: str = Field(max_length=20, default="pending_login", nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
-    expires_at: datetime = Field(nullable=False)
 
     family: "Family" = Relationship(back_populates="invitations")
     inviter: "User" = Relationship(back_populates="sent_invitations")
@@ -95,23 +93,20 @@ class FamilyInvitationRead(SQLModel):
     uuid: UUID
     family_id: int
     inviter_id: int
-    invitee_email: EmailStr
+    email: str
     status: str
     created_at: datetime
-    expires_at: datetime
 
 
 class FamilyInvitationCreate(SQLModel):
     family_id: int
     inviter_id: int
-    invitee_email: EmailStr
+    email: str
     status: str | None = None
-    expires_at: datetime
 
 
 class FamilyInvitationUpdate(SQLModel):
     family_id: int | None = None
     inviter_id: int | None = None
-    invitee_email: EmailStr | None = None
+    email: str | None = None
     status: str | None = None
-    expires_at: datetime | None = None
