@@ -98,7 +98,7 @@ Plans:
 - [x] 04-01-PLAN.md — Wave 0: stubs de testes (test_family_operations + test_auth.auto_join + test_generator)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 04-02-PLAN.md — Evoluir DSL: domains plurais (users/families), redesign FamilyInvitation, dsl/operations/family.yaml, generator com URL plural + hifens
+- [x] 04-02-PLAN.md — Evoluir DSL: domains plurais (users/families), redesign FamilyInvitation, dsl/operations/family.yaml, generator com URL plural + hifens
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 04-03-PLAN.md — Regenerar código (users/ + families/), deletar diretórios antigos, atualizar main.py + alembic/env.py + migration Alembic
