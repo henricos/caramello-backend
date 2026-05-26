@@ -101,7 +101,7 @@ Plans:
 - [x] 04-02-PLAN.md — Evoluir DSL: domains plurais (users/families), redesign FamilyInvitation, dsl/operations/family.yaml, generator com URL plural + hifens
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 04-03-PLAN.md — Regenerar código (users/ + families/), deletar diretórios antigos, atualizar main.py + alembic/env.py + migration Alembic
+- [x] 04-03-PLAN.md — Regenerar código (users/ + families/), deletar diretórios antigos, atualizar main.py + alembic/env.py + migration Alembic
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 04-04-PLAN.md — Implementar families/operations.py (6 endpoints) + estender shared/auth.py com auto-join (D-02) + finalizar ROADMAP/REQUIREMENTS (FAMILY-04/05/06 deferidos M2)
