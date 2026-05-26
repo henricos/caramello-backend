@@ -676,21 +676,24 @@ services:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`operation_id` do endpoint `list_my_families`**
    - O que sabemos: FastAPI gera `operation_id` automático como `list_my_families_families_families_get` se não for especificado explicitamente.
    - O que está unclear: o endpoint atual em `operations.py` não define `operation_id` explícito. O `include_operations` precisa do `operation_id` exato.
    - Recomendação: adicionar `operation_id="list_my_families"` ao decorator `@router.get("/families", ...)` em `operations.py`. Isso também melhora a legibilidade da spec OpenAPI para clientes MCP.
+   - RESOLVED: Plano 05-02 Task 1 adiciona `operation_id="list_my_families"` explicitamente ao decorator `@router.get("/families", ...)` em `src/caramello/families/operations.py`.
 
 2. **`families/services.py` ainda faz sentido como extração?**
    - O que sabemos: D-MCP-03 pede a extração para `services.py`. O MCP não precisa mais dela diretamente (usa o endpoint). Mas a extração tem valor de testabilidade.
    - Recomendação: manter a extração para `services.py` — os testes de integração podem chamar tanto via endpoint quanto via service diretamente. Isso também prepara o terreno para M2.
+   - RESOLVED: Plano 05-02 Task 2 extrai `families/services.py` de `operations.py` para testabilidade e preparação para M2. O MCP usa o endpoint REST diretamente, não o service.
 
 3. **`caramello_dev` vs `familia_dev` — migração de dados**
    - O que sabemos: D-NAMING-01 define `caramello_dev` como novo nome, mas o banco físico atual é `familia_dev`. Renomear exige operação de banco (não é só código).
    - O que está unclear: se o operador tem dados de dev que precisa preservar ou se pode criar um banco limpo.
    - Recomendação: o plano deve incluir uma tarefa documentada "operador cria `caramello_dev` e `caramello_test` via `bin/setup_db` ou SQL direto" — não automatizar a migração de dados de dev.
+   - RESOLVED: Plano 05-06 Task 3 (checkpoint humano) documenta as instruções para o operador criar `caramello_dev` e `caramello_test` manualmente via `bin/setup_db` ou SQL. Não há migração automática de dados.
 
 ---
 
