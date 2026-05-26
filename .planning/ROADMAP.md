@@ -95,7 +95,7 @@ Plans:
 **Plans**: 4 planos (1 wave por plano — sequenciais)
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md — Wave 0: stubs de testes (test_family_operations + test_auth.auto_join + test_generator)
+- [x] 04-01-PLAN.md — Wave 0: stubs de testes (test_family_operations + test_auth.auto_join + test_generator)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-02-PLAN.md — Evoluir DSL: domains plurais (users/families), redesign FamilyInvitation, dsl/operations/family.yaml, generator com URL plural + hifens
