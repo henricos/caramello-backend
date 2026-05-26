@@ -18,6 +18,7 @@ from caramello.family.models import (
 )
 from caramello.shared.auth import get_current_user
 from caramello.shared.database import get_session
+from caramello.user.models import User
 
 family_router = APIRouter(prefix="/family", tags=["Family"])
 
@@ -26,7 +27,7 @@ family_router = APIRouter(prefix="/family", tags=["Family"])
 async def create_family(
     family_in: FamilyCreate,
     session: AsyncSession = Depends(get_session),
-    _: Family = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> Family:
     db_obj = Family.model_validate(family_in)
     session.add(db_obj)
@@ -38,7 +39,7 @@ async def create_family(
 @family_router.get("/", response_model=list[FamilyRead])
 async def read_familys(
     session: AsyncSession = Depends(get_session),
-    _: Family = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[Family]:
@@ -50,7 +51,7 @@ async def read_familys(
 async def read_family(
     uuid: UUID,
     session: AsyncSession = Depends(get_session),
-    _: Family = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> Family:
     statement = select(Family).where(Family.uuid == uuid)
     result = await session.exec(statement)
@@ -65,7 +66,7 @@ async def update_family(
     uuid: UUID,
     family_in: FamilyUpdate,
     session: AsyncSession = Depends(get_session),
-    _: Family = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> Family:
     statement = select(Family).where(Family.uuid == uuid)
     result = await session.exec(statement)
@@ -85,7 +86,7 @@ async def update_family(
 async def delete_family(
     uuid: UUID,
     session: AsyncSession = Depends(get_session),
-    _: Family = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select(Family).where(Family.uuid == uuid)
     result = await session.exec(statement)
@@ -106,7 +107,7 @@ familyinvitation_router = APIRouter(
 async def create_familyinvitation(
     familyinvitation_in: FamilyInvitationCreate,
     session: AsyncSession = Depends(get_session),
-    _: FamilyInvitation = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> FamilyInvitation:
     db_obj = FamilyInvitation.model_validate(familyinvitation_in)
     session.add(db_obj)
@@ -118,7 +119,7 @@ async def create_familyinvitation(
 @familyinvitation_router.get("/", response_model=list[FamilyInvitationRead])
 async def read_familyinvitations(
     session: AsyncSession = Depends(get_session),
-    _: FamilyInvitation = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[FamilyInvitation]:
@@ -130,7 +131,7 @@ async def read_familyinvitations(
 async def read_familyinvitation(
     uuid: UUID,
     session: AsyncSession = Depends(get_session),
-    _: FamilyInvitation = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> FamilyInvitation:
     statement = select(FamilyInvitation).where(FamilyInvitation.uuid == uuid)
     result = await session.exec(statement)
@@ -145,7 +146,7 @@ async def update_familyinvitation(
     uuid: UUID,
     familyinvitation_in: FamilyInvitationUpdate,
     session: AsyncSession = Depends(get_session),
-    _: FamilyInvitation = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> FamilyInvitation:
     statement = select(FamilyInvitation).where(FamilyInvitation.uuid == uuid)
     result = await session.exec(statement)
@@ -165,7 +166,7 @@ async def update_familyinvitation(
 async def delete_familyinvitation(
     uuid: UUID,
     session: AsyncSession = Depends(get_session),
-    _: FamilyInvitation = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select(FamilyInvitation).where(FamilyInvitation.uuid == uuid)
     result = await session.exec(statement)

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -25,8 +23,8 @@ class FamilyMember(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
 
-    user: User = Relationship()
-    family: Family = Relationship()
+    user: "User" = Relationship()
+    family: "Family" = Relationship()
 
 
 class Family(SQLModel, table=True):
@@ -46,10 +44,10 @@ class Family(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
 
-    members: list[User] = Relationship(
+    members: list["User"] = Relationship(
         back_populates="families", link_model=FamilyMember
     )
-    invitations: list[FamilyInvitation] = Relationship(back_populates="family")
+    invitations: list["FamilyInvitation"] = Relationship(back_populates="family")
 
 
 class FamilyRead(SQLModel):
@@ -89,8 +87,8 @@ class FamilyInvitation(SQLModel, table=True):
     )
     expires_at: datetime = Field(nullable=False)
 
-    family: Family = Relationship(back_populates="invitations")
-    inviter: User = Relationship(back_populates="sent_invitations")
+    family: "Family" = Relationship(back_populates="invitations")
+    inviter: "User" = Relationship(back_populates="sent_invitations")
 
 
 class FamilyInvitationRead(SQLModel):

@@ -110,18 +110,27 @@ def generate_relationships(
     entity_domain: dict[str, str],
     skip_link_models: set[str] | None = None,
     late_bound_types: set[str] | None = None,
+    sa_secondary_map: dict[str, str] | None = None,
 ) -> list[str]:
     """Gera as linhas de Relationship() para uma entidade.
 
-    skip_link_models: set de nomes de link_model que serão late-bound (não emitir
-    no Relationship() inline para evitar NameError por import circular).
+    skip_link_models: set de nomes de link_model que não podem ser referenciados
+    diretamente (causariam import circular). Quando o link_model está em
+    sa_secondary_map, usa sa_relationship_kwargs={'secondary': table_name} para
+    o SQLAlchemy resolver a tabela secundária lazily pelo nome.
+
     late_bound_types: set de classes referenciadas no rel.type que estão apenas
     sob TYPE_CHECKING (não disponíveis em runtime). Necessário para emitir
     `# noqa: UP037` e impedir que `ruff --unsafe-fixes` remova as aspas da
     anotação `list["Foo"]`, o que quebraria o mapper SQLAlchemy.
+
+    sa_secondary_map: dict {link_model_class_name: table_name} — para cada
+    link_model em skip_link_models, o nome da tabela SQLAlchemy que deve ser
+    passado via sa_relationship_kwargs={'secondary': 'table_name'}.
     """
     skip = skip_link_models or set()
     late_bound = late_bound_types or set()
+    sa_sec = sa_secondary_map or {}
     lines = []
     for rel in relationships:
         rname = rel["name"]
@@ -133,6 +142,12 @@ def generate_relationships(
         lm = rel.get("link_model")
         if lm and lm not in skip:
             args.append(f"link_model={lm}")
+        elif lm and lm in skip and lm in sa_sec:
+            # Link model cross-domain: não importamos a classe para evitar
+            # import circular. Usamos sa_relationship_kwargs com secondary como
+            # string (nome da tabela) — SQLAlchemy resolve lazily via metadata.
+            table_name = sa_sec[lm]
+            args.append(f'sa_relationship_kwargs={{"secondary": "{table_name}"}}')
 
         # Detectar se rtype referencia classe late-bound (sob TYPE_CHECKING).
         # Nesse caso anotar `# noqa: UP037` para impedir que ruff
@@ -157,6 +172,7 @@ def generate_models(
     entity_domain: dict[str, str],
     skip_link_models: set[str] | None = None,
     late_bound_types: set[str] | None = None,
+    sa_secondary_map: dict[str, str] | None = None,
 ) -> str:
     """Gera o bloco de 4 classes (Table, Read, Create, Update) para uma entidade."""
     name = entity_data["name"]
@@ -206,7 +222,7 @@ def generate_models(
                 if ci not in cross_imports:
                     cross_imports.append(ci)
 
-    code = "from __future__ import annotations\n\n"
+    code = ""
 
     # Imports de stdlib e terceiros
     stdlib_imports: list[str] = []
@@ -244,7 +260,8 @@ def generate_models(
         code += get_field_definition(f) + "\n"
 
     rel_lines = generate_relationships(
-        relationships, name, entity_domain, skip_link_models, late_bound_types
+        relationships, name, entity_domain, skip_link_models, late_bound_types,
+        sa_secondary_map,
     )
     if rel_lines:
         code += "\n" + "\n".join(rel_lines) + "\n"
@@ -500,8 +517,19 @@ def _consolidate_models(
 ) -> str:
     """Consolida os modelos de todas as entidades de um domínio em um único arquivo.
 
-    Detecta ciclos de import entre domínios e usa TYPE_CHECKING + late-bind
-    para imports que causariam ImportError circular.
+    Detecta ciclos de import entre domínios e usa TYPE_CHECKING para imports que
+    causariam ImportError circular. Para relacionamentos M:M com link_model
+    cross-domain (que causaria ciclo), usa
+    sa_relationship_kwargs={'secondary': 'table_name'} em vez de link_model=...
+    — o SQLAlchemy resolve a tabela pelo nome via metadata, eliminando a
+    necessidade do import circular e de late-binds pós-criação de classe.
+
+    Arquivos gerados NUNCA emitem `from __future__ import annotations`:
+    com `from __future__`, anotações como `list["Family"]` viram strings
+    lazy; SQLModel usa get_origin/get_args para extrair o tipo, mas
+    get_origin('list[\"Family\"]') == None (string não é GenericAlias).
+    Sem `from __future__`, `list["Family"]` é um GenericAlias real e
+    SQLAlchemy resolve "Family" via class registry — correto.
     """
     if not entities:
         return ""
@@ -524,16 +552,23 @@ def _consolidate_models(
         # Se import_domain tem FK para domain, então import cross-domain é ciclo
         return domain in import_domain_imports_from
 
+    # Mapear entity_name → table_name para resolver sa_secondary_map
+    entity_table: dict[str, str] = {}
+    for e in (all_entities or entities):
+        entity_table[e["name"]] = e["table_name"]
+
     # Coletar imports únicos de cada entidade
     all_imports: set[str] = set()
     late_bind_imports: set[str] = set()  # imports que causariam ciclo → TYPE_CHECKING
-    # late_bind_assignments: (entity, rel_name, link_model_class)
-    late_bind_assignments: list[tuple[str, str, str]] = []
     class_blocks: list[str] = []
 
     for entity_data in entities:
-        # Pré-calcular quais link_models desta entidade serão late-bound
+        # Pré-calcular quais link_models desta entidade são cross-domain com ciclo.
+        # Para esses, NÃO fazemos import direto; usamos sa_secondary_map em vez disso.
         entity_skip_link_models: set[str] = set()
+        # sa_secondary_map: {link_model_class: table_name} — para link_models que não
+        # podem ser importados diretamente (ciclo), usamos secondary como string.
+        entity_sa_secondary: dict[str, str] = {}
         for rel in entity_data.get("relationships", []):
             lm = rel.get("link_model")
             if not lm:
@@ -541,9 +576,9 @@ def _consolidate_models(
             lm_domain = entity_domain.get(lm, "")
             if lm_domain and lm_domain != domain and _would_create_cycle(lm_domain):
                 entity_skip_link_models.add(lm)
-                ent_name = entity_data["name"]
-                rel_name = rel["name"]
-                late_bind_assignments.append((ent_name, rel_name, lm))
+                # Mapear link_model → table_name para secondary
+                lm_table = entity_table.get(lm, lm.lower())
+                entity_sa_secondary[lm] = lm_table
 
         # Extrair nomes de classes que entrarão em TYPE_CHECKING (late-bound).
         # Necessário para que generate_relationships emita `# noqa: UP037` nas
@@ -571,6 +606,7 @@ def _consolidate_models(
             entity_domain,
             entity_skip_link_models,
             entity_late_bound,
+            entity_sa_secondary,
         )
         lines = block.split("\n")
 
@@ -619,9 +655,12 @@ def _consolidate_models(
             class_blocks.append("\n".join(class_lines))
 
     # Montar arquivo final
-    result = "from __future__ import annotations\n\n"
+    #
+    # NUNCA emitimos `from __future__ import annotations` em arquivos de models.
+    # Ver docstring desta função para a explicação completa.
+    result = ""
 
-    # Imports TYPE_CHECKING para tipos que causariam ciclo
+    # Imports TYPE_CHECKING para tipos que causariam ciclo (ex: Family em user/models)
     if late_bind_imports:
         result += "from typing import TYPE_CHECKING\n"
 
@@ -661,30 +700,6 @@ def _consolidate_models(
     result += "\n\n"
     result += "\n\n\n".join(class_blocks)
     result += "\n"
-
-    # Bloco de late-bind para link_models que causariam ciclo
-    if late_bind_assignments:
-        result += "\n\n"
-        result += "# ---------------------------------------------------------------\n"
-        result += "# Late-bind de link_models cross-domain — evita import circular.\n"
-        result += "# ---------------------------------------------------------------\n"
-        # Agrupar por domínio de destino
-        by_domain: dict[str, list[tuple[str, str, str]]] = {}
-        for ent, rel, cls in late_bind_assignments:
-            lm_domain = entity_domain.get(cls, "")
-            by_domain.setdefault(lm_domain, []).append((ent, rel, cls))
-        for lm_domain, assignments in sorted(by_domain.items()):
-            # Extrair classes únicas a importar
-            classes = sorted({cls for _, _, cls in assignments})
-            result += f"from caramello.{lm_domain}.models import "
-            result += ", ".join(f"{c} as _{c}" for c in classes)
-            result += "  # noqa: E402\n"
-            for ent, rel, cls in assignments:
-                result += (
-                    f'{ent}.__sqlmodel_relationships__["{rel}"]'
-                    f".link_model = _{cls}"
-                    "  # type: ignore[attr-defined]\n"
-                )
 
     return result
 
@@ -819,14 +834,17 @@ def main() -> None:
         e for domain_entities in entities_by_domain.values() for e in domain_entities
     ]
 
-    # Passo 2: gerar models.py e router.py por domínio
+    # Passo 2: gerar models.py e router.py por domínio (passagem única)
+    # Cross-domain M:M com ciclo de import usam sa_relationship_kwargs secondary
+    # como string — não precisam de segunda passagem para late-binds.
     for domain, entities in entities_by_domain.items():
         domain_dir = SRC_DIR / domain
         domain_dir.mkdir(parents=True, exist_ok=True)
         (domain_dir / "__init__.py").touch()
 
-        # models.py: concatenar classes de todas as entidades do domínio
-        models_code = _consolidate_models(entities, entity_domain, all_entities_flat)
+        models_code = _consolidate_models(
+            entities, entity_domain, all_entities_flat
+        )
         (domain_dir / "models.py").write_text(models_code)
         print(f"  wrote {domain_dir}/models.py")
 
