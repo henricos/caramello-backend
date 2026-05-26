@@ -109,16 +109,35 @@ Plans:
 > **Nota:** os Success Criteria acima refletem o fluxo original (código de convite reutilizável FAMILY-04/05/06). Após Plano 04-04, este bloco passa a refletir o fluxo de pré-cadastro por email (D-01/D-02 em 04-CONTEXT.md) — FAMILY-04/05/06 deferidos para M2 conforme D-04.
 
 ### Phase 5: MCP, Testes e Docker
-**Goal**: Aplicação containerizada, testada com isolamento de banco, e expondo ferramentas MCP protegidas por auth — pronta para deploy
+**Goal**: Aplicação containerizada, testada com isolamento de banco, e expondo uma ferramenta MCP protegida por auth — pronta para deploy
 **Depends on**: Phase 4
 **Requirements**: MCP-01, MCP-02, DEPLOY-01, DEPLOY-02, DEPLOY-03, TEST-01, TEST-02, TEST-03
 **Success Criteria** (what must be TRUE):
-  1. Cliente MCP em `/mcp` descobre ferramentas de consulta de `family` (famílias, membros, convites) e `user` (me) — ferramentas MCP exigem Bearer token válido com mesmo mecanismo dos endpoints REST
+  1. Cliente MCP em `/mcp` descobre a ferramenta de consulta `list_my_families` (endpoint REST exposto via `include_operations`) — a ferramenta MCP exige Bearer token válido com mesmo mecanismo dos endpoints REST
   2. `docker build` produz imagem reproducível com Dockerfile multi-stage, non-root user, sem secrets nos layers de build
   3. `docker compose up` inicia a aplicação com configuração exclusivamente via variáveis de ambiente — sem valores hardcoded; `APP_VERSION` como build arg aparece na OpenAPI spec
-  4. `pytest` executa contra banco isolado `familia_test` com rollback por teste — banco `familia_dev` não é tocado
-  5. Casos de sucesso do domínio family têm cobertura de testes: criar família, convidar, aprovar, listar membros — usando `dependency_overrides` para simular usuário autenticado sem Keycloak real
-**Plans**: TBD
+  4. `pytest` executa contra banco isolado `caramello_test` com rollback por teste — banco `caramello_dev` não é tocado
+  5. Casos de sucesso do domínio family têm cobertura de testes: criar família, pré-registrar membro, listar membros — usando `dependency_overrides` para simular usuário autenticado sem Keycloak real
+
+> **Nota Phase 5:** SC1 reflete a correção do RESEARCH (D-MCP-02): `fastapi-mcp` 0.4.0 só expõe endpoints FastAPI como ferramentas — não há `tools.py` manual. A fase entrega 1 ferramenta de exemplo (`list_my_families`, D-MCP-04); ferramentas adicionais (incluindo convites/aprovação) são M2+. SC4 usa a nomenclatura corrigida `caramello_test`/`caramello_dev` (D-NAMING-01).
+
+**Plans**: 6 planos
+Plans:
+**Wave 1**
+- [ ] 05-01-PLAN.md — Wave 0: deps (fastapi-mcp + pytest-asyncio), asyncio_mode no pyproject, conftest async + stubs de teste
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md — Extrair families/services.py de operations.py + operation_id="list_my_families" (pré-requisito do MCP)
+
+**Wave 3** *(blocked on Waves 1-2; 05-03 e 05-04 paralelos)*
+- [ ] 05-03-PLAN.md — Testes de integração family (criar/listar/pré-registrar/listar membros) + bin/manage_db --env test
+- [ ] 05-04-PLAN.md — Montar FastApiMCP em /mcp (whitelist + auth Bearer) + APP_VERSION na OpenAPI spec
+
+**Wave 4** *(blocked on Wave 3 / 05-04)*
+- [ ] 05-05-PLAN.md — Dockerfile multi-stage non-root + compose.yaml app-only + .dockerignore
+
+**Wave 5** *(blocked on Waves 1/3/5; autonomous: false — checkpoint operador)*
+- [ ] 05-06-PLAN.md — Nomenclatura caramello/caramello_dev/caramello_test (.env.example, docs, CLAUDE.md, REQUIREMENTS.md) + operador cria bancos
 
 ## Progress
 
@@ -128,4 +147,4 @@ Plans:
 | 2. Stack Async | 0/4 | Planned | - |
 | 3. Estrutura por Domínios e Autenticação | 6/7 | In Progress|  |
 | 4. Domínio Family | 0/? | Not started | - |
-| 5. MCP, Testes e Docker | 0/? | Not started | - |
+| 5. MCP, Testes e Docker | 0/6 | Planned | - |
