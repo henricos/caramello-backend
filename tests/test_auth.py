@@ -59,3 +59,111 @@ def test_jwt_decode_only_accepts_rs256():
     assert '"none"' not in auth_src.lower().replace("'none'", '"none"'), (
         "shared/auth.py não deve aceitar algoritmo 'none'"
     )
+
+
+def test_auto_join_on_login():
+    """D-02: get_current_user faz auto-join se existir FamilyInvitation pendente.
+
+    Skipa enquanto src/caramello/families/models.py não existir (plano 04-03).
+    Quando existir, valida o comportamento via mock de session:
+    - FamilyMember(role="member") é criado para a família do convite
+    - invitation.status é marcado como "joined"
+    """
+    pytest.importorskip("caramello.families.models")
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from caramello.families.models import FamilyInvitation, FamilyMember
+
+    from caramello.shared import auth as auth_module
+
+    # Construir uma FamilyInvitation pending_login simulada
+    pending_inv = FamilyInvitation(
+        id=1,
+        family_id=99,
+        inviter_id=1,
+        email="recem@example.com",
+        status="pending_login",
+    )
+
+    try:
+        from caramello.users.models import User  # type: ignore[import-not-found]
+    except ModuleNotFoundError:
+        from caramello.user.models import User  # type: ignore[no-redef]
+
+    provisioned_user = User(
+        id=50,
+        idp_sub="kc-sub-recem",
+        email="recem@example.com",
+        name="Recem Cadastrado",
+    )
+
+    added = []
+    # Sequência esperada de SELECTs em get_current_user (após plano 04-04):
+    # 1) SELECT User WHERE idp_sub → retorna provisioned_user
+    # 2) SELECT FamilyInvitation WHERE email==status=='pending_login' → pending_inv
+    select_results = iter([provisioned_user, pending_inv])
+
+    async def _exec(_stmt):
+        r = MagicMock()
+        try:
+            r.first.return_value = next(select_results)
+        except StopIteration:
+            r.first.return_value = None
+        return r
+
+    mock_session = AsyncMock()
+    mock_session.exec.side_effect = _exec
+    mock_session.execute = AsyncMock()
+    mock_session.add.side_effect = lambda o: added.append(o)
+    mock_session.commit = AsyncMock()
+
+    # Mockar JWT decode + JWKS cache para evitar tocar Keycloak real
+    fake_token_payload = {
+        "sub": "kc-sub-recem",
+        "email": "recem@example.com",
+        "name": "Recem Cadastrado",
+    }
+    with (
+        patch.object(auth_module, "_jwks_cache", {"fake-kid": object()}),
+        patch.object(
+            auth_module.jwt,
+            "get_unverified_header",
+            return_value={"kid": "fake-kid"},
+        ),
+        patch.object(
+            auth_module.jwt,
+            "decode",
+            return_value=fake_token_payload,
+        ),
+    ):
+        from fastapi.security import HTTPAuthorizationCredentials
+
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="fake.token.value"
+        )
+
+        import asyncio
+
+        result_user = asyncio.run(
+            auth_module.get_current_user(
+                credentials=credentials,
+                session=mock_session,
+            )
+        )
+
+    # Asserções:
+    # - User retornado deve ser o provisioned_user
+    assert result_user.idp_sub == "kc-sub-recem"
+    # - Um FamilyMember com role="member" foi adicionado para a família 99
+    members = [o for o in added if isinstance(o, FamilyMember)]
+    assert len(members) == 1, (
+        f"Esperado 1 FamilyMember; foi {len(members)}: {added!r}"
+    )
+    assert members[0].role == "member"
+    assert members[0].family_id == 99
+    assert members[0].user_id == 50
+    # - A invitation foi marcada como joined (mutação direta + add para persistir)
+    assert pending_inv.status == "joined", (
+        "FamilyInvitation.status deve ser 'joined' após auto-join; "
+        f"foi {pending_inv.status!r}"
+    )
