@@ -2,11 +2,11 @@
 
 - Lifespan: popula cache JWKS via shared.auth.fetch_jwks no startup
 - CORS: configurado para o frontend React/Capacitor
-- Routers: registrados a partir dos domínios user/ e family/
+- Routers: registrados a partir dos domínios users/ e families/
 """
 
 # isort: skip_file
-# Ordem de imports intencional — user carregado antes de family para evitar ciclo.
+# Ordem de imports intencional — users carregado antes de families para evitar ciclo.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -17,9 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from caramello.core.config import settings
 from caramello.shared.auth import fetch_jwks
-from caramello.user import operations as user_operations
-from caramello.user import router as user_router
-from caramello.family import router as family_router  # noqa: E402
+from caramello.users import operations as user_operations
+from caramello.users import router as user_router
+from caramello.families import operations as families_operations  # noqa: E402
+from caramello.families import router as families_router  # noqa: E402
 
 
 @asynccontextmanager
@@ -45,13 +46,14 @@ app.add_middleware(
 )
 
 # Routers por domínio
-# IMPORTANTE: user_operations deve ser registrado ANTES de user_router para que
-# rotas estáticas como GET /user/me tenham prioridade sobre GET /user/{uuid}.
-# FastAPI faz correspondência em ordem de registro; rotas estáticas devem vir
-# antes das rotas com parâmetro para evitar que /user/me seja interpretado como uuid.
+# IMPORTANTE: operations (rotas estáticas) registrados ANTES de router (CRUD com {uuid})
+# para que /users/me, /families/registry e /families/families não sejam interpretados
+# como UUIDs. FastAPI faz correspondência em ordem de registro.
+# Ver D-06 (CONTEXT.md Phase 4) e Pitfall 2 (RESEARCH.md Phase 4).
 app.include_router(user_operations.router)
 app.include_router(user_router.router)
-app.include_router(family_router.router)
+app.include_router(families_operations.router)
+app.include_router(families_router.router)
 
 
 @app.get("/")
