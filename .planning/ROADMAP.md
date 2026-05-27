@@ -130,8 +130,8 @@ Plans:
 - [x] 05-02-PLAN.md — Extrair families/services.py de operations.py + operation_id="list_my_families" (pré-requisito do MCP)
 
 **Wave 3** *(blocked on Waves 1-2; 05-03 e 05-04 paralelos)*
-- [ ] 05-03-PLAN.md — Testes de integração family (criar/listar/pré-registrar/listar membros) + bin/manage_db --env test
-- [ ] 05-04-PLAN.md — Montar FastApiMCP em /mcp (whitelist + auth Bearer) + APP_VERSION na OpenAPI spec
+- [x] 05-03-PLAN.md — Testes de integração family (criar/listar/pré-registrar/listar membros) + bin/manage_db --env test
+- [x] 05-04-PLAN.md — Montar FastApiMCP em /mcp (whitelist + auth Bearer) + APP_VERSION na OpenAPI spec
 
 **Wave 4** *(blocked on Wave 3 / 05-04)*
 - [ ] 05-05-PLAN.md — Dockerfile multi-stage non-root + compose.yaml app-only + .dockerignore
