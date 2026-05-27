@@ -13,7 +13,7 @@ Backend Python/FastAPI do sistema Caramello — plataforma pessoal e familiar pa
 
 - **Stack**: Python 3.10+, FastAPI async, SQLModel/SQLAlchemy async, PostgreSQL obrigatório — não há suporte a SQLite
 - **Auth**: Keycloak com OIDC/JWT — clients de dev e prod já configurados na infra existente
-- **DB naming**: `familia_dev` (dev) e `familia_prod` (prod) — convenção definida em `docs/apps-platform.md` §5
+- **DB naming**: `caramello` (prod), `caramello_dev` (dev) — convenção definida em `docs/apps-platform.md` §5
 - **Código gerado**: arquivos em `src/caramello/domains/*/` gerados pelo DSL **não devem ser editados diretamente** — editar o YAML e regenerar
 - **Escopo do repo**: apenas Grupo Família — sem tabelas compartilhadas com outros grupos
 <!-- GSD:project-end -->
