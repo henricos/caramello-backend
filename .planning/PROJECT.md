@@ -107,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-26 after Phase 4 completion (Domínio Family) — domínio families com 6 endpoints operacionais, auto-join via Keycloak, migration Alembic, DSL generator evoluído para arquitetura por domínios. 31 testes passando. Próxima fase: MCP, testes e Docker.*
+*Last updated: 2026-05-27 after Phase 5 completion (MCP, Testes e Docker) — fastapi-mcp montado em /mcp com auth Bearer, ferramenta list_my_families exposta, Dockerfile multi-stage + compose.yaml, 36 testes (unit + integration stubs), nomenclatura caramello/caramello_dev consolidada. Esta é a última fase do M1. Próximo passo: UAT manual (Docker build, suite de integração, cliente MCP real).*
