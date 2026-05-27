@@ -13,11 +13,12 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import AuthConfig, FastApiMCP
 
 from caramello.core.config import settings
-from caramello.shared.auth import fetch_jwks
+from caramello.shared.auth import fetch_jwks, http_bearer
 from caramello.users import operations as user_operations
 from caramello.users import router as user_router
 from caramello.families import operations as families_operations  # noqa: E402
@@ -55,6 +56,19 @@ app.include_router(user_operations.router)
 app.include_router(user_router.router)
 app.include_router(families_operations.router)
 app.include_router(families_router.router)
+
+# MCP — montar DEPOIS de todos os include_router. Routers registrados após
+# mount_http() não aparecem como ferramentas (RESEARCH.md Pitfall 2).
+mcp = FastApiMCP(
+    app,
+    name="Caramello MCP",
+    include_operations=["list_my_families"],  # operation_id de families/operations.py
+    auth_config=AuthConfig(
+        dependencies=[Depends(http_bearer)],
+    ),
+    headers=["authorization"],  # propaga token para get_current_user()
+)
+mcp.mount_http()
 
 
 @app.get("/")
