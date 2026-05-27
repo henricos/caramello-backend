@@ -23,10 +23,22 @@ async def test_create_family(async_client):
 
 @pytest.mark.integration
 async def test_list_my_families(async_client):
-    """FAMILY-02: GET /families/families retorna lista do usuário autenticado."""
+    """FAMILY-02: GET /families/families retorna lista contendo a família criada."""
+    # Cria família para garantir ao menos um resultado
+    create_response = await async_client.post(
+        "/families/registry",
+        json={"name": "Familia para Listar"},
+    )
+    assert create_response.status_code == 201
+    created_uuid = create_response.json()["uuid"]
+
+    # Lista e verifica que a família criada está presente
     response = await async_client.get("/families/families")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    families = response.json()
+    assert isinstance(families, list)
+    uuids = [f["uuid"] for f in families]
+    assert created_uuid in uuids
 
 
 @pytest.mark.integration
@@ -40,17 +52,19 @@ async def test_pre_register_member(async_client):
     assert create_response.status_code == 201
     family_uuid = create_response.json()["uuid"]
 
-    # Pré-registra membro
+    # Pré-registra membro e verifica o email retornado
     response = await async_client.post(
         f"/families/families/{family_uuid}/pre-register",
         json={"email": "novo@example.com"},
     )
     assert response.status_code == 201
+    data = response.json()
+    assert data["email"] == "novo@example.com"
 
 
 @pytest.mark.integration
 async def test_list_members(async_client):
-    """D-07: GET /families/{uuid}/members lista membros da família."""
+    """D-07: GET /families/{uuid}/members lista membros da família com role owner."""
     # Cria família para ter UUID válido
     create_response = await async_client.post(
         "/families/registry",
@@ -59,9 +73,11 @@ async def test_list_members(async_client):
     assert create_response.status_code == 201
     family_uuid = create_response.json()["uuid"]
 
-    # Lista membros — deve conter ao menos o owner
+    # Lista membros — deve conter exatamente 1 item: o fake_user com role owner
     response = await async_client.get(f"/families/families/{family_uuid}/members")
     assert response.status_code == 200
     members = response.json()
     assert isinstance(members, list)
     assert len(members) >= 1
+    roles = [m["role"] for m in members]
+    assert "owner" in roles
