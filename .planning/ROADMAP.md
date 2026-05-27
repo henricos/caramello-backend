@@ -116,10 +116,10 @@ Plans:
   1. Cliente MCP em `/mcp` descobre a ferramenta de consulta `list_my_families` (endpoint REST exposto via `include_operations`) — a ferramenta MCP exige Bearer token válido com mesmo mecanismo dos endpoints REST
   2. `docker build` produz imagem reproducível com Dockerfile multi-stage, non-root user, sem secrets nos layers de build
   3. `docker compose up` inicia a aplicação com configuração exclusivamente via variáveis de ambiente — sem valores hardcoded; `APP_VERSION` como build arg aparece na OpenAPI spec
-  4. `pytest` executa contra banco isolado `caramello_test` com rollback por teste — banco `caramello_dev` não é tocado
+  4. `pytest` executa contra `caramello_dev` com rollback por savepoint por teste — sem banco separado `caramello_test`; isolamento garantido pela transação revertida (D-TEST-01)
   5. Casos de sucesso do domínio family têm cobertura de testes: criar família, pré-registrar membro, listar membros — usando `dependency_overrides` para simular usuário autenticado sem Keycloak real
 
-> **Nota Phase 5:** SC1 reflete a correção do RESEARCH (D-MCP-02): `fastapi-mcp` 0.4.0 só expõe endpoints FastAPI como ferramentas — não há `tools.py` manual. A fase entrega 1 ferramenta de exemplo (`list_my_families`, D-MCP-04); ferramentas adicionais (incluindo convites/aprovação) são M2+. SC4 usa a nomenclatura corrigida `caramello_test`/`caramello_dev` (D-NAMING-01).
+> **Nota Phase 5:** SC1 reflete a correção do RESEARCH (D-MCP-02): `fastapi-mcp` 0.4.0 só expõe endpoints FastAPI como ferramentas — não há `tools.py` manual. A fase entrega 1 ferramenta de exemplo (`list_my_families`, D-MCP-04); ferramentas adicionais são M2+. SC4 corrigido (D-TEST-01, D-NAMING-01): não existe banco `caramello_test` — testes rodam em `caramello_dev` com rollback por savepoint.
 
 **Plans**: 6 planos
 Plans:
@@ -137,7 +137,7 @@ Plans:
 - [x] 05-05-PLAN.md — Dockerfile multi-stage non-root + compose.yaml app-only + .dockerignore
 
 **Wave 5** *(blocked on Waves 1/3/5; autonomous: false — checkpoint operador)*
-- [x] 05-06-PLAN.md — Nomenclatura caramello/caramello_dev/caramello_test (.env.example, docs, CLAUDE.md, REQUIREMENTS.md) + operador cria bancos
+- [x] 05-06-PLAN.md — Nomenclatura caramello/caramello_dev (.env.example, docs, CLAUDE.md, REQUIREMENTS.md) + confirmação operador
 
 ## Progress
 
