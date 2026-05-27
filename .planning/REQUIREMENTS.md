@@ -19,7 +19,7 @@ Requisitos do Milestone 1 — Fundação e revisão geral do projeto.
 
 - [ ] **MODEL-01**: A tabela `users` representa apenas dados de identidade Keycloak (`idp_sub`, `email`, `name`, `created_at`, `updated_at`) — sem campos de auth local (`hashed_password`, `google_id`, `phone_number`, `is_active`)
 - [ ] **MODEL-02**: Migrações Alembic refletem o schema correto e podem ser aplicadas em banco limpo sem erro — migration antiga descartada e recriada
-- [ ] **MODEL-03**: O banco de dados usa a convenção de nomenclatura `familia_dev` (dev) e `familia_prod` (prod) — `.env.example` atualizado
+- [x] **MODEL-03**: O banco de dados usa a convenção de nomenclatura `caramello_dev` (dev) e `caramello` (prod) — `.env.example` atualizado (D-NAMING-01; implementado na Phase 05-06)
 
 ### Autenticação e Autorização
 
@@ -63,7 +63,7 @@ Requisitos do Milestone 1 — Fundação e revisão geral do projeto.
 
 ### Testes
 
-- [ ] **TEST-01**: Testes executam contra banco de dados isolado com rollback por teste — sem contaminar `familia_dev` ou produção
+- [x] **TEST-01**: Testes executam contra banco de dados isolado com rollback por teste — sem contaminar `caramello_dev` ou produção (implementado na Phase 05-01/05-03)
 - [ ] **TEST-02**: Endpoints do domínio familia têm cobertura de testes para casos de sucesso — criar família, convidar, aprovar, listar membros
 - [ ] **TEST-03**: Testes de endpoints protegidos usam `dependency_overrides` para simular usuário autenticado — sem precisar de Keycloak real nos testes
 

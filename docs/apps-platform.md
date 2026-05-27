@@ -162,8 +162,8 @@ A separação entre `services.py` e as rotas não é detalhe estético — é o 
 
 | Database | Propósito |
 |---|---|
-| `familia_prod` | Produção do Grupo Família |
-| `familia_dev` | Desenvolvimento do Grupo Família |
+| `caramello` | Produção do Grupo Família |
+| `caramello_dev` | Desenvolvimento e testes de integração (rollback por teste) |
 | `trabalho_prod` | Produção do Grupo Trabalho |
 | `trabalho_dev` | Desenvolvimento do Grupo Trabalho |
 | `outros_prod` | Produção do Grupo Outros |
@@ -191,7 +191,7 @@ Cada grupo possui seus próprios usuários, sua própria tabela `users`, e não 
 
 **Grupo Família**
 
-A tabela `users` vive no database `familia_prod`, gerenciada pelas migrations do backend monolítico do grupo. Ela registra os membros da família que se autenticaram pelo tenant `tenant-familia` do Logto.
+A tabela `users` vive no database `caramello`, gerenciada pelas migrations do backend monolítico do grupo. Ela registra os membros da família que se autenticaram pelo tenant `tenant-familia` do Logto.
 
 ```sql
 CREATE TABLE users (
@@ -232,7 +232,7 @@ A decisão de eliminar o `plataforma-core` simplifica o modelo operacional sem a
 
 | Grupo | Tabela `users` | Dono das migrations | Usuários esperados |
 |---|---|---|---|
-| Família | `familia_prod.users` | Backend monolítico do grupo | Membros da família |
+| Família | `caramello.users` | Backend monolítico do grupo | Membros da família |
 | Trabalho (por app) | `trabalho_prod.users` | Cada aplicação individualmente | 1, porta aberta para 2 |
 | Outros (por app) | `outros_prod.users` | Cada aplicação individualmente | 1 (usuário único) |
 
@@ -294,7 +294,7 @@ Não há nada a construir agora além de manter essa disciplina arquitetural des
 
 A fundação de infraestrutura vem primeiro, antes de qualquer aplicação:
 
-1. Subir PostgreSQL com os databases de cada grupo (`familia_prod`, `familia_dev`, `trabalho_prod`, `trabalho_dev`, `outros_prod`, `outros_dev`)
+1. Subir PostgreSQL com os databases de cada grupo (`caramello`, `caramello_dev`, `trabalho_prod`, `trabalho_dev`, `outros_prod`, `outros_dev`)
 2. Instalar e configurar Logto com os três tenants (`tenant-familia`, `tenant-trabalho`, `tenant-outros`)
 3. Configurar OAuth2/Google, MFA e allowlist de e-mails em cada tenant
 4. Definir e documentar o template base de backend (FastAPI + Alembic + estrutura de pastas padrão)
