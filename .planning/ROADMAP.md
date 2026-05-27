@@ -134,7 +134,7 @@ Plans:
 - [x] 05-04-PLAN.md — Montar FastApiMCP em /mcp (whitelist + auth Bearer) + APP_VERSION na OpenAPI spec
 
 **Wave 4** *(blocked on Wave 3 / 05-04)*
-- [ ] 05-05-PLAN.md — Dockerfile multi-stage non-root + compose.yaml app-only + .dockerignore
+- [x] 05-05-PLAN.md — Dockerfile multi-stage non-root + compose.yaml app-only + .dockerignore
 
 **Wave 5** *(blocked on Waves 1/3/5; autonomous: false — checkpoint operador)*
 - [ ] 05-06-PLAN.md — Nomenclatura caramello/caramello_dev/caramello_test (.env.example, docs, CLAUDE.md, REQUIREMENTS.md) + operador cria bancos
