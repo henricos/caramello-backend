@@ -157,18 +157,18 @@ async def registry_family(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/families", response_model=list[FamilyRead])
+@router.get(
+    "/families",
+    response_model=list[FamilyRead],
+    operation_id="list_my_families",
+)
 async def list_my_families(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[Family]:
     """FAMILY-02: lista famílias onde o usuário autenticado é membro."""
-    result = await session.exec(
-        select(Family)
-        .join(FamilyMember, FamilyMember.family_id == Family.id)  # type: ignore[arg-type]
-        .where(FamilyMember.user_id == current_user.id)
-    )
-    return list(result.all())
+    from caramello.families.services import list_my_families as svc
+    return await svc(session, current_user)
 
 
 # ---------------------------------------------------------------------------
