@@ -9,6 +9,7 @@
 # Ordem de imports intencional — users carregado antes de families para evitar ciclo.
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -33,7 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Caramello Backend",
     description="Backend API for Caramello",
-    version="0.1.0",
+    version=os.getenv("APP_VERSION", "0.0.0"),
     lifespan=lifespan,
 )
 
