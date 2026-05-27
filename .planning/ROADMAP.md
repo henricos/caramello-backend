@@ -137,7 +137,7 @@ Plans:
 - [x] 05-05-PLAN.md — Dockerfile multi-stage non-root + compose.yaml app-only + .dockerignore
 
 **Wave 5** *(blocked on Waves 1/3/5; autonomous: false — checkpoint operador)*
-- [ ] 05-06-PLAN.md — Nomenclatura caramello/caramello_dev/caramello_test (.env.example, docs, CLAUDE.md, REQUIREMENTS.md) + operador cria bancos
+- [x] 05-06-PLAN.md — Nomenclatura caramello/caramello_dev/caramello_test (.env.example, docs, CLAUDE.md, REQUIREMENTS.md) + operador cria bancos
 
 ## Progress
 
