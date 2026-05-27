@@ -124,7 +124,7 @@ Plans:
 **Plans**: 6 planos
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md — Wave 0: deps (fastapi-mcp + pytest-asyncio), asyncio_mode no pyproject, conftest async + stubs de teste
+- [x] 05-01-PLAN.md — Wave 0: deps (fastapi-mcp + pytest-asyncio), asyncio_mode no pyproject, conftest async + stubs de teste
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-02-PLAN.md — Extrair families/services.py de operations.py + operation_id="list_my_families" (pré-requisito do MCP)
