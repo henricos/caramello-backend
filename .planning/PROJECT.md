@@ -28,16 +28,24 @@ A fundação está completa e pronta para receber novos domínios de negócio.
 - `pytest -m integration` contra `caramello_dev`
 - MCP Inspector com Bearer token Keycloak real
 
-## Next Milestone — M2: Domínio Financeiro
+## Current Milestone — v2.0: Domínio Financeiro
 
-> _Planejamento via `/gsd-new-milestone`_
+**Goal:** Registrar movimentações brutas por conta, conciliar em lançamentos classificados e analisar por competência e categoria hierárquica.
 
-Foco: primeiro domínio de negócio real sobre a fundação do M1.
+**Modelo de domínio:**
+- `Conta` — conta bancária/cartão/poupança; saldo derivado de movimentações
+- `Movimentação` — crédito/débito bruto; entrada individual ou importação em lote com deduplicação
+- `Lançamento` — movimentação conciliada 1:1 com categoria (2 níveis) + competência (ano/mês); base de todos os relatórios
+- `Categoria` — hierarquia 2 níveis (ex: Transporte > Gasolina), scoped por família
 
-**Candidatos:**
-- Domínio `finances`: categorias, transações, saldos
-- FAMILY-04/05/06: fluxo de convite reutilizável (deferido do M1)
-- OPS-01/02: health endpoint + logging estruturado
+**Target features:**
+- CRUD de contas por família
+- Registro individual e importação em lote de movimentações (com deduplicação)
+- Categorias hierárquicas (2 níveis) por família
+- Conciliação semi-automática: sistema propõe categoria por similaridade; usuário confirma
+- Criação de lançamento a partir de movimentação conciliada
+- Breakdown mensal por categoria pai e subcategoria
+- Saldo por conta + consolidado familiar
 
 ## Constraints
 
@@ -68,4 +76,4 @@ Foco: primeiro domínio de negócio real sobre a fundação do M1.
 - Token introspection remota — validação local com JWKS cacheado
 
 ---
-*Last updated: 2026-05-30 — fechamento do Milestone 1 (Fundação)*
+*Last updated: 2026-05-30 — início do Milestone 2 (Domínio Financeiro)*

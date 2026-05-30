@@ -1,42 +1,53 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: financeiro
-status: milestone_planning
-stopped_at: M1 archived, ready for new milestone
+milestone_name: Domínio Financeiro
+status: not_started
+stopped_at: Roadmap defined — ready to plan Phase 6
 last_updated: "2026-05-30T00:00:00.000Z"
-last_activity: 2026-05-30 -- M1 archived, starting M2 planning
+last_activity: 2026-05-30 -- Milestone v2.0 roadmap created (4 phases, 24 requirements)
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 25
-  completed_plans: 19
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-23)
+See: .planning/PROJECT.md (updated 2026-05-30)
 
 **Core value:** Um backend sólido, seguro e extensível onde cada novo domínio de negócio pode ser adicionado sem tocar no que já existe.
-**Current focus:** Phase 05 — mcp-testes-e-docker
+**Current focus:** Phase 06 — fundacao-dsl-schema (not started)
 
 ## Current Position
 
-Phase: 05
+Phase: 06
 Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-27
+Status: Roadmap defined — awaiting `/gsd-plan-phase 6`
+Last activity: 2026-05-30
 
-Progress: [██████████] 100% (Phase 3)
+Progress: [__________] 0% (0/4 phases complete)
+
+## M1 Reference (SHIPPED 2026-05-30)
+
+- 5 phases completed, 25 plans executed
+- Stack async: FastAPI + asyncpg + AsyncSession + Alembic async
+- Auth: Keycloak JWT, JWKS cache, JIT provisioning, auto-join por email
+- Domínios: users + families (6 endpoints negócio + pré-registro por email)
+- MCP: `/mcp` com `list_my_families` e whitelist
+- Docker: Dockerfile multi-stage non-root + compose.yaml
+- Testes: 36 unitários + 4 integração (stub, necessitam banco real)
+- DSL generator: YAML → models.py + router.py + operations.py stub por domínio
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 25
+- Total plans completed: 0 (M2)
 - Average duration: —
 - Total execution time: —
 
@@ -44,13 +55,12 @@ Progress: [██████████] 100% (Phase 3)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 4 | - | - |
-| 02 | 4 | - | - |
-| 03 | 7 | - | - |
-| 04 | 4 | - | - |
-| 05 | 6 | - | - |
+| 06 | TBD | - | - |
+| 07 | TBD | - | - |
+| 08 | TBD | - | - |
+| 09 | TBD | - | - |
 
-**Recent Trend:** N/A — nenhum plano executado ainda
+**Recent Trend:** N/A — M2 não iniciado
 
 ## Accumulated Context
 
@@ -58,29 +68,36 @@ Progress: [██████████] 100% (Phase 3)
 
 Decisões registradas em PROJECT.md Key Decisions table.
 
-Decisões relevantes para a fase atual:
+Decisões relevantes para M2:
 
-- Keycloak como provedor de auth (reverte Logto) — clients dev/prod já configurados na infra existente
-- Migration Alembic inicial descartada e recriada — foi gerada com modelo errado (`hashed_password`, `google_id`)
-- DB naming: `familia_dev` (dev) e `familia_prod` (prod)
+- Precisão monetária: `NUMERIC(15,2)` + `Decimal` — zero `float` em campo de valor (pitfall P1)
+- Category self-referencial: `models.py` pós-processado manualmente, marcado `# CARAMELLO-GENERATED: implemented`
+- 1:1 Movement→FinancialEntry: `UniqueConstraint("movement_id")` no banco, não só `uselist=False` no ORM (pitfall P5)
+- Deduplicação: `import_hash UNIQUE` + `pg_insert(...).on_conflict_do_nothing()` (pitfall P4)
+- Agregações: `session.execute()` com `func.sum + group_by` — não `session.exec()` (pitfall P3)
+- Routers de finances registrados em `main.py` ANTES de `FastApiMCP(...)` (pitfall P7)
+- Import circular: `finances/` importa de `families/` e `users/`; inverso proibido
+- Novas libs: `ofxparse`, `openpyxl`, `rapidfuzz`, `python-multipart` (provavelmente já presente)
 
 ### Pending Todos
 
-Nenhum ainda.
+- Verificar `down_revision` com `alembic history --verbose` após gerar migration 0002 (pitfall P6)
+- Testar encoding OFX de bancos BR com extrato real na Fase 8 (gap identificado no research)
+- Definir convenção Decimal no JSON (string vs float) na Fase 6 e documentar no schema
 
 ### Blockers/Concerns
 
-- Questão em aberto: confirmar realm name, audience claim e client ID do Keycloak antes de implementar `shared/auth.py` (Phase 3)
-- Questão em aberto: subdomínio definitivo para API vs MCP (decide no Phase 5 deploy)
+Nenhum bloqueador conhecido. Fase 6 pode começar imediatamente.
 
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| E2E Testing | Verificação E2E com Keycloak real + banco PostgreSQL (Task 7 do plano 03-05) — boot da app, GET /user/me com token real, JIT provisioning, claim aud | Pendente | 2026-05-25 |
+| E2E Testing | Verificação E2E com Keycloak real + banco PostgreSQL (M1 Task 7 do plano 03-05) | Pendente UAT | 2026-05-25 |
+| Convites | FAMILY-04/05/06 — fluxo de convite reutilizável | Backlog M3 | M1 D-04 |
 
 ## Session Continuity
 
-Last session: 2026-05-26T22:37:25.867Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-mcp-testes-e-docker/05-CONTEXT.md
+Last session: 2026-05-30
+Stopped at: Roadmap M2 criado — 4 fases, 24 requisitos mapeados
+Resume: `/gsd-plan-phase 6` para iniciar planejamento da Phase 6

@@ -1,461 +1,548 @@
 # Architecture Patterns
 
-**Domain:** Backend FastAPI organizado por domínios com MCP integrado (Keycloak + fastapi-mcp)
-**Researched:** 2026-05-23
-**Confidence:** HIGH — baseado em documentação oficial fastapi-mcp (Context7), FastAPI oficial, codebase inspecionado
+**Domain:** Backend FastAPI organizado por domínios — adição do domínio financeiro ao codebase existente
+**Researched:** 2026-05-30
+**Confidence:** HIGH — baseado em codebase inspecionado + documentação oficial SQLAlchemy 2.0 + SQLModel GitHub discussions
 
 ---
 
-## Recommended Architecture
+## Contexto: Estado Atual (v1.0)
 
 ```
 src/caramello/
-├── main.py                        # App factory: registra routers, monta MCP, configura CORS/lifespan
+├── main.py                        # App factory: routers, MCP, CORS, lifespan
 ├── shared/
-│   ├── __init__.py
-│   ├── auth.py                    # JWT validation (Keycloak JWKS) + get_current_user dependency
-│   └── database.py                # AsyncEngine + get_session dependency (move de core/)
-├── domains/
-│   ├── __init__.py
-│   ├── familia/
-│   │   ├── __init__.py
-│   │   ├── models.py              # SQLModel table=True (gerado pelo DSL)
-│   │   ├── schemas.py             # Pydantic Read/Create/Update (gerado pelo DSL)
-│   │   ├── services.py            # Business logic puro (manual, sem FastAPI)
-│   │   └── routes.py              # APIRouter com Depends(get_current_user) (manual)
-│   ├── financeiro/                # Futuro M2
-│   └── lista_compras/             # Futuro M3
+│   ├── auth.py                    # JWT Keycloak + get_current_user
+│   └── database.py                # AsyncEngine (asyncpg) + get_session
+├── users/
+│   ├── models.py                  # User (gerado DSL)
+│   ├── router.py                  # CRUD gerado
+│   └── operations.py              # GET /users/me (implementado)
+├── families/
+│   ├── models.py                  # Family, FamilyMember, FamilyInvitation (gerado DSL)
+│   ├── router.py                  # CRUD gerado
+│   ├── operations.py              # 6 endpoints de negócio (implementado)
+│   └── services.py                # list_my_families (puro, MCP-exposable)
 └── core/
-    └── config.py                  # Settings via pydantic-settings (já existe)
-
-alembic/
-├── env.py                         # imports from caramello.domains.*
-└── versions/
-
-dsl/
-├── manifest.yaml
-└── entities/
-    ├── user.yaml                  # domain: shared
-    ├── family.yaml                # domain: familia
-    ├── family_member.yaml         # domain: familia
-    └── family_invitation.yaml     # domain: familia
+    └── config.py                  # Settings pydantic-settings
 ```
+
+Padrão estabelecido:
+- `models.py` + `router.py` — gerados pelo DSL (nunca editar diretamente)
+- `operations.py` — router de negócio com lógica inline ou delegando a `services.py`
+- `services.py` — funções puras (sem FastAPI imports), reusáveis via MCP
+- `main.py` — registra `operations.router` ANTES de `router.router` (rota estática antes de `{uuid}`)
 
 ---
 
-## Component Boundaries
+## Estrutura Proposta para o Domínio Finances
 
-| Componente | Responsabilidade | Comunica com |
-|------------|-----------------|--------------|
-| `main.py` | Registra routers, monta MCP server, configura CORS e lifespan | Todos os routers de domínio; FastApiMCP |
-| `shared/auth.py` | Valida JWT (Keycloak JWKS), provisiona User just-in-time, expõe `get_current_user` | `shared/database.py` (session), `domains/familia/models.py` (User model) |
-| `shared/database.py` | `AsyncEngine`, `get_session()` generator | PostgreSQL via asyncpg |
-| `domains/familia/models.py` | SQLModel table definitions — gerado pelo DSL | PostgreSQL (via Alembic migrations) |
-| `domains/familia/schemas.py` | Pydantic I/O shapes (Read, Create, Update) — gerado pelo DSL | `routes.py` (response_model), serializacão |
-| `domains/familia/services.py` | Business logic: Family CRUD, membership, invitation lifecycle | `models.py`, `AsyncSession` (via injeção) |
-| `domains/familia/routes.py` | FastAPI APIRouter: HTTP → service call → response | `services.py`, `shared/auth.py` (Depends), `schemas.py` |
-| `fastapi-mcp` (montado em `main.py`) | Expõe endpoints FastAPI como MCP tools via `/mcp` | Mesma ASGI app — sem HTTP extra |
-| `alembic/` | Versionamento de schema PostgreSQL | `SQLModel.metadata` — importa modelos de todos os domains |
+```
+src/caramello/
+├── finances/
+│   ├── __init__.py
+│   ├── models.py                  # Account, Movement, Entry, Category (gerado DSL)
+│   ├── router.py                  # CRUD gerado
+│   ├── operations.py              # endpoints de negócio (manual — CARAMELLO-GENERATED: implemented)
+│   └── services.py                # lógica pura MCP-exposable (aggregações, sugestão, resumos)
+```
 
-**Regra de dependência:** A seta aponta para o que é importado. Routes → Services → Models. Nunca o inverso. `services.py` não deve importar de `routes.py`.
+Domínio único `finances/` (não subdividir em `finances/accounts/` + `finances/entries/`).
+**Rationale:** 4 entidades são poucas para justificar subdomínios; as queries de aggregação cruzam Account→Movement→Entry→Category em uma única operação — separar criaria imports circulares desnecessários. O padrão do projeto já suporta múltiplas entidades por arquivo `models.py` (ver `families/models.py` com 3 entidades).
 
 ---
 
-## Data Flow
+## Respostas às Questões Arquiteturais
 
-### Request REST normal (autenticado)
+### Q1: Self-referential Category (parent/child) no SQLModel com async
 
-```
-HTTP Request (Bearer token)
-  → main.py (CORS middleware)
-  → domains/familia/routes.py (APIRouter)
-  → shared/auth.py: get_current_user (Depends)
-      → valida JWT contra Keycloak JWKS (local, sem round-trip ao Keycloak)
-      → upsert User na tabela users (just-in-time provisioning)
-      → retorna User object
-  → domains/familia/services.py: lógica de negócio
-      → shared/database.py: get_session (AsyncSession)
-      → queries SQLModel async (select, add, commit)
-  → serialização via schemas.py (response_model)
-  → HTTP Response
+**Padrão verificado** (SQLModel GitHub discussions #691, #1509 — MEDIUM confidence, padrão confirmado por múltiplas fontes):
+
+```python
+class Category(SQLModel, table=True):
+    __tablename__ = "category"
+
+    id: int | None = Field(primary_key=True, default=None)
+    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
+    family_id: int = Field(foreign_key="family.id", nullable=False)
+    name: str = Field(max_length=100, nullable=False)
+    parent_id: int | None = Field(
+        foreign_key="category.id",
+        default=None,
+        nullable=True,        # nullable=True explícito — categoria raiz não tem pai
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Self-referential: remote_side como string com nome da CLASSE (maiúsculo)
+    # FK usa nome da TABELA (minúsculo)
+    parent: "Category | None" = Relationship(
+        back_populates="children",
+        sa_relationship_kwargs={"remote_side": "Category.id"},
+    )
+    children: list["Category"] = Relationship(back_populates="parent")
+    entries: list["Entry"] = Relationship(back_populates="category")
 ```
 
-### Request MCP tool call
+**Pontos críticos:**
+- `foreign_key="category.id"` usa nome da TABELA (lowercase), não da classe
+- `remote_side="Category.id"` usa nome da CLASSE (PascalCase) como string
+- `nullable=True` explícito no Field para o `parent_id` — sem isso SQLModel pode inferir NOT NULL
+- Compatível com AsyncSession: as queries em services.py usam `selectinload` para carregar filhos quando necessário; sem `selectinload`, não acessar `.children` dentro de endpoint async (causaria MissingGreenlet error)
+- Para 2 níveis fixos (raiz + folha): restringir em operações/validação, não em schema de banco
 
-```
-MCP client → POST /mcp (Streamable HTTP transport)
-  → fastapi-mcp converte tool call em HTTP request interno
-  → reutiliza a mesma ASGI app (sem HTTP extra, sem porta separada)
-  → passa pelo mesmo fluxo de autenticação acima
-      (fastapi-mcp propaga Authorization header via headers=["authorization"])
-  → mesmo service, mesma lógica
-  → resposta serializada de volta ao cliente MCP
-```
-
-### DSL generation flow
-
-```
-editar dsl/entities/*.yaml (com campo domain:)
-  → bin/generate_code (scripts/generate_code.py)
-  → para cada entity: lê domain, resolve output_dir = src/caramello/domains/{domain}/
-  → gera models.py (SQLModel table=True)
-  → gera schemas.py (Read, Create, Update — sem Field args de banco)
-  → NÃO gera services.py nem routes.py (manual)
-  → NÃO toca em arquivos existentes fora de models.py e schemas.py
-```
+**No DSL YAML**, a auto-referência deve ser declarada manualmente em `models.py` (o gerador DSL atual não suporta `remote_side` — exceção à regra "não editar models.py").
+Ou: gerar o bloco base via DSL e pós-processar o relacionamento parent/children manualmente, marcando o arquivo como `# CARAMELLO-GENERATED: implemented` para proteger de sobrescrita.
 
 ---
 
-## Decisions: fastapi-mcp
+### Q2: Relacionamento 1:1 Movement → Entry no SQLModel
 
-### Como fastapi-mcp descobre endpoints
-
-fastapi-mcp lê a OpenAPI spec gerada automaticamente pelo FastAPI. **Não precisa de anotações especiais além de `operation_id` e `tags`**, que já fazem parte do padrão FastAPI. Cada endpoint se torna um MCP tool usando seu `operation_id` como nome da ferramenta.
-
-**Decisão para este projeto:** usar `tags` por domínio como mecanismo de controle.
+SQLModel não tem açúcar sintático específico para 1:1. O padrão usa `uselist=False` via `sa_relationship_kwargs` (MEDIUM confidence — SQLModel issue #132 + SQLAlchemy docs):
 
 ```python
-# domains/familia/routes.py
-router = APIRouter(
-    prefix="/familia",
-    tags=["familia"],          # tag de domínio — controla exposição MCP
-)
+class Movement(SQLModel, table=True):
+    __tablename__ = "movement"
 
-@router.get("/families/{family_id}", operation_id="get_family")
-async def get_family(...):
-    ...
+    id: int | None = Field(primary_key=True, default=None)
+    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
+    account_id: int = Field(foreign_key="account.id", nullable=False)
+    type: str = Field(max_length=10, nullable=False)       # "credit" | "debit"
+    date: datetime = Field(nullable=False)
+    amount: float = Field(nullable=False)                   # ou Numeric — ver Pitfall 1
+    description: str | None = Field(max_length=500, default=None)
+    is_duplicate: bool = Field(default=False, nullable=False)
+    import_batch_id: str | None = Field(max_length=100, default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+    account: "Account | None" = Relationship(back_populates="movements")
+    entry: "Entry | None" = Relationship(
+        back_populates="movement",
+        sa_relationship_kwargs={"uselist": False},
+    )
+
+
+class Entry(SQLModel, table=True):
+    __tablename__ = "entry"
+
+    id: int | None = Field(primary_key=True, default=None)
+    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
+    movement_id: int = Field(foreign_key="movement.id", unique=True, nullable=False)  # unique=True força 1:1
+    category_id: int | None = Field(foreign_key="category.id", default=None, nullable=True)
+    competencia_year: int = Field(nullable=False)
+    competencia_month: int = Field(nullable=False)           # 1-12
+    notes: str | None = Field(max_length=500, default=None)
+    is_recurring: bool = Field(default=False, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+    movement: "Movement | None" = Relationship(back_populates="entry")
+    category: "Category | None" = Relationship(back_populates="entries")
 ```
 
-**O que NÃO expor via MCP:** endpoints internos/operacionais (health check, readiness probe, rotas de debug) devem receber a tag `"internal"` e ser excluídos explicitamente.
-
-### Configuração fastapi-mcp em main.py
-
-```python
-from fastapi_mcp import FastApiMCP, AuthConfig
-from fastapi.security import HTTPBearer
-
-mcp = FastApiMCP(
-    app,
-    name="Caramello MCP",
-    description="Família domain tools for AI agents",
-    include_tags=["familia"],          # expõe só endpoints do domínio familia
-    # futuramente: include_tags=["familia", "financeiro", "lista_compras"]
-    describe_all_responses=True,       # ajuda agentes a entender estrutura de retorno
-    describe_full_response_schema=True,
-    auth_config=AuthConfig(
-        dependencies=[Depends(get_current_user)],   # mesma dependency que as rotas REST
-    ),
-    headers=["authorization"],         # propaga Bearer token aos tool calls
-)
-mcp.mount_http()   # monta em /mcp (padrão)
-```
-
-**Ponto crítico:** `FastApiMCP` deve ser instanciado DEPOIS que todos os `include_router()` já foram chamados. Se routers forem adicionados depois, é necessário chamar `mcp.setup_server()` novamente. Para este projeto (routers registrados no startup), a ordem em `main.py` é:
-
-1. Criar `app = FastAPI(...)`
-2. Registrar todos os routers de domínio via `app.include_router(...)`
-3. Instanciar `FastApiMCP(app, ...)` e chamar `mcp.mount_http()`
-
-### Controle: o que expor vs. o que não expor
-
-| Endpoint | Tag | Exposto via MCP? |
-|----------|-----|-----------------|
-| `GET /familia/families` | `familia` | Sim |
-| `POST /familia/families/{id}/invite` | `familia` | Sim |
-| `GET /health` | `internal` | Não (`exclude_tags=["internal"]` ou simplesmente não incluir na `include_tags`) |
-| `GET /` (root) | nenhuma | Não (não está em `include_tags=["familia"]`) |
+**Pontos críticos:**
+- `unique=True` em `movement_id` é o que garante 1:1 no banco — o `uselist=False` é apenas ORM
+- `category_id` nullable: Lançamento pode existir sem categoria (movimento conciliado mas não categorizado ainda)
+- Para async: mesma precaução — não acessar `.movement` ou `.category` sem ter carregado via `selectinload`
 
 ---
 
-## Decisions: Autenticação
+### Q3: Endpoint de importação em lote
 
-### Middleware vs. Depends — qual usar
+**Recomendação: `POST /finances/accounts/{uuid}/movements/import` com body JSON `list[MovementImportItem]`** — não UploadFile/CSV.
 
-**Decisão: `Depends(get_current_user)` explicitamente em cada router, não middleware global.**
-
-Razão: alguns endpoints não precisam de auth (`GET /health`, `GET /docs`). Middleware global exige lógica de exceção e torna o código menos legível. `Depends` é o padrão idiomático do FastAPI, aparece na OpenAPI spec, e fastapi-mcp o respeita nativamente.
-
-**Na prática:** auth é aplicada no nível do `APIRouter` via `dependencies=[Depends(get_current_user)]`:
-
-```python
-router = APIRouter(
-    prefix="/familia",
-    tags=["familia"],
-    dependencies=[Depends(get_current_user)],   # aplica a todas as rotas deste router
-)
-```
-
-Isso aplica `get_current_user` a todas as rotas do router sem repetir o parâmetro em cada função. Endpoints individuais que precisam do objeto `user` recebem `current_user: User = Depends(get_current_user)` como parâmetro para poder acessá-lo.
-
-### shared/auth.py — estrutura
+**Justificativa:**
+- O frontend mobile (React/Capacitor) é o chamador. Enviar JSON é mais simples que multipart/form-data no mobile
+- O cliente já tem os dados parseados do extrato bancário antes de enviar
+- JSON lista permite validação Pydantic por item antes de qualquer insert
+- CSV upload exige decodificação + parsing server-side + tratamento de encoding (UTF-8/Latin1) — complexidade sem ganho para este escopo
 
 ```python
-# shared/auth.py
+class MovementImportItem(BaseModel):
+    type: str                        # "credit" | "debit"
+    date: datetime
+    amount: float
+    description: str | None = None
 
-from jwt import PyJWKClient
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlmodel.ext.asyncio.session import AsyncSession
-from shared.database import get_session
+class MovementImportResponse(BaseModel):
+    imported: int
+    duplicates_flagged: int
+    batch_id: str
+    items: list[MovementRead]
 
-security = HTTPBearer()
-
-class JWKSClient:
-    """Singleton com cache de chaves públicas do Keycloak."""
-    _client: PyJWKClient | None = None
-
-    @classmethod
-    def get(cls, jwks_url: str) -> PyJWKClient:
-        if cls._client is None:
-            cls._client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
-        return cls._client
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+@router.post("/accounts/{account_uuid}/movements/import", response_model=MovementImportResponse)
+async def import_movements(
+    account_uuid: UUID,
+    items: list[MovementImportItem],
     session: AsyncSession = Depends(get_session),
-) -> User:
-    """Valida JWT contra Keycloak JWKS. Faz upsert just-in-time do usuário local."""
-    token = credentials.credentials
-    # 1. Valida assinatura RS256 contra Keycloak JWKS (local, sem round-trip)
-    # 2. Verifica exp, iss, aud
-    # 3. Extrai sub (idp_sub), email, name
-    # 4. Upsert na tabela users
-    # 5. Retorna User ORM object
+    current_user: User = Depends(get_current_user),
+) -> MovementImportResponse:
     ...
 ```
 
-**Biblioteca JWT:** PyJWT (`jwt` package) com `PyJWKClient` — mais mantida que python-jose, suporte nativo a JWKS. Keycloak usa RS256 por padrão.
-
-**Sem round-trip ao Keycloak por request:** validação local contra chave pública (do JWKS endpoint), não via introspection endpoint. Chave em cache por 1 hora.
+**Alternativa se precisar importar arquivos:** `UploadFile` + pandas/csv.reader. Para OFX/QIF (formatos bancários brasileiros), adicionar parser de terceiro. Mas o escopo atual não requer isso — adiar para iteração futura.
 
 ---
 
-## Decisions: Registro de Routers em main.py
+### Q4: Onde vive a lógica de deduplicação
 
-### Prefixo por domínio (escolhido) vs. versioning
+**Em `services.py`, executada DURANTE o insert, ANTES do commit.**
 
-**Decisão: prefixo por domínio, sem `/v1/` no path.**
+Não em step separado. Não em background task. Rationale:
 
-Razão: este é um backend pessoal/familiar com um único cliente front-end sob controle total. Versioning de URL resolve um problema de compatibilidade retroativa que não existe aqui. Prefixo por domínio comunica intenção arquitetural e é mais limpo para o MCP.
-
-```python
-# main.py
-from domains.familia import routes as familia_routes
-
-app.include_router(familia_routes.router, prefix="/familia")
-# futuro: app.include_router(financeiro_routes.router, prefix="/financeiro")
-# futuro: app.include_router(lista_compras_routes.router, prefix="/lista_compras")
-```
-
-O `prefix` em `include_router` combina com o `prefix` definido no próprio `APIRouter`:
+1. Deduplicação síncrona ao import dá feedback imediato ao usuário ("3 de 10 já existiam")
+2. A família tem no máximo centenas de movimentações por conta — não há volume que justifique queue/background
+3. Fingerprint de deduplicação: `(account_id, date, amount, description)` — hash ou comparação direta. `import_batch_id` armazena o UUID do lote para rollback manual se necessário
 
 ```python
-# routes.py define prefix="/families" (plural, o recurso)
-# include_router adiciona prefix="/familia" (o domínio)
-# resultado: GET /familia/families/{id}
+# finances/services.py
+async def import_movements(
+    session: AsyncSession,
+    account: Account,
+    items: list[MovementImportItem],
+    batch_id: str,
+) -> MovementImportResponse:
+    """Importa movimentações, flagando duplicatas. Lógica pura, sem FastAPI."""
+    imported = 0
+    duplicates = 0
+    results = []
+
+    for item in items:
+        # Checar duplicata: mesmo account, mesma data, mesmo valor, mesma descrição
+        existing = await session.exec(
+            select(Movement).where(
+                Movement.account_id == account.id,
+                Movement.date == item.date,
+                Movement.amount == item.amount,
+                Movement.description == item.description,
+            )
+        )
+        is_dup = existing.first() is not None
+
+        mov = Movement(
+            account_id=account.id,
+            type=item.type,
+            date=item.date,
+            amount=item.amount,
+            description=item.description,
+            is_duplicate=is_dup,
+            import_batch_id=batch_id,
+        )
+        session.add(mov)
+        results.append(mov)
+        if is_dup:
+            duplicates += 1
+        else:
+            imported += 1
+
+    await session.commit()
+    for mov in results:
+        await session.refresh(mov)
+
+    return MovementImportResponse(
+        imported=imported,
+        duplicates_flagged=duplicates,
+        batch_id=batch_id,
+        items=[MovementRead.model_validate(m) for m in results],
+    )
 ```
 
-**Tags para OpenAPI/MCP:** cada router usa `tags=["{domain_name}"]`. fastapi-mcp usa tags para filtragem.
+**Nota:** duplicatas são salvas com `is_duplicate=True`, não rejeitadas — permite revisão manual. O usuário pode limpar depois.
 
 ---
 
-## Decisions: DSL Generator — Evolução para Domínios
+### Q5: Lógica de sugestão de categoria
 
-### Campo `domain` no YAML
+**Em `services.py`, exposta via MCP.**
 
-Adicionar campo obrigatório `domain` em cada entity YAML:
-
-```yaml
-# dsl/entities/family.yaml
-name: Family
-domain: familia           # novo campo — define o subdiretório de output
-table_name: family
-...
-```
-
-```yaml
-# dsl/entities/user.yaml
-name: User
-domain: shared            # User é cross-domain — fica em shared/
-table_name: users         # corrigir para plural (convenção)
-...
-```
-
-### Output do generator
-
-O generator atualizado resolve o diretório de output assim:
+Mesma estratégia de `list_my_families`: função pura em `services.py`, chamada em `operations.py` via endpoint HTTP e também acessível via MCP:
 
 ```python
-domain = entity_data.get('domain', 'shared')
-output_dir = ROOT_DIR / "src" / "caramello" / (
-    "shared" if domain == "shared"
-    else f"domains/{domain}"
-)
+# finances/services.py
+async def suggest_category(
+    session: AsyncSession,
+    family: Family,
+    description: str,
+) -> list[Category]:
+    """
+    Sugere categorias baseado em similaridade com entradas anteriores.
+    Estratégia v1: ILIKE na descrição de movimentações já categorizadas.
+    Estratégia v2: embeddings (fase posterior).
+    """
+    # v1: busca categorias usadas em entradas com descrição similar
+    result = await session.exec(
+        select(Category)
+        .join(Entry, Entry.category_id == Category.id)
+        .join(Movement, Movement.id == Entry.movement_id)
+        .where(
+            Category.family_id == family.id,
+            Movement.description.ilike(f"%{description}%"),
+        )
+        .distinct()
+        .limit(5)
+    )
+    return list(result.all())
 ```
 
-**O generator produz apenas:**
-- `models.py` — SQLModel com `table=True`
-- `schemas.py` — Read/Create/Update sem Field args de banco
+**Exposição MCP:** registrar `operation_id="suggest_category"` no endpoint e adicionar em `include_operations` no `main.py`. Agentes de IA poderão sugerir categorias diretamente.
 
-**O generator NÃO produz:**
-- `services.py` — lógica de negócio é manual
-- `routes.py` — routers são manuais (dependências de auth, lógica de negócio específica)
+---
 
-### Imports entre domínios
+### Q6: Performance de agregações com SQLAlchemy async
 
-Regra: modelos só referenciam outros modelos via import direto:
+**Veredicto: func.sum + group_by via `session.execute()` (não `session.exec()`) — performance adequada para 1-5 usuários.**
+
+`session.exec()` (SQLModel helper) funciona bem para queries de ORM que retornam instâncias de modelo. Para queries com agregações (`func.sum`, `group_by`, colunas calculadas), usar `session.execute()` nativo do SQLAlchemy 2.0 que retorna `Row` objects (HIGH confidence — SQLAlchemy 2.0 asyncio docs):
 
 ```python
-# domains/familia/models.py (gerado)
-from caramello.shared.models import User   # cross-domain import explícito
+# finances/services.py
+async def monthly_breakdown(
+    session: AsyncSession,
+    family_id: int,
+    year: int,
+    month: int,
+) -> list[dict]:
+    """Retorna breakdown de gastos por categoria pai no mês."""
+    stmt = (
+        select(
+            Category.name.label("category_name"),
+            func.sum(Movement.amount).label("total"),
+        )
+        .join(Entry, Entry.category_id == Category.id)
+        .join(Movement, Movement.id == Entry.movement_id)
+        .join(Account, Account.id == Movement.account_id)
+        .where(
+            Account.family_id == family_id,
+            Entry.competencia_year == year,
+            Entry.competencia_month == month,
+            Movement.is_duplicate.is_(False),
+        )
+        .group_by(Category.id, Category.name)
+        .order_by(func.sum(Movement.amount).desc())
+    )
+    result = await session.execute(stmt)
+    rows = result.all()
+    return [{"category": row.category_name, "total": float(row.total or 0)} for row in rows]
 ```
 
-O generator deve gerar imports corretos baseado no campo `domain` da entidade referenciada. O `manifest.yaml` deve ser o índice que o generator usa para resolver `domain` de cada entidade pelo nome.
+**Considerações de performance:**
+- Índices obrigatórios: `movement.account_id`, `entry.competencia_year`, `entry.competencia_month`, `entry.category_id`, `account.family_id`
+- Para o escopo (1-5 usuários, centenas de lançamentos por família por mês), PostgreSQL executa a agregação em milissegundos — sem necessidade de materializar views ou caching
+- `func.sum` em asyncpg é executado server-side no PostgreSQL, não client-side — sem overhead de trazer todas as linhas para Python
 
-Estratégia no generator:
+---
 
-```python
-# construir índice domain por entity name durante a leitura do manifest
-entity_domain_map = {data['name']: data.get('domain', 'shared') for data in all_entities}
+### Q7: Um diretório ou subdividir o domínio finances
 
-# ao gerar import de relacionamento:
-def resolve_import(entity_name: str) -> str:
-    domain = entity_domain_map[entity_name]
-    base = "caramello.shared" if domain == "shared" else f"caramello.domains.{domain}"
-    return f"from {base}.models import {entity_name}"
+**Diretório único `src/caramello/finances/`** — não subdividir.
+
+| Critério | Argumento |
+|----------|-----------|
+| Volume de entidades | 4 entidades (Account, Movement, Entry, Category) — não justifica subdivisão |
+| Queries entre entidades | `monthly_breakdown` junta as 4 entidades — subdivisão criaria imports cruzados internos |
+| Padrão do projeto | `families/` já tem 3 entidades (Family, FamilyMember, FamilyInvitation) em um único diretório |
+| Fricção operacional | Subdivisão = 2 pares de `models.py + router.py`, 2 entradas em `main.py`, 2 entradas no `alembic/env.py` — sem ganho |
+| DSL generator | Gera por `domain:` field — "finances" como domínio único se encaixa nativamente |
+
+Se o domínio crescer para 8+ entidades (ex: orçamento mensal, metas, investimentos), subdividir então faz sentido.
+
+---
+
+## Modelo de Domínio Completo
+
+```
+Account
+  id, uuid, family_id (FK→family.id), name, type, currency, is_active
+  created_at, updated_at
+  → movements: list[Movement]
+  → family: Family
+
+Movement
+  id, uuid, account_id (FK→account.id), type, date, amount, description
+  is_duplicate, import_batch_id
+  created_at, updated_at
+  → account: Account
+  → entry: Entry | None (1:1, uselist=False)
+
+Entry
+  id, uuid, movement_id (FK→movement.id, UNIQUE), category_id (FK→category.id, nullable)
+  competencia_year, competencia_month, notes, is_recurring
+  created_at, updated_at
+  → movement: Movement (back_populates)
+  → category: Category | None
+
+Category
+  id, uuid, family_id (FK→family.id), name, parent_id (FK→category.id, nullable)
+  created_at, updated_at
+  → parent: Category | None (self-ref, remote_side=Category.id)
+  → children: list[Category]
+  → entries: list[Entry]
+  → family: Family
+```
+
+**Fluxo de conciliação:**
+```
+1. Movement inserida (bruta, sem Entry)
+2. services.suggest_category() → sugere categoria por similaridade
+3. Usuário confirma categoria via PATCH /finances/movements/{uuid}/reconcile
+4. Entry criada com movement_id + category_id + competencia
+5. monthly_breakdown() agrega Entry+Movement+Category por mês/família
 ```
 
 ---
 
-## Decisions: Alembic com Múltiplos Domínios
+## Integração com Arquitetura Existente
 
-### Estratégia: uma migration, todos os domínios
+### Pontos de integração
 
-**Decisão: um único Alembic `env.py`, uma única cadeia de migrations, todos os modelos.**
+| Componente | O que muda | Ação |
+|------------|-----------|------|
+| `main.py` | Adicionar imports e `include_router` para finances | Manual — após geração DSL |
+| `alembic/env.py` | Importar Account, Movement, Entry, Category para metadata | Adicionar 4 imports |
+| `dsl/manifest.yaml` | Adicionar 4 novos entity files | Adicionar entradas |
+| `scripts/generate_code.py` | Adicionar `"finances"` em `DOMAIN_TO_ENTITY_NAME` | 1 linha |
+| `scripts/generate_code.py` | Adicionar `finances` em `_run_ruff_fix` dirs list | 1 linha |
+| `main.py` MCP `include_operations` | Adicionar `suggest_category`, outros operations IDs financeiros | Após implementação |
 
-Razão: o banco `familia_dev` / `familia_prod` é um único database PostgreSQL para um único grupo. Não há necessidade de migrations isoladas por domínio — isso adicionaria complexidade operacional sem benefício real no escopo deste projeto (1-5 usuários, equipe de 1).
+### O que NÃO muda
 
-### env.py atualizado
+- `shared/auth.py`, `shared/database.py` — reutilizados sem modificação
+- `users/`, `families/` — sem toque
+- Padrão de testes (savepoint rollback contra `caramello_dev`)
+- DSL YAML → geração → operações manuais
 
-O `env.py` atual usa `from caramello.models import *`. Com a nova estrutura, muda para importação explícita de todos os domínios:
+### Novo componente: Account como escopo de autorização
+
+Diferente de Family (acesso irrestrito a membros), Account é scoped por `family_id`. O padrão de autorização em `operations.py`:
 
 ```python
-# alembic/env.py
-from sqlmodel import SQLModel
-
-# Importar todos os modelos para registrar metadata antes do autogenerate
-from caramello.shared.models import User          # noqa: F401
-from caramello.domains.familia.models import (    # noqa: F401
-    Family, FamilyMember, FamilyInvitation
-)
-# Futuros domínios: importar aqui quando adicionados
-# from caramello.domains.financeiro.models import ...
-
-target_metadata = SQLModel.metadata
-```
-
-**Alternativa (para quando houver muitos domínios):** scan automático via `importlib` de todos os `domains/*/models.py`. Para o M1 com 1 domínio, importação explícita é mais simples e mais previsível.
-
-### Naming convention de tabelas
-
-Definida em `docs/apps-platform.md` §5: sem schemas PostgreSQL, isolamento por prefixo de tabela.
-
-```
-users              # shared (sem prefixo — User é cross-domain central)
-family             # domínio familia → renomear para familia_family
-family_member      # → familia_family_member
-family_invitation  # → familia_family_invitation
-```
-
-**Decisão:** manter `users` sem prefixo (é referenciado por todos os domínios via FK). Tabelas específicas de domínio recebem prefixo `{domain}_`.
-
----
-
-## Build Order (Dependências entre Componentes)
-
-Ordem de implementação com dependências anotadas:
-
-```
-1. core/config.py (já existe, ajustar para variáveis Keycloak)
-   └── depende de: nada
-
-2. shared/database.py (novo — move de core/, troca psycopg2 por asyncpg, AsyncSession)
-   └── depende de: core/config.py
-
-3. User model em shared/ (DSL generator + dsl/entities/user.yaml corrigido)
-   └── depende de: shared/database.py (para Alembic)
-   └── CRÍTICO: remover hashed_password, google_id; adicionar idp_sub; PK UUID
-
-4. shared/auth.py (Keycloak JWT + get_current_user + just-in-time provisioning)
-   └── depende de: shared/database.py (get_session), User model
-
-5. DSL generator evoluído (suporte a campo domain, output em domains/{domain}/)
-   └── depende de: definição de estrutura de pastas (passos 1-4)
-
-6. domains/familia/models.py + schemas.py (DSL generator)
-   └── depende de: generator evoluído, User model em shared/
-
-7. domains/familia/services.py (manual — Family CRUD, membership, invitations)
-   └── depende de: models.py, shared/database.py
-
-8. domains/familia/routes.py (manual — APIRouter com auth)
-   └── depende de: services.py, shared/auth.py, schemas.py
-
-9. main.py reescrito (registra router familia, monta fastapi-mcp)
-   └── depende de: routes.py, fastapi-mcp instalado
-
-10. alembic/env.py atualizado + migration recriada
-    └── depende de: todos os models importáveis (passos 3, 6)
+async def _require_account_access(
+    account_uuid: UUID,
+    current_user: User,
+    session: AsyncSession,
+) -> Account:
+    """Garante que current_user é membro da família dona da conta."""
+    result = await session.exec(
+        select(Account)
+        .join(Family, Family.id == Account.family_id)
+        .join(FamilyMember, FamilyMember.family_id == Family.id)
+        .where(
+            Account.uuid == account_uuid,
+            FamilyMember.user_id == current_user.id,
+        )
+    )
+    account = result.first()
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return account
 ```
 
 ---
 
-## Anti-Patterns to Avoid
+## Build Order para o Domínio Finances
 
-### Anti-Pattern 1: Services com import de FastAPI
-**O que é:** `services.py` importa `HTTPException`, `Request`, ou qualquer coisa de `fastapi`.
-**Por que é ruim:** Quebra o princípio de services como lógica pura. Impossibilita reutilização via MCP sem passar pela camada HTTP.
-**Em vez disso:** Services lançam exceções de domínio (ex: `FamilyNotFoundError`). Routes capturam e convertem em `HTTPException`.
+Dependências ditam a ordem:
 
-### Anti-Pattern 2: Lógica de negócio em routes.py
-**O que é:** queries SQLModel diretamente em funções de router, sem services.
-**Por que é ruim:** fastapi-mcp expõe os endpoints REST como ferramentas MCP. A lógica fica duplicada se alguém quiser adicionar uma rota MCP diferente.
-**Em vez disso:** Toda lógica fica em `services.py`. Routes são wrappers de 5-10 linhas.
+```
+1. DSL YAMLs (4 arquivos em dsl/entities/)
+   └── depende de: definição do modelo de domínio
 
-### Anti-Pattern 3: FastApiMCP instanciado antes dos routers
-**O que é:** chamar `FastApiMCP(app)` antes de `app.include_router(...)`.
-**Por que é ruim:** fastapi-mcp lê a OpenAPI spec no momento da instanciação. Endpoints adicionados depois não são incluídos automaticamente.
-**Em vez disso:** instanciar `FastApiMCP` depois de todos os `include_router()` em `main.py`.
+2. generate_code.py atualizado (DOMAIN_TO_ENTITY_NAME + _run_ruff_fix)
+   └── depende de: nada novo
 
-### Anti-Pattern 4: Validação JWT por introspection endpoint
-**O que é:** chamar `{keycloak_url}/introspect` em cada request para validar o token.
-**Por que é ruim:** Adiciona latência de rede em cada request, cria dependência de disponibilidade do Keycloak para cada operação.
-**Em vez disso:** Validação local usando chave pública do JWKS endpoint (`{keycloak_url}/.well-known/jwks.json`), com cache de 1 hora.
+3. bin/generate_code → gera finances/models.py + finances/router.py
+   └── depende de: DSL YAMLs + generator atualizado
 
-### Anti-Pattern 5: Editar arquivos gerados pelo DSL diretamente
-**O que é:** editar `domains/familia/models.py` ou `schemas.py` manualmente.
-**Por que é ruim:** o próximo `bin/generate_code` sobrescreve tudo.
-**Em vez disso:** editar o YAML em `dsl/entities/` e regenerar.
+4. Category.parent/children — pós-processar manualmente em finances/models.py
+   └── marcar arquivo como # CARAMELLO-GENERATED: implemented
+   └── depende de: geração DSL (3)
+
+5. Alembic migration 0002_finances_schema.py
+   └── depende de: models.py completo (3+4)
+   └── alembic/env.py deve importar as 4 entidades
+
+6. finances/operations.py — CRUD de Account (criação, listagem por família)
+   └── depende de: models.py (3), auth helpers existentes
+
+7. finances/operations.py — Movement: insert individual + reconcile (criar Entry)
+   └── depende de: Account (6), Category (9)
+
+8. finances/operations.py — import em lote + deduplicação (via services.py)
+   └── depende de: Movement (7)
+
+9. finances/operations.py — Category: CRUD hierárquico
+   └── depende de: models.py (3+4)
+
+10. finances/services.py — suggest_category, monthly_breakdown, account_balance
+    └── depende de: todas as entidades (3-9)
+
+11. main.py — include_router finances_operations + finances_router
+    └── depende de: operations.py (6-9)
+    └── operations ANTES de router (padrão estabelecido — D-06)
+
+12. MCP — adicionar operation_ids financeiros em include_operations
+    └── depende de: main.py (11)
+
+13. Testes unitários + integração
+    └── depende de: tudo acima
+```
+
+**Fases naturais de entrega:**
+- **Fase A (fundação):** passos 1-5 — DSL, geração, migration
+- **Fase B (contas e categorias):** passos 6, 9 — CRUD Account + Category
+- **Fase C (movimentações):** passos 7-8 — insert individual + bulk import
+- **Fase D (conciliação e relatórios):** passos 10-12 — Entry, aggregações, MCP
 
 ---
 
-## Scalability Considerations
+## Anti-Patterns Específicos do Domínio Finances
 
-Este backend serve 1-5 usuários simultâneos. As decisões abaixo são adequadas para esse escopo e não precisam ser revisitadas até crescimento expressivo.
+### Anti-Pattern 1: float para valores monetários
+**O que é:** `amount: float` em vez de `Numeric(10, 2)` no banco
+**Por que é ruim:** ponto flutuante perde precisão em somas acumuladas — R$ 0.1 + R$ 0.2 ≠ R$ 0.3
+**Em vez disso:** `sa_column=Column(Numeric(10, 2))` no SQLModel Field, ou `Decimal` no Python. Para o DSL, adicionar suporte a tipo `decimal` ou usar `float` no Python mas `Numeric` no banco via `sa_column`.
 
-| Preocupação | Na escala atual (1-5 usuários) | Se crescer |
-|-------------|-------------------------------|-----------|
-| Connection pool | `NullPool` para Alembic, pool padrão SQLAlchemy para app | Ajustar pool size |
-| fastapi-mcp em processo | Single ASGI app — adequado | Separar em `mcp_app` com httpx apontando para API |
-| Keycloak JWKS cache | 1 hora em memória — sem problema | Redis para instâncias múltiplas |
-| Migrations | Sequential, single-branch | Continua adequado |
+### Anti-Pattern 2: Lazy loading em endpoint async
+**O que é:** acessar `movement.entry` ou `category.children` dentro de endpoint async sem ter carregado via `selectinload`
+**Por que é ruim:** SQLAlchemy async não suporta lazy loading implícito — resulta em `MissingGreenlet` error
+**Em vez disso:** quando a response inclui relacionamentos, usar `options(selectinload(Movement.entry))` na query, ou estruturar a response para não incluir relacionamentos (use IDs/UUIDs em vez de objetos aninhados)
+
+### Anti-Pattern 3: Criar Entry sem verificar Movement já conciliada
+**O que é:** `POST /entries` sem checar se `movement.entry` já existe
+**Por que é ruim:** viola o 1:1 — SQLModel não impede a criação de múltiplas Entries para o mesmo Movement em nível de aplicação (só o unique constraint no banco pega)
+**Em vez disso:** verificar existência em `operations.py` antes de inserir, retornar 409 Conflict se já existir
+
+### Anti-Pattern 4: Agregação via Python loop
+**O que é:** carregar todas as Entry do mês e somar em Python
+**Por que é ruim:** traz dados desnecessários para a memória; PostgreSQL faz SUM server-side muito mais eficiente
+**Em vez disso:** `func.sum()` com `group_by()` via `session.execute()` como demonstrado em Q6
+
+### Anti-Pattern 5: Categoria raiz com parent_id = parent_id (ciclo)
+**O que é:** Category.parent_id apontando para si mesma (id == parent_id)
+**Por que é ruim:** cria ciclo na hierarquia — queries de traversal entram em loop
+**Em vez disso:** validar em operations.py que `parent_id != id` antes de salvar; validar também que parent não tem pai (max 2 níveis)
+
+---
+
+## Considerações de Escalabilidade
+
+Para 1-5 usuários, todas as decisões acima são adequadas e não precisam revisão.
+
+| Preocupação | Escala atual (1-5 usuários) | Se crescer |
+|-------------|----------------------------|-----------|
+| Aggregações mensais | SQL GROUP BY direto — centenas de linhas | Materialized view ou Redis cache |
+| Deduplicação síncrona | Loop Python + queries individuais | Bulk INSERT ON CONFLICT |
+| Sugestão de categoria | ILIKE query | Embeddings + pgvector |
+| Import em lote | JSON list síncrono | Background task + WebSocket status |
 
 ---
 
 ## Sources
 
-- Context7 / fastapi-mcp official docs: `include_operations`, `include_tags`, `exclude_tags`, `AuthConfig`, `headers`, `mount_http` — HIGH confidence
-- FastAPI official docs (fastapi.tiangolo.com/tutorial/bigger-applications/): `include_router`, prefix, tags, dependencies — HIGH confidence
-- Context7 / SQLModel docs: `AsyncSession`, `get_session` dependency pattern — HIGH confidence
-- skycloak.io Keycloak+FastAPI tutorial: `PyJWKClient`, RS256 local validation — MEDIUM confidence (single source, pattern verified against PyJWT docs)
-- WebSearch: Alembic multi-domain strategy, single env.py com importação explícita — MEDIUM confidence (múltiplas fontes concordam no padrão)
+- SQLModel GitHub Discussion #691 (self-referential): `remote_side` com string da classe — MEDIUM confidence
+- SQLModel GitHub Discussion #1509 (self-referential): padrão confirmado com `nullable=True` — MEDIUM confidence
+- SQLModel GitHub Issue #132 (one-to-one): `uselist=False` via `sa_relationship_kwargs` — MEDIUM confidence
+- SQLAlchemy 2.0 asyncio docs (`docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html`): `session.execute()` para aggregações — HIGH confidence
+- SQLAlchemy 2.0 self-referential docs (`docs.sqlalchemy.org/en/20/orm/self_referential.html`): adjacency list, `remote_side` — HIGH confidence
+- Codebase inspecionado: families/models.py, families/operations.py, scripts/generate_code.py — HIGH confidence (fonte primária)

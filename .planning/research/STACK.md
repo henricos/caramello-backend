@@ -1,421 +1,225 @@
-# Technology Stack — caramello-api M1
+# Technology Stack — caramello-api M2 (Domínio Financeiro)
 
 **Projeto:** caramello-api (Grupo Família backend)
-**Pesquisado:** 2026-05-23
-**Confiança geral:** HIGH (todas as versões verificadas no PyPI; padrões verificados em Context7 e fontes oficiais)
+**Pesquisado:** 2026-05-30
+**Confiança geral:** HIGH (versões verificadas no PyPI; padrões verificados via Context7 e fontes oficiais)
 
 ---
 
-## Stack recomendado
-
-### Core Framework
-
-| Tecnologia | Versão | Propósito | Por quê |
-|------------|--------|-----------|---------|
-| Python | 3.12 | Runtime | 3.10+ obrigatório; 3.12 é a versão estável com melhor suporte de ferramentas |
-| FastAPI | ≥0.100.0 | Framework web async | Decisão existente; compatível com fastapi-mcp |
-| uvicorn | ≥0.20.0 | ASGI server | Par natural do FastAPI; suporta uvloop no Docker |
-| pydantic v2 | ≥2.0.0 | Validação/schemas | FastAPI depende; v2 obrigatório para sqlmodel 0.0.38+ |
-| pydantic-settings | ≥2.5.2 | Config por env vars | Já em uso; versão mínima exigida pelo fastapi-mcp |
-
-### Banco de dados
-
-| Tecnologia | Versão | Propósito | Por quê |
-|------------|--------|-----------|---------|
-| PostgreSQL | 15+ | Banco relacional | Já rodando na infra; família_dev / família_prod |
-| asyncpg | 0.31.0 | Driver async nativo | O único driver que faz PostgreSQL realmente async com SQLAlchemy; psycopg3 existe mas asyncpg tem mais tracção com SQLModel |
-| SQLAlchemy | ≥2.0 | ORM + async engine | `create_async_engine` + `async_sessionmaker` — base do async stack |
-| SQLModel | 0.0.38 | Modelos unificados Pydantic+SA | Já em uso; versão 0.0.38 é a atual; sem wrappers async próprios |
-| Alembic | atual | Migrations | Já configurado; permanece sem alterações no setup |
-
-**Nota de compatibilidade (HIGH confidence — verificado):** SQLModel 0.0.38 não tem wrappers async próprios. O padrão correto é importar `AsyncSession` e `create_async_engine` diretamente do `sqlalchemy.ext.asyncio`, não do sqlmodel. O SQLModel funciona como camada de modelo; a infra de sessão usa SQLAlchemy puro.
-
-### Autenticação
-
-| Tecnologia | Versão | Propósito | Por quê |
-|------------|--------|-----------|---------|
-| PyJWT | 2.13.0 | Validação JWT/RS256 | Ativo, mantido, suporta `PyJWKClient` com cache de chaves. python-jose está abandonado (último release 2021) |
-| cryptography | ≥41.0 | Backend crypto para PyJWT[crypto] | Exigido para RS256; instalado via extra `PyJWT[crypto]` |
-
-**Não usar:** python-jose — último release foi 2021, não recebe atualizações, vulnerabilidades acumuladas. PyJWT com `[crypto]` extra é o substituto direto.
-
-### MCP
-
-| Tecnologia | Versão | Propósito | Por quê |
-|------------|--------|-----------|---------|
-| fastapi-mcp | 0.4.0 | Expor endpoints FastAPI como tools MCP | Decisão já tomada; monta diretamente na app FastAPI, sem serviço separado |
-| mcp | ≥1.12.0 | Protocolo MCP (dependência indireta) | Puxado pelo fastapi-mcp |
-
-### Qualidade
-
-| Tecnologia | Versão | Propósito | Por quê |
-|------------|--------|-----------|---------|
-| ruff | 0.15.x | Linter + formatter | Substitui flake8+isort+black em um binário; exigido por docs/quality_rules.md |
-| mypy | 2.1.0 | Type checking | Exigido por docs/quality_rules.md |
-
-### Testes
-
-| Tecnologia | Versão | Propósito | Por quê |
-|------------|--------|-----------|---------|
-| pytest | ≥9.0.1 | Test runner | Já em dev dependencies |
-| pytest-asyncio | 1.3.0 | Suporte async em fixtures e tests | Versão atual; obrigatório para AsyncSession fixtures |
-| httpx | 0.28.1 | HTTP client para TestClient async | Já em dev dependencies; exigido pelo AsyncClient do FastAPI |
+> **Nota:** Este documento cobre apenas as _adições_ necessárias para o Milestone 2.
+> O stack base (FastAPI async + SQLModel + asyncpg + Alembic + PyJWT + fastapi-mcp) está implementado e validado — não é reexaminado aqui.
 
 ---
 
-## Configuração detalhada por área
+## Adições necessárias
 
-### 1. asyncpg + SQLAlchemy async + FastAPI
+### 1. Parsing de arquivos bancários
 
-**Connection string:**
-```
-postgresql+asyncpg://user:password@host:5432/familia_dev
-```
+| Biblioteca | Versão | Propósito | Por quê |
+|------------|--------|-----------|---------|
+| `ofxparse` | 0.21 | Parser OFX/QFX | Biblioteca mais usada para OFX; API simples: `OfxParser.parse(fileobj)` retorna objeto com `account.statement.transactions`; versão 0.21 de 2021 — projeto tem PRs em 2024-2025 mas baixa atividade geral |
+| `openpyxl` | 3.1.5 | Leitura de XLSX | Alta reputação (Context7); `read_only=True` para memória constante; sem dependências pesadas; suporta Python 3.10+ |
+| `python-multipart` | 0.0.29 | Upload multipart/form-data | **Já é dependência indireta do FastAPI** para UploadFile — provavelmente já instalado; adicionar explicitamente ao `pyproject.toml` para clareza |
 
-**`src/caramello/database/session.py` (reescrita completa):**
+**Nota sobre OFX:** Bancos brasileiros exportam arquivos `.ofx` com encodings variados e headers não-padrão. A alternativa `ofxparse2` (fork por @pedrin-pedrada, 0.2.2) trata especificamente esses casos. Para uso inicial com CSV e XLSX o problema não se aplica. Se OFX de bancos BR se mostrar problemático, trocar para `ofxparse2`. Por ora: usar `ofxparse` 0.21 como primeira escolha.
+
+**O que NÃO adicionar:**
+- `pandas` — dependência de 30+ MB para um parser de CSV. Para família de 1-5 usuários, o módulo `csv` da stdlib é suficiente. Pandas faz sentido só se houvesse análise estatística.
+- `xlrd` — para `.xls` (formato antigo pre-2007). Bancos modernos exportam `.xlsx`. Ignorar.
+- `aiofiles` — OFX/CSV/XLSX de extratos bancários são tipicamente < 1 MB. `await file.read()` via UploadFile (que já usa SpooledTemporaryFile) é suficiente sem streaming chunked.
+
+---
+
+### 2. Deduplicação de movimentações
+
+**Biblioteca necessária:** nenhuma nova. A stdlib do Python é suficiente.
+
+**Estratégia recomendada — hash de impressão digital (fingerprint):**
+
 ```python
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from caramello.core.config import settings
+import hashlib
 
-engine = create_async_engine(
-    settings.DATABASE_URL,  # deve usar postgresql+asyncpg://
-    echo=settings.DEBUG,
-    pool_pre_ping=True,
-)
-
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,  # obrigatório em async: evita lazy load implícito pós-commit
-)
-
-async def get_async_session() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        yield session
+def compute_movement_hash(date: str, amount: str, description: str, account_id: int) -> str:
+    """Fingerprint determinístico para deduplicação de movimentações importadas."""
+    raw = f"{account_id}|{date}|{amount}|{description.strip().upper()}"
+    return hashlib.sha256(raw.encode()).hexdigest()
 ```
 
-**Por que `expire_on_commit=False`:** Em async, acessar atributo de objeto após commit dispara um lazy load que tenta IO síncrono — e isso falha silenciosamente ou levanta `MissingGreenlet`. Com `expire_on_commit=False`, os atributos do objeto permanecem acessíveis após commit sem nova query.
+- O campo `import_hash` (VARCHAR(64), UNIQUE por conta) é adicionado ao modelo `Movimentacao`.
+- Na importação em lote: calcular hash para cada linha → inserir com `INSERT ... ON CONFLICT (import_hash) DO NOTHING` via SQLAlchemy.
+- Arquivos OFX já fornecem `FITID` (Financial Institution Transaction ID) único por banco — usar como hash direto quando disponível, mais confiável que campo derivado.
 
-**Dependency injection nos routers:**
+**Por que não fuzzy matching para deduplicação:**
+Fuzzy matching é útil para _sugestão de categoria_, não para deduplicação de importação. Para deduplicação, o critério deve ser determinístico (mesmo arquivo importado duas vezes = zero duplicatas). Hash é O(1) por transação e correto.
+
+---
+
+### 3. Sugestão de categoria (semi-automática)
+
+| Biblioteca | Versão | Propósito | Por quê |
+|------------|--------|-----------|---------|
+| `rapidfuzz` | 3.14.5 | Similaridade de strings para sugestão de categoria | Implementado em C++, mas API Python pura; `process.extractOne()` retorna a melhor correspondência com score; sem dependência de modelo ML; MIT license; alta atividade no PyPI |
+
+**Padrão de uso:**
+
 ```python
-from typing import Annotated
-from fastapi import Depends
+from rapidfuzz import process, fuzz
+
+def suggest_category(description: str, known_entries: list[tuple[str, int]]) -> int | None:
+    """
+    known_entries: lista de (description_normalizada, categoria_id) de lancamentos anteriores
+    Retorna categoria_id se score >= threshold, None caso contrário.
+    """
+    if not known_entries:
+        return None
+    choices = {desc: cat_id for desc, cat_id in known_entries}
+    result = process.extractOne(
+        description.upper(),
+        choices.keys(),
+        scorer=fuzz.token_set_ratio,  # ignora ordem de palavras; bom para descrições de extrato
+        score_cutoff=75,              # limiar: ajustável, 75 funciona bem para descrições bancárias
+    )
+    if result:
+        _, _score, matched_desc = result
+        return choices[matched_desc]
+    return None
+```
+
+**Por que `token_set_ratio` e não `ratio` simples:**
+Descrições de extrato têm tokens na ordem variável (ex: "PIX RECEBIDO JOAO SILVA" vs "JOAO SILVA PIX"). `token_set_ratio` trata o conjunto de tokens como bag-of-words, ignorando ordem e duplicatas — muito mais preciso para esse caso de uso.
+
+**Escala:** Para 1-5 usuários com centenas de lançamentos históricos, a comparação linear contra todos os lançamentos anteriores é negligenciável em performance. Sem necessidade de indexação vetorial.
+
+**O que NÃO adicionar:**
+- `scikit-learn` / `sentence-transformers` / qualquer modelo ML — totalmente desnecessário para app familiar. RapidFuzz entrega 80% do valor com 0% da complexidade operacional.
+- `fuzzywuzzy` — versão antiga de RapidFuzz, mais lenta, usa `python-Levenshtein` como dependência opcional.
+
+---
+
+### 4. Agregações financeiras
+
+**Biblioteca necessária:** nenhuma nova. SQLAlchemy 2.0 (já em uso) tem suporte completo a `func.sum`, `func.extract`, `group_by` com AsyncSession.
+
+**Padrão recomendado — SQLAlchemy ORM expressions (não SQL raw):**
+
+```python
+from sqlalchemy import select, func, extract
 from sqlalchemy.ext.asyncio import AsyncSession
-from caramello.database.session import get_async_session
 
-SessionDep = Annotated[AsyncSession, Depends(get_async_session)]
-
-@router.get("/items")
-async def list_items(session: SessionDep):
-    result = await session.execute(select(Item))
-    return result.scalars().all()
-```
-
-**Alembic com asyncpg:** O `alembic/env.py` precisa usar `run_async_migrations` com `connectable.connect()` async. O padrão está em `alembic.ini` apontando para a mesma URL com `+asyncpg`.
-
----
-
-### 2. Keycloak + FastAPI — validação JWT/OIDC
-
-**Padrão recomendado:** PyJWT com `PyJWKClient` (cache automático de JWKS). O token é validado localmente a partir da chave pública do Keycloak — sem round-trip ao Keycloak por request.
-
-**`src/caramello/shared/auth.py`:**
-```python
-from functools import lru_cache
-import jwt
-from jwt import PyJWKClient
-from fastapi import Depends, HTTPException, Security
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
-from caramello.core.config import settings
-
-security = HTTPBearer()
-
-@lru_cache(maxsize=1)
-def get_jwks_client() -> PyJWKClient:
-    # Keycloak JWKS endpoint:
-    # {keycloak_url}/realms/{realm}/protocol/openid-connect/certs
-    return PyJWKClient(
-        settings.KEYCLOAK_JWKS_URL,
-        cache_keys=True,
-        lifespan=3600,
-    )
-
-class TokenPayload(BaseModel):
-    sub: str            # Keycloak user ID — vira idp_sub na tabela users
-    email: str | None = None
-    preferred_username: str | None = None
-    realm_roles: list[str] = []
-
-def decode_token(token: str) -> TokenPayload:
-    client = get_jwks_client()
-    signing_key = client.get_signing_key_from_jwt(token)
-    try:
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=settings.KEYCLOAK_CLIENT_ID,  # ou "account" dependendo da config do realm
-            issuer=settings.KEYCLOAK_ISSUER,        # {keycloak_url}/realms/{realm}
-            options={"verify_exp": True, "verify_aud": True, "verify_iss": True},
+async def monthly_breakdown(session: AsyncSession, family_id: int, year: int, month: int):
+    stmt = (
+        select(
+            Categoria.nome.label("categoria"),
+            func.sum(Lancamento.valor).label("total"),
         )
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expirado")
-    except jwt.InvalidAudienceError:
-        raise HTTPException(status_code=401, detail="Audience inválido")
-    except jwt.PyJWTError as e:
-        raise HTTPException(status_code=401, detail=f"Token inválido: {e}")
-
-    realm_roles = payload.get("realm_access", {}).get("roles", [])
-    return TokenPayload(
-        sub=payload["sub"],
-        email=payload.get("email"),
-        preferred_username=payload.get("preferred_username"),
-        realm_roles=realm_roles,
+        .join(Lancamento, Lancamento.categoria_id == Categoria.id)
+        .where(
+            Lancamento.competencia_ano == year,
+            Lancamento.competencia_mes == month,
+            Categoria.family_id == family_id,
+        )
+        .group_by(Categoria.id, Categoria.nome)
+        .order_by(func.sum(Lancamento.valor).desc())
     )
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Security(security),
-) -> TokenPayload:
-    return decode_token(credentials.credentials)
-
-CurrentUser = Annotated[TokenPayload, Depends(get_current_user)]
+    result = await session.execute(stmt)
+    return result.mappings().all()
 ```
 
-**Variáveis de ambiente necessárias:**
-```
-KEYCLOAK_JWKS_URL=https://{host}/realms/{realm}/protocol/openid-connect/certs
-KEYCLOAK_ISSUER=https://{host}/realms/{realm}
-KEYCLOAK_CLIENT_ID={client-id-configurado-no-realm}
+**Por que ORM expressions e não SQL raw:**
+- Reutiliza o async engine já configurado sem abrir conexões separadas.
+- Verificação de tipos em tempo de desenvolvimento com mypy.
+- Portabilidade caso o banco mude (improvável, mas boa prática).
+- Para queries mais complexas (ex: breakdown hierárquico pai/filho), SQL raw via `text()` é aceitável — sem dogma.
+
+**Saldo derivado por conta:**
+```python
+async def account_balance(session: AsyncSession, account_id: int) -> Decimal:
+    stmt = select(func.sum(Movimentacao.valor)).where(
+        Movimentacao.conta_id == account_id
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none() or Decimal(0)
 ```
 
-**Atenção ao `audience`:** Keycloak emite tokens com `aud` variável dependendo de como o client está configurado. Se o realm usa `account` como audiência padrão, use `audience="account"`. Se o client tem `audience mapper` configurado, use o client ID. Precisa ser verificado contra o Keycloak real do projeto.
+Créditos são valores positivos, débitos são negativos — convenção a definir no modelo e manter consistente.
 
 ---
 
-### 3. fastapi-mcp — integração
+### 5. Campo `competencia` (período contábil)
 
-**Versão atual:** 0.4.0 (julho 2025). Requer Python ≥3.10, FastAPI ≥0.100.0, mcp ≥1.12.0.
+**Biblioteca necessária:** nenhuma nova. Padrão de modelagem com dois campos inteiros no banco.
 
-**Mounting pattern (minimal):**
+**Por que dois campos inteiros e não um campo `date`:**
+- `competencia_ano: int` + `competencia_mes: int` é explícito e sem ambiguidade — não há "dia" em competência.
+- Filtragem por período usa `WHERE competencia_ano = 2025 AND competencia_mes = 11` — índice composto em (ano, mes) é trivial.
+- Evita o problema de normalizar para `date(2025, 11, 1)` (primeiro do mês? último?) que causa bugs sutis.
+- `GROUP BY competencia_ano, competencia_mes ORDER BY competencia_ano, competencia_mes` é legível.
+
+**Índice recomendado no modelo:**
 ```python
-# src/caramello/main.py
-from fastapi import FastAPI
-from fastapi_mcp import FastApiMCP
+class Lancamento(SQLModel, table=True):
+    competencia_ano: int = Field(index=False)   # índice composto abaixo
+    competencia_mes: int = Field(index=False)
+    ...
 
-app = FastAPI(title="Caramello API")
-
-# ... registrar routers de domínio ...
-
-mcp = FastApiMCP(app)
-mcp.mount()
-# MCP server disponível em /mcp
+# Em alembic migration ou via __table_args__:
+# Index("ix_lancamento_competencia", "competencia_ano", "competencia_mes")
 ```
-
-**Com autenticação via dependência existente:**
-```python
-from caramello.shared.auth import get_current_user
-
-mcp = FastApiMCP(
-    app,
-    # fastapi-mcp usa as dependências FastAPI declaradas nos endpoints —
-    # endpoints marcados com Depends(get_current_user) ficam protegidos no MCP também
-)
-mcp.mount()
-```
-
-**Ordem importa:** `mcp.mount()` deve ser chamado **após** todos os routers estarem registrados. Se montar antes, os tools MCP não incluirão os endpoints adicionados depois.
-
-**O MCP não duplica lógica:** Expõe os mesmos endpoints REST como tools. Isso valida a decisão arquitetural de colocar lógica em `services.py` — os endpoints MCP são automaticamente wrappers finos.
 
 ---
 
-### 4. Dockerfile multi-stage com uv e non-root user
+### 6. Endpoint de importação em lote
 
-**Padrão recomendado para Python/FastAPI com uv:**
+**Biblioteca necessária:** `python-multipart` 0.0.29 (provavelmente já resolvido pelo FastAPI).
 
-```dockerfile
-# syntax=docker/dockerfile:1
-ARG PYTHON_VERSION=3.12
-ARG APP_VERSION=dev
+**Padrão recomendado:**
 
-# ─── Stage 1: builder ────────────────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
+```python
+from fastapi import APIRouter, UploadFile, File, Depends
+from typing import Annotated
 
-# Copia o binário uv da imagem oficial — mais rápido que instalar via pip
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+@router.post("/movimentacoes/import")
+async def import_movimentacoes(
+    conta_id: int,
+    file: Annotated[UploadFile, File(description="CSV, OFX ou XLSX")],
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> ImportResult:
+    content = await file.read()          # sync-seguro: SpooledTemporaryFile já lido em memória
+    filename = file.filename or ""
 
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    PYTHONDONTWRITEBYTECODE=1
+    if filename.endswith(".ofx") or filename.endswith(".qfx"):
+        rows = parse_ofx(content)
+    elif filename.endswith(".xlsx"):
+        rows = parse_xlsx(content)
+    elif filename.endswith(".csv"):
+        rows = parse_csv(content)
+    else:
+        raise HTTPException(status_code=422, detail="Formato não suportado")
 
-WORKDIR /app
-
-# Copia manifests primeiro — camadas de deps ficam em cache entre builds
-COPY pyproject.toml uv.lock* ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
-
-# Copia código depois (muda com frequência, não invalida cache de deps)
-COPY src/ ./src/
-COPY alembic/ ./alembic/
-COPY alembic.ini ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
-
-# ─── Stage 2: runtime ────────────────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
-
-ARG APP_VERSION
-ENV APP_VERSION=${APP_VERSION} \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/app/.venv/bin:$PATH"
-
-# Non-root user — UID/GID fixos para consistência entre builds
-RUN groupadd -g 1001 app && \
-    useradd -u 1001 -g app -m -d /app -s /bin/false app
-
-WORKDIR /app
-
-# Copia apenas o venv e o código — sem build tools no runtime
-COPY --from=builder --chown=app:app /app/.venv ./.venv
-COPY --from=builder --chown=app:app /app/src ./src
-COPY --from=builder --chown=app:app /app/alembic ./alembic
-COPY --from=builder --chown=app:app /app/alembic.ini ./
-
-USER app
-
-EXPOSE 8000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-
-CMD ["uvicorn", "caramello.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    inserted, skipped = await bulk_insert_with_dedup(session, conta_id, rows)
+    return ImportResult(inserted=inserted, skipped=skipped)
 ```
 
-**compose.yaml (desenvolvimento):**
-```yaml
-services:
-  api:
-    build:
-      context: .
-      args:
-        APP_VERSION: dev
-    env_file: .env
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
+**Decisão síncrona vs. background:** Para arquivos de extrato bancário (tipicamente < 500 linhas, < 200KB), processamento síncrono no endpoint é adequado. Background tasks (via `BackgroundTasks` do FastAPI) adicionam complexidade de estado sem benefício mensurável para este volume. Usar background só se o tempo de resposta for visivelmente lento no uso real.
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: familia_dev
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  pgdata:
-```
-
-**Decisões chave do Dockerfile:**
-- `UV_COMPILE_BYTECODE=1`: Bytecode compilado no build, não no startup — reduz tempo de cold start
-- `UV_LINK_MODE=copy`: Evita hardlinks que não funcionam entre stages Docker
-- `uv.lock*`: O glob aceita projetos sem lockfile ainda; usar `uv.lock` sem glob em produção real
-- `--mount=type=cache`: Cache persistente do uv entre builds sem adicionar ao layer final
-- UID/GID `1001`: Fixos, não root, consistentes
+**Tamanho máximo de upload:** Configurar via `MAX_UPLOAD_SIZE` no uvicorn/nginx se necessário. Para extratos mensais não há necessidade de streaming chunked.
 
 ---
 
-### 5. pytest + pytest-asyncio com banco isolado
+## Resumo das instalações
 
-**Versão atual:** pytest-asyncio 1.3.0. Mudança importante: a partir da 1.x, o modo padrão mudou e o modo `auto` precisa ser declarado explicitamente.
+```bash
+# Parsing de arquivos bancários
+uv add "ofxparse>=0.21" "openpyxl>=3.1.5" "python-multipart>=0.0.29"
 
-**`pyproject.toml` — configuração de testes:**
-```toml
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "session"
+# Sugestão de categoria
+uv add "rapidfuzz>=3.14.5"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-```
-
-**`tests/conftest.py` — fixtures de banco isoladas:**
-```python
-import asyncio
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
-
-from caramello.main import app
-from caramello.database.session import get_async_session
-
-TEST_DATABASE_URL = "postgresql+asyncpg://user:password@localhost/familia_test"
-
-# Engine de sessão — criado uma vez por suite
-@pytest_asyncio.fixture(scope="session")
-async def test_engine():
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-        await conn.run_sync(SQLModel.metadata.create_all)
-    yield engine
-    await engine.dispose()
-
-# Session factory por engine de teste
-@pytest_asyncio.fixture(scope="session")
-async def session_factory(test_engine):
-    return async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-
-# Sessão isolada por teste — limpa a tabela via truncate ou cria nova transação
-@pytest_asyncio.fixture
-async def db_session(session_factory):
-    async with session_factory() as session:
-        yield session
-        await session.rollback()
-
-# Override da dependency do app
-@pytest_asyncio.fixture
-async def client(db_session):
-    async def override_get_session():
-        yield db_session
-
-    app.dependency_overrides[get_async_session] = override_get_session
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as ac:
-        yield ac
-    app.dependency_overrides.clear()
-```
-
-**Estratégia de isolamento:** Rollback por teste (padrão acima) é simples e sem custo de schema. Para fixtures com `scope="session"` que precisam de dados compartilhados, usar `scope="session"` com `loop_scope="session"` no decorator `@pytest_asyncio.fixture`.
-
-**Autenticação nos testes:** Sobrescrever `get_current_user` com um usuário fixo fake:
-```python
-from caramello.shared.auth import get_current_user, TokenPayload
-
-@pytest.fixture
-def mock_user():
-    return TokenPayload(sub="test-sub-uuid", email="test@familia.test")
-
-@pytest_asyncio.fixture
-async def auth_client(client, mock_user):
-    app.dependency_overrides[get_current_user] = lambda: mock_user
-    yield client
-    app.dependency_overrides.pop(get_current_user, None)
+# Sem instalações adicionais para:
+# - Deduplicação (hashlib stdlib)
+# - Agregações (SQLAlchemy já instalado)
+# - Competencia (campos inteiros, sem lib)
 ```
 
 ---
@@ -424,57 +228,38 @@ async def auth_client(client, mock_user):
 
 | Categoria | Recomendado | Alternativa | Por que não |
 |-----------|-------------|-------------|-------------|
-| JWT | PyJWT 2.13.0 | python-jose | Abandonado desde 2021, vulnerabilidades conhecidas |
-| JWT | PyJWT 2.13.0 | authlib | Mais complexo, orientado a OAuth server; aqui só precisamos de validação |
-| Auth wrapper | Implementação própria | fastapi-keycloak-middleware | Middleware pesado demais; caveats de path-only exclusion; PyJWT direto é mais previsível |
-| Driver DB | asyncpg | psycopg3 (asyncio) | asyncpg tem mais tracção com SQLModel/SA 2.0; psycopg3 async é alternativa válida mas menor ecossistema de exemplos |
-| Test isolation | Rollback por teste | Drop/recreate tables por teste | Rollback é mais rápido; recreate só vale se tiver DDL-heavy no setup |
-| Async mode | pytest-asyncio | anyio | anyio é preferido por FastAPI internamente, mas pytest-asyncio 1.3.0 funciona bem e tem mais exemplos na comunidade FastAPI |
+| CSV parsing | `csv` (stdlib) | `pandas` | pandas adiciona 30MB de dependência; desnecessário para < 1000 linhas |
+| OFX parser | `ofxparse` 0.21 | `ofxtools` 0.9.5 | ofxtools é mais completo (suporta OFX 2.x/XML) mas mais complexo; para extratos simples (OFX 1.x SGML), ofxparse é suficiente |
+| OFX BR | `ofxparse` | `ofxparse2` | ofxparse2 é fork específico para bancos BR; trocar se ofxparse falhar em encodings BR reais |
+| Similaridade | `rapidfuzz` | `scikit-learn` TF-IDF | Totalmente desproporcional para app familiar; rapidfuzz entrega resultado comparável sem infra de ML |
+| Similaridade | `rapidfuzz` | `fuzzywuzzy` | fuzzywuzzy é antecessor abandonado de rapidfuzz; não usar |
+| Aggregation | SQLAlchemy ORM | raw SQL via `text()` | ORM expressions para casos simples; raw SQL aceitável se a query ficar ilegível com ORM |
+| Deduplicação | hash SHA-256 | fuzzy dedup | Fuzzy dedup introduz falsos positivos/negativos; hash é determinístico e correto para importação |
+| Competência | 2 campos inteiros | campo `date` | campo date cria ambiguidade de dia; inteiros são explícitos e indexáveis |
+| Upload async | sync `await file.read()` | `aiofiles` streaming | extratos < 200KB não justificam streaming; UploadFile já abstrai SpooledTemporaryFile |
 
 ---
 
-## Instalação
+## Compatibilidade verificada
 
-```bash
-# Remover driver síncrono
-uv remove psycopg2-binary
-
-# Core async
-uv add "asyncpg>=0.31.0" "sqlalchemy[asyncio]>=2.0" "sqlmodel>=0.0.38"
-
-# Auth
-uv add "PyJWT[crypto]>=2.13.0"
-
-# MCP
-uv add "fastapi-mcp>=0.4.0"
-
-# Qualidade
-uv add --dev "ruff>=0.15.0" "mypy>=2.1.0"
-
-# Testes
-uv add --dev "pytest>=9.0.1" "pytest-asyncio>=1.3.0" "httpx>=0.28.1"
-```
-
----
-
-## Compatibilidade entre bibliotecas verificada
-
-| Par | Versão | Status | Observação |
-|-----|--------|--------|------------|
-| SQLModel 0.0.38 + SQLAlchemy 2.0 | compatível | OK | SQLModel usa SA 2.0 internamente desde 0.0.22+ |
-| asyncpg 0.31.0 + SQLAlchemy 2.0 | compatível | OK | SA 2.0 suporta asyncpg 0.29+ — o bug anterior com 0.29 foi corrigido |
-| FastAPI + fastapi-mcp 0.4.0 | FastAPI ≥0.100.0 | OK | Já compatível com versão atual do FastAPI |
-| PyJWT 2.13.0 + Python 3.12 | suportado | OK | PyPI confirma suporte 3.9–3.14 |
-| pytest-asyncio 1.3.0 + pytest 9.x | compatível | OK | Versões atuais |
+| Par | Status | Observação |
+|-----|--------|------------|
+| `ofxparse` 0.21 + Python 3.12 | OK | Puro Python, sem extensões C |
+| `openpyxl` 3.1.5 + Python 3.12 | OK | Verificado no PyPI |
+| `rapidfuzz` 3.14.5 + Python 3.12 | OK | Wheels pré-compilados para Python 3.12 disponíveis no PyPI |
+| `python-multipart` 0.0.29 + FastAPI | OK | Dependência oficial do FastAPI para UploadFile |
+| `rapidfuzz` + asyncio | OK | Chamadas síncronas de CPU-bound; para volumes de app familiar (< 1000 entradas históricas), sem necessidade de `run_in_executor` |
 
 ---
 
 ## Fontes
 
-- SQLAlchemy async docs: https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html (Context7, HIGH)
-- PyJWT + Keycloak pattern: https://skycloak.io/blog/keycloak-fastapi-python-api-authentication/ (MEDIUM — verificado contra PyPI)
-- fastapi-mcp GitHub: https://github.com/tadata-org/fastapi_mcp (HIGH — README oficial)
-- pytest-asyncio docs: https://github.com/pytest-dev/pytest-asyncio (Context7, HIGH)
-- pytest-asyncio fixtures: https://praciano.com.br/fastapi-and-async-sqlalchemy-20-with-pytest-done-right.html (MEDIUM)
-- Docker uv pattern: https://medium.com/@peziere.antonin/guide-senior-fastapi-docker-uv-patterns-production-2025-6443709dfc62 (MEDIUM)
-- Versões verificadas diretamente no PyPI via `pip index versions`
+- ofxparse PyPI: https://pypi.org/project/ofxparse/ (versão 0.21, MEDIUM — projeto de baixa atividade mas funcional)
+- ofxparse2 PyPI: https://pypi.org/project/ofxparse2/ (fallback para bancos BR, LOW confidence — fork pequeno)
+- openpyxl docs: https://openpyxl.readthedocs.io/en/stable/optimized.html (HIGH — documentação oficial, Context7)
+- rapidfuzz docs: https://rapidfuzz.github.io/RapidFuzz/Usage/process.html (HIGH — Context7)
+- FastAPI UploadFile: https://fastapi.tiangolo.com/tutorial/request-files/ (HIGH — documentação oficial)
+- SQLAlchemy 2.0 async: https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html (HIGH — documentação oficial)
+- SQLAlchemy func/group_by: https://docs.sqlalchemy.org/en/20/core/functions.html (HIGH — documentação oficial)
+- python-multipart PyPI: https://pypi.org/project/python-multipart/ (HIGH — dependência oficial FastAPI)
+- rapidfuzz PyPI: https://pypi.org/project/rapidfuzz/ (HIGH — versão 3.14.5 verificada)

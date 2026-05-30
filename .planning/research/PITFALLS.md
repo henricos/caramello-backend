@@ -1,496 +1,491 @@
-# Domain Pitfalls
+# Domain Pitfalls — Domínio Financeiro
 
-**Domain:** FastAPI brownfield — asyncpg migration, Keycloak JWT, fastapi-mcp, domain restructure, DSL generator, Docker/uv
-**Researched:** 2026-05-23
-**Context:** Brownfield com fundação parcial. Gaps críticos catalogados em `.planning/codebase/CONCERNS.md`. Stack: Python 3.10+, FastAPI, SQLModel/SQLAlchemy, PostgreSQL, asyncpg, Keycloak, fastapi-mcp, uv, Docker.
-
----
-
-## 1. Migração psycopg2 → asyncpg
-
-### PITFALL-1A: `create_engine` deixado no código junto com `create_async_engine`
-
-**O que vai errado:** Durante a migração, o `session.py` atual usa `create_engine` (síncrono) do SQLModel. Se qualquer import transitivo — por exemplo, um modelo ou o próprio `alembic/env.py` — continuar referenciando o engine síncrono enquanto o app usa `AsyncSession`, as duas instâncias de engine coexistem silenciosamente. Queries aparentam funcionar mas bloqueiam o event loop.
-
-**Por que acontece:** O SQLModel importa tanto `Session` quanto `AsyncSession` do mesmo namespace. É fácil deixar o import antigo e adicionar o novo ao lado sem remover o original.
-
-**Sinal de alerta:** `greenlet_spawn has not been called` ou `MissingGreenlet` no log com stack trace apontando para o router. Ou queries lentas sob carga mínima (1-2 requests simultâneos).
-
-**Prevenção:**
-- Substituir `session.py` inteiro de uma vez, não incrementalmente.
-- URL do banco deve ter prefixo `postgresql+asyncpg://`, não `postgresql://`. Uma URL sem o driver explícito usará o driver padrão, que é síncrono.
-- Rodar `grep -r "create_engine\|from sqlmodel import.*Session" src/` após a migração — qualquer `create_engine` que não seja `create_async_engine` é bug.
-
-**Fase:** Milestone 1 — Fase 2 (Stack Atualizada).
+**Domain:** FastAPI async + SQLModel + asyncpg — adição de domínio financeiro a app existente
+**Researched:** 2026-05-30
+**Context:** Milestone 2 (Domínio Financeiro) adicionado sobre fundação existente (M1 shipped). Stack: Python 3.12, FastAPI async, SQLModel, SQLAlchemy 2.0, asyncpg, PostgreSQL, Alembic async.
 
 ---
 
-### PITFALL-1B: Lazy loading de relacionamentos quebra silenciosamente em AsyncSession
+## 1. Relacionamento Auto-Referencial (Category.parent) com Async
 
-**O que vai errado:** SQLModel gera relacionamentos com `Relationship()` sem especificar `lazy`. O padrão do SQLAlchemy em contexto async é `lazy="select"`, que dispara IO implícito ao acessar o atributo. No contexto async isso levanta `MissingGreenletError` em runtime, não em tempo de compilação.
+### PITFALL-F1: `remote_side` e `foreign_keys` ausentes em relacionamento self-referencial
 
-**Por que acontece:** No contexto síncrono, `session.refresh(obj)` carrega o relacionamento transparentemente. No contexto async, o mesmo acesso ao atributo fora de um `await` levanta exceção. O DSL generator atual não especifica `lazy` — todos os `Relationship()` gerados herdam o default problemático.
+**O que vai errado:** Definir `Relationship(back_populates="children")` sem `sa_relationship_kwargs={"remote_side": ..., "foreign_keys": ...}` faz o SQLAlchemy não saber qual lado da relação é "one" vs "many". O resultado é um `AmbiguousForeignKeysError` na inicialização da app, ou pior: joins silenciosamente incorretos que retornam a categoria como própria filha.
 
-**Consequência específica para este projeto:** `FamilyMember` tem relacionamento com `User` e `Family`. Ao retornar um `FamilyMember` com relacionamentos expandidos, o FastAPI serializa o objeto — e o acesso ao relacionamento dispara `MissingGreenletError` em produção.
+**Por que acontece:** Em relacionamentos normais (tabelas distintas), o SQLAlchemy infere os lados da relação pelos nomes das tabelas. Em relacionamentos self-referencial, ambos os lados apontam para a mesma tabela — a inferência falha.
 
-**Sinal de alerta:** `sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called; can't call await from handler` aparece apenas quando um endpoint tenta serializar um relacionamento, não na consulta principal.
-
-**Prevenção:**
-- Usar `selectinload` ou `joinedload` explicitamente em queries que precisam de relacionamentos: `select(Family).options(selectinload(Family.members))`.
-- Configurar `async_sessionmaker` com `expire_on_commit=False` para evitar que atributos simples expirem e disparem reloads implícitos após commit.
-- Atualizar o DSL generator para emitir `lazy="raise"` em todos os `Relationship()` — isso converte o erro silencioso em erro explícito durante desenvolvimento.
-
+**Padrão obrigatório:**
 ```python
-# session.py correto
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+class Category(SQLModel, table=True):
+    __tablename__ = "category"
 
-engine = create_async_engine("postgresql+asyncpg://...", echo=False)
-async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    id: int | None = Field(default=None, primary_key=True)
+    parent_id: int | None = Field(default=None, foreign_key="category.id")
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
-        yield session
-```
-
-**Fase:** Milestone 1 — Fase 2 (Stack Atualizada). Atualização do DSL generator na Fase 3.
-
----
-
-### PITFALL-1C: Alembic `env.py` não adaptado para async engine
-
-**O que vai errado:** O `alembic/env.py` gerado pelo `alembic init` usa `engine.connect()` síncrono. Com `asyncpg`, a conexão async não é compatível com o contexto síncrono do Alembic. Resultado: `alembic upgrade head` falha com `TypeError` ou trava sem mensagem clara.
-
-**Por que acontece:** Alembic precisa de um padrão específico para async: `async_engine_from_config` + `connection.run_sync(do_run_migrations)` + `poolclass=NullPool`. Sem `NullPool`, o pool fica aberto após a migração, causando warnings e eventual vazamento de conexão.
-
-**Prevenção:** Reescrever `env.py` usando o template oficial async (`alembic init -t async`). O padrão obrigatório:
-
-```python
-from sqlalchemy.ext.asyncio import async_engine_from_config
-from sqlalchemy.pool import NullPool
-
-async def run_async_migrations():
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=NullPool,  # obrigatório — sem isso, pool vaza
+    parent: "Category | None" = Relationship(
+        back_populates="children",
+        sa_relationship_kwargs={
+            "remote_side": "Category.id",   # lado "one" — o pai
+            "foreign_keys": "[Category.parent_id]",
+        },
     )
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-    await connectable.dispose()
-
-def run_migrations_online():
-    asyncio.run(run_async_migrations())
+    children: list["Category"] = Relationship(
+        back_populates="parent",
+        sa_relationship_kwargs={
+            "foreign_keys": "[Category.parent_id]",
+        },
+    )
 ```
 
-**Fase:** Milestone 1 — Fase 2. Deve ser feito junto com a troca do driver.
+Os valores de `remote_side` e `foreign_keys` são strings avaliadas como expressões Python — necessário porque a classe ainda está sendo definida.
+
+**Fase:** Fase de modelagem (Category CRUD).
 
 ---
 
-### PITFALL-1D: `target_metadata` no `env.py` com modelos não importados
+### PITFALL-F2: Lazy loading em relacionamento self-referencial dispara `MissingGreenlet`
 
-**O que vai errado:** `alembic revision --autogenerate` gera uma migration vazia (só `pass` no `upgrade`) porque `SQLModel.metadata.tables` está vazio. Alembic não avisa — ele silenciosamente acha que o banco já está em sincronia com os modelos.
+**O que vai errado:** Acessar `category.children` ou `category.parent` fora de um `await` em contexto async levanta `sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called`. Isso ocorre *depois* da query principal, durante serialização pela FastAPI — o erro aparece tarde e o stack trace é confuso.
 
-**Por que acontece:** O `env.py` precisa importar todos os models antes de usar `SQLModel.metadata` como `target_metadata`. Se os imports falharem silenciosamente (ex: módulo movido durante a reestruturação por domínios), o metadata fica vazio.
+**Por que acontece:** SQLAlchemy async elimina lazy loading implícito. Todo acesso a relacionamento não carregado tenta IO implícito, que é proibido em async. O padrão síncrono de acessar `.children` funciona normalmente; o mesmo código em async explode em runtime.
 
-**Sinal de alerta:** Migration gerada com `pass` em `upgrade()` e `downgrade()`. Rodar `python -c "from caramello.domains.familia.models import *; from sqlmodel import SQLModel; print(SQLModel.metadata.tables.keys())"` antes de gerar migrations.
+**Prevenção — duas opções:**
+
+Opção 1 (preferida para endpoints que precisam dos filhos): `selectinload` explícito na query:
+```python
+from sqlalchemy.orm import selectinload
+
+stmt = select(Category).where(Category.family_id == family_id).options(
+    selectinload(Category.children)
+)
+result = await session.exec(stmt)
+```
+
+Opção 2 (para uso no DSL generator): configurar `lazy="selectin"` no relacionamento, carregando sempre os filhos automaticamente:
+```python
+sa_relationship_kwargs={
+    "foreign_keys": "[Category.parent_id]",
+    "lazy": "selectin",   # carrega filhos automaticamente em toda query
+}
+```
+
+Opção 2 é conveniente mas cria N+1 implícito para queries que não precisam dos filhos. Para `Category` com apenas 2 níveis e uso familiar (< 100 categorias), é aceitável.
+
+**Sinal de alerta:** `greenlet_spawn has not been called; can't call await_()` no log com stack trace dentro de `fastapi/routing.py` (durante serialização).
+
+**Fase:** Fase de modelagem (Category CRUD) e geração DSL.
+
+---
+
+### PITFALL-F3: Constraint de profundidade não enforçado no banco
+
+**O que vai errado:** O modelo aceita Category com `parent_id` de uma categoria que já é filha — criando 3+ níveis. Sem check constraint no banco, o sistema aceita silenciosamente hierarquias arbitrariamente profundas, quebrando relatórios que assumem exatamente 2 níveis (pai → subcategoria).
+
+**Prevenção:** Check constraint via `__table_args__`:
+```python
+class Category(SQLModel, table=True):
+    __table_args__ = (
+        # enforça: se tem parent, o parent NÃO pode ter parent (evita 3+ níveis)
+        # implementado via trigger ou validação em service
+    )
+```
+
+Na prática, para este projeto, a validação mais simples é no service layer: ao criar uma subcategoria, verificar que o pai não tem `parent_id`. Mais simples e suficiente para 1-5 usuários.
+
+**Fase:** Fase de modelagem (Category CRUD) — verificar antes de criar Lançamentos.
+
+---
+
+## 2. Batch Insert com Deduplicação (Movimentações)
+
+### PITFALL-F4: `session.add_all()` em loop não deduplica — viola unique constraint em runtime
+
+**O que vai errado:** Carregar CSV, mapear para objetos `Movimentacao`, e fazer `await session.add_all(movimentacoes)` sem deduplicação prévia. Se o arquivo contém duplicatas internas (duas linhas idênticas no mesmo CSV), ou se o usuário reimporta o mesmo arquivo, o PostgreSQL lança `IntegrityError: duplicate key value violates unique constraint` na primeira linha duplicada — e a transação inteira é abortada, perdendo as movimentações únicas do lote.
+
+**Por que acontece:** `add_all` não tem semântica de "inserir se não existir". A transação falha atomicamente — zero linhas são inseridas se houver qualquer conflito.
+
+**Prevenção obrigatória — `INSERT ... ON CONFLICT DO NOTHING`:**
+```python
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+async def bulk_insert_movimentacoes(
+    session: AsyncSession, rows: list[dict]
+) -> int:
+    if not rows:
+        return 0
+    stmt = (
+        pg_insert(Movimentacao)
+        .values(rows)
+        .on_conflict_do_nothing(index_elements=["dedup_hash"])
+        # dedup_hash: coluna UNIQUE calculada como hash(data + descricao_normalizada + valor + conta_id)
+    )
+    result = await session.execute(stmt)
+    await session.commit()
+    return result.rowcount  # linhas efetivamente inseridas (excluindo duplicatas)
+```
+
+**Hash de deduplicação:** calcular antes do insert, não depender de unicidade por combinação de colunas individuais (datas e valores podem coincidir legitimamente):
+```python
+import hashlib
+
+def calc_dedup_hash(data: date, descricao: str, valor: Decimal, conta_id: int) -> str:
+    raw = f"{data}|{descricao.strip().lower()}|{valor}|{conta_id}"
+    return hashlib.md5(raw.encode()).hexdigest()
+```
+
+**Fase:** Fase de importação de Movimentações.
+
+---
+
+### PITFALL-F5: Lote grande carregado inteiro em memória antes do insert
+
+**O que vai errado:** `await file.read()` + `csv.reader(StringIO(content))` para arquivos CSV de extrato bancário anual (tipicamente 300-2000 linhas, raramente > 10 MB) não é problema de memória, mas a prática de `read()` inteiro bloqueia o event loop durante o parsing. Em uploads de arquivos maiores (extratos de vários anos, OFX), o bloqueio se torna visível.
+
+**Prevenção:** Usar `SpooledTemporaryFile` (comportamento padrão do `UploadFile` do FastAPI — arquivos < 1MB em memória, > 1MB em disco). Para parsing, usar streaming line-by-line:
+```python
+async def import_csv(file: UploadFile) -> list[dict]:
+    content = await file.read()  # OK para extratos < 5MB
+    # Para arquivos maiores: iterar linha a linha via file.file (sync handle)
+    lines = content.decode("utf-8").splitlines()
+    reader = csv.DictReader(lines)
+    return list(reader)
+```
+
+Para extratos bancários domésticos (escopo deste projeto: 1-5 usuários), `read()` inteiro é aceitável. O risco real é inserir em lote sem chunking — para > 5.000 linhas, usar `executemany` em chunks de 500.
+
+**Fase:** Fase de importação de Movimentações.
+
+---
+
+### PITFALL-F6: Tipo do arquivo não validado — `UploadFile` aceita qualquer conteúdo
+
+**O que vai errado:** FastAPI não valida o `Content-Type` do arquivo uploadado por padrão. Um cliente pode enviar um arquivo `.exe` com `Content-Type: text/csv`. O endpoint tenta fazer `csv.DictReader` no conteúdo binário e lança `UnicodeDecodeError` não tratado — HTTP 500 sem mensagem útil.
 
 **Prevenção:**
 ```python
-# env.py — imports explícitos antes de target_metadata
-from sqlmodel import SQLModel
-from caramello.domains.familia import models  # noqa: F401 — import necessário para registrar metadata
-from caramello.shared import user_model  # noqa: F401
+async def import_movimentacoes(file: UploadFile = File(...)):
+    if file.content_type not in ("text/csv", "text/plain", "application/octet-stream"):
+        raise HTTPException(422, "Formato de arquivo não suportado. Envie um CSV.")
+    try:
+        content = await file.read()
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(422, "Arquivo não é texto UTF-8 válido.")
+```
+
+**Fase:** Fase de importação de Movimentações.
+
+---
+
+## 3. Agregações Financeiras (GROUP BY mês/categoria)
+
+### PITFALL-F7: ORM relationships carregados para calcular agregações — N+1 query
+
+**O que vai errado:** Calcular saldo de conta iterando sobre `conta.movimentacoes` em Python:
+```python
+# ERRADO — N+1: uma query por conta + uma por lista de movimentações
+contas = await session.exec(select(Conta)).all()
+for conta in contas:
+    saldo = sum(m.valor for m in conta.movimentacoes)  # lazy load por conta
+```
+
+**Prevenção — agregar no banco:**
+```python
+from sqlalchemy import func, select
+
+stmt = (
+    select(
+        Movimentacao.conta_id,
+        func.sum(Movimentacao.valor).label("saldo"),
+    )
+    .group_by(Movimentacao.conta_id)
+)
+result = await session.execute(stmt)
+saldos = {row.conta_id: row.saldo for row in result}
+```
+
+**Fase:** Fase de relatórios e agregações.
+
+---
+
+### PITFALL-F8: `func.date_trunc` sem label causa ambiguidade no GROUP BY
+
+**O que vai errado:** Usar `func.date_trunc("month", Lancamento.competencia)` no `select()` e `group_by()` sem `.label()` pode gerar SQL com referência ambígua à expressão — alguns backends retornam o resultado corretamente, outros levantam `ProgrammingError: column must appear in GROUP BY clause`.
+
+**Prevenção — sempre usar `.label()` para expressões em GROUP BY:**
+```python
+competencia_mes = func.date_trunc("month", Lancamento.competencia).label("mes")
+
+stmt = (
+    select(
+        competencia_mes,
+        Categoria.nome.label("categoria"),
+        func.sum(Movimentacao.valor).label("total"),
+    )
+    .join(Lancamento.movimentacao)
+    .join(Lancamento.categoria)
+    .where(Lancamento.familia_id == familia_id)
+    .group_by(competencia_mes, Categoria.nome)
+    .order_by(competencia_mes)
+)
+```
+
+**Alternativa recomendada:** usar `competencia` como campo `year + month` inteiro (ex: `202501`) em vez de datetime. Evita `date_trunc` completamente, simplifica GROUP BY, e a coluna é indexável de forma simples.
+
+**Fase:** Fase de relatórios e agregações.
+
+---
+
+### PITFALL-F9: `expire_on_commit=False` mascara dados obsoletos em sessões longas de relatório
+
+**O que vai errado:** O `async_session_factory` do projeto já usa `expire_on_commit=False` (necessário para async). Em endpoints de relatório que fazem múltiplas queries na mesma sessão (ex: buscar contas, depois somar movimentações por conta), um objeto `Conta` lido antes de uma modificação concorrente não será recarregado automaticamente — os cálculos usam o estado stale.
+
+**Mitigação:** Para relatórios financeiros, usar `await session.refresh(obj)` explicitamente se o objeto foi carregado em step anterior da mesma sessão. Ou, mais simples: estruturar relatórios como queries agregadas únicas (uma só `SELECT` com JOINs e GROUP BY) em vez de múltiplas queries seguidas.
+
+**Fase:** Fase de relatórios e agregações.
+
+---
+
+## 4. Constraint 1:1 Movimentação → Lançamento
+
+### PITFALL-F10: 1:1 enforçado apenas no ORM — banco permite múltiplos Lançamentos por Movimentação
+
+**O que vai errado:** Definir `Relationship()` como 1:1 no SQLModel sem constraint de unicidade no banco. O SQLAlchemy ORM respeitará a semântica 1:1 em código Python, mas inserções diretas via SQL (migrations, fixtures de teste, imports de dados) podem criar múltiplos `Lançamento` para a mesma `Movimentacao`. Relatórios de saldo ficam duplicados silenciosamente.
+
+**Prevenção — constraint no banco é obrigatório:**
+```python
+class Lancamento(SQLModel, table=True):
+    __tablename__ = "lancamento"
+
+    movimentacao_id: int = Field(
+        foreign_key="movimentacao.id",
+        unique=True,    # enforça 1:1 no banco — não apenas no ORM
+        nullable=False,
+    )
+```
+
+A cláusula `unique=True` em SQLModel cria `UNIQUE CONSTRAINT` na coluna via Alembic autogenerate. Verificar que a migration gerada inclui `sa.UniqueConstraint("movimentacao_id")`.
+
+**Fase:** Fase de modelagem (Lançamento) — verificar na migration antes de popular dados.
+
+---
+
+### PITFALL-F11: Tentativa de criar segundo Lançamento para mesma Movimentação vira HTTP 500
+
+**O que vai errado:** Sem tratamento explícito de `IntegrityError`, tentar criar um segundo `Lançamento` para uma `Movimentacao` já conciliada levanta `sqlalchemy.exc.IntegrityError` não tratado — FastAPI retorna HTTP 500 em vez de HTTP 409 Conflict com mensagem útil.
+
+**Prevenção:**
+```python
+from sqlalchemy.exc import IntegrityError
+
+async def create_lancamento(movimentacao_id: int, ..., session: AsyncSession):
+    try:
+        lancamento = Lancamento(movimentacao_id=movimentacao_id, ...)
+        session.add(lancamento)
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Movimentação {movimentacao_id} já possui um lançamento associado.",
+        )
+```
+
+**Fase:** Fase de Lançamentos (service layer).
+
+---
+
+## 5. Precisão Monetária
+
+### PITFALL-F12: Usar `float` para valores monetários — erro de ponto flutuante acumula
+
+**O que vai errado:** Armazenar valor como `float` no Python/SQLAlchemy e `DOUBLE PRECISION` ou `REAL` no PostgreSQL. Exemplos de erro real:
+- `0.1 + 0.2 == 0.30000000000000004` em Python
+- Saldo acumulado de 100 transações de `R$ 1,10` resulta em `R$ 109,99999999` em vez de `R$ 110,00`
+- Comparações de igualdade em deduplicação por valor falham para valores com casas decimais
+
+**Por que acontece:** `float` é IEEE 754 binário — não consegue representar `0.1` exatamente. Após centenas de somas, o erro acumula.
+
+**Prevenção obrigatória — `NUMERIC` no banco + `Decimal` no Python:**
+```python
+from decimal import Decimal
+from sqlmodel import Field
+from sqlalchemy import Numeric
+
+class Movimentacao(SQLModel, table=True):
+    valor: Decimal = Field(
+        sa_column=Column(Numeric(precision=15, scale=2), nullable=False)
+    )
+    # precision=15 suporta até R$ 9.999.999.999.999,99 — suficiente para uso familiar
+    # scale=2 = centavos
+```
+
+**asyncpg e Decimal:** asyncpg decodifica `NUMERIC` como `Decimal` nativamente (confirmado na documentação oficial). SQLAlchemy 2.0 com `Numeric(asdecimal=True)` (padrão) retorna `Decimal` — nenhuma conversão manual necessária.
+
+**Alternativa (integer cents):** armazenar como `INTEGER` em centavos (`R$ 10,50` → `1050`). Elimina risco de float completamente, é mais eficiente em storage (4 bytes vs 10 bytes de NUMERIC). Desvantagem: toda leitura/escrita requer divisão/multiplicação por 100. Para este projeto com frontends React/IA que esperam valores decimais, `NUMERIC` é mais ergonômico.
+
+**Sinal de alerta:** qualquer uso de `float` ou `Float` no modelo financeiro é bug.
+
+**Fase:** Modelagem de Movimentação e Lançamento — deve ser enforçado na DSL.
+
+---
+
+### PITFALL-F13: Pydantic serializa `Decimal` como string em alguns contextos
+
+**O que vai errado:** `Decimal` não é JSON-serializable por padrão. FastAPI/Pydantic 2 serializa `Decimal` como string (`"10.50"`) em alguns contextos e como number (`10.50`) em outros, dependendo da configuração do schema. Clientes que esperam número recebem string — comparações falham no frontend.
+
+**Prevenção:** Configurar serialização explícita no schema de resposta:
+```python
+class MovimentacaoRead(SQLModel):
+    model_config = {"json_encoders": {Decimal: float}}
+    valor: Decimal
+```
+
+Ou, mais simples: aceitar que o valor vai como string no JSON (`"10.50"`) e documentar isso no OpenAPI. O frontend deve usar `parseFloat()` ao receber.
+
+**Fase:** Fase de schemas (MovimentacaoRead, LancamentoRead).
+
+---
+
+## 6. Integração com Domínios Existentes
+
+### PITFALL-F14: Migration do domínio financeiro sem `down_revision` correto quebra sequência de migrações
+
+**O que vai errado:** Criar migration `0002_financial_domain.py` com `down_revision = None` (esquecido ou gerado incorretamente) em vez de `down_revision = "0001"`. O Alembic aceita a migration mas o grafo de revisões fica bifurcado — `alembic upgrade head` sobe ambas as branches independentemente, podendo criar tabelas em ordem errada ou falhar com FK violation.
+
+**Por que acontece:** `alembic revision --autogenerate` geralmente detecta o `down_revision` correto, mas se o `env.py` não importa os modelos do domínio financeiro (PITFALL-1D), ele pode gerar a migration sem perceber que é uma branch.
+
+**Prevenção:**
+- Verificar `down_revision = "0001"` manualmente após gerar a migration.
+- Rodar `alembic history --verbose` para visualizar o grafo — deve ser linear, não bifurcado.
+- Garantir que `env.py` importa os novos modelos antes de gerar a migration:
+```python
+# alembic/env.py
+from caramello.users import models as _  # noqa
+from caramello.families import models as _  # noqa
+from caramello.finances import models as _  # noqa  <- adicionar ao criar o domínio
+```
+
+**Fase:** Fase inicial do domínio financeiro (primeira migration).
+
+---
+
+### PITFALL-F15: Constraint `create_foreign_key(None, ...)` no autogenerate — downgrade quebrado
+
+**O que vai errado:** Alembic autogenerate pode produzir `op.create_foreign_key(None, ...)` com `constraint_name=None` para foreign keys sem nome explícito. O `upgrade()` funciona (PostgreSQL gera nome automático), mas o `downgrade()` tenta `op.drop_constraint(None, ...)` — lança `TypeError` porque o banco registrou o constraint com nome gerado, não `None`.
+
+**Prevenção:** Adicionar naming convention global no `env.py` para que Alembic gere nomes determinísticos:
+```python
+# alembic/env.py
+from sqlalchemy import MetaData
+
+convention = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
 
 target_metadata = SQLModel.metadata
+target_metadata.naming_convention = convention
 ```
 
-**Fase:** Milestone 1 — Fase 2 e Fase 3 (ao reorganizar domínios, atualizar env.py imediatamente).
+**Fase:** Antes de gerar a primeira migration do domínio financeiro.
 
 ---
 
-## 2. Keycloak + FastAPI JWT
+### PITFALL-F16: Imports circulares entre domínio financeiro e domínio families
 
-### PITFALL-2A: `algorithms` omitido ou fixado como `["HS256"]` em vez de `["RS256"]`
+**O que vai errado:** `finances/models.py` importa `Family` de `families/models.py` para o FK `Movimentacao.family_id`. Se `families/models.py` em algum momento importar algo de `finances/` (ex: para um related property), o Python levanta `ImportError: cannot import name 'X' from partially initialized module`.
 
-**O que vai errado:** Keycloak emite tokens RS256 por padrão (assimétrico — chave pública/privada). Se `jwt.decode()` for chamado sem `algorithms=["RS256"]`, PyJWT usa o default ou aceita qualquer algoritmo declarado no header do token — criando uma vulnerabilidade de algoritmo downgrade onde um atacante pode forjar tokens HS256 usando a chave pública como secret.
+**Por que acontece:** Ao adicionar um novo domínio com FKs para domínios existentes, a tentação é adicionar back-references no domínio existente — criando ciclos.
 
-**Prevenção:**
+**Regra de ouro para este projeto:** `finances/` importa de `families/` e `users/`. Nenhum dos dois importa de `finances/`. Relacionamentos reversos (ex: "listar movimentações de uma família") são implementados via query, não via `Relationship()` no model de `Family`.
+
+**Para referências de tipo apenas:**
 ```python
-# ERRADO — nunca fazer isso
-decoded = jwt.decode(token, key)
-
-# CORRETO
-decoded = jwt.decode(token, signing_key.key, algorithms=["RS256"])
-```
-Hardcode `algorithms=["RS256"]` — nunca derivar do header do token.
-
-**Fase:** Milestone 1 — Fase 3 (implementação de `shared/auth.py`).
-
----
-
-### PITFALL-2B: `aud` (audience) ausente no token Keycloak
-
-**O que vai errado:** Keycloak só inclui o `client_id` no claim `aud` se o usuário tiver pelo menos um role atribuído ao client. Em ambientes de desenvolvimento onde nenhum role foi configurado, os tokens não têm `aud` — e PyJWT com `audience=` configurado rejeita o token com `InvalidAudienceError`.
-
-**Por que acontece:** Comportamento documentado do Keycloak. A ausência de `aud` é silenciosa — o Keycloak não avisa, o token é emitido normalmente, mas a validação no app falha.
-
-**Sinal de alerta:** `jwt.exceptions.InvalidAudienceError` em ambiente de dev mas não nos testes manuais via Postman (onde audience não é validado).
-
-**Prevenção:**
-- Configurar um **Audience Mapper** no Keycloak client (Client → Client Scopes → Add mapper → Audience). Isso garante que `aud` sempre contém o `client_id`, independente de roles.
-- Validar em staging com um token real antes de ir para produção.
-- No código, nunca usar `options={"verify_aud": False}` em produção — isso desabilita a proteção.
-
-**Fase:** Milestone 1 — Fase 3. Configurar o mapper no Keycloak junto com a implementação do `shared/auth.py`.
-
----
-
-### PITFALL-2C: JWKS endpoint chamado em toda request (sem cache) ou com cache eterno (chaves revogadas aceitas)
-
-**O que vai errado:** Dois cenários opostos:
-1. **Sem cache:** `PyJWKClient` instanciado dentro do handler ou em cada request → uma chamada HTTP ao Keycloak por request → latência alta, dependência de rede em hot path.
-2. **Com `cache_keys=True` (default):** `lru_cache` sem TTL → se Keycloak rotacionar chaves, a chave antiga permanece em cache indefinidamente → tokens com chaves revogadas continuam sendo aceitos.
-
-**Prevenção:**
-- Instanciar `PyJWKClient` uma única vez no startup da aplicação (module-level ou como singleton via `lifespan`).
-- O `PyJWKClient` já trata rotação automaticamente: se `kid` do token não está no cache, ele re-fetcha o JWKS. Isso é suficiente para rotação normal de chaves.
-- Para o projeto de 1-5 usuários, o cache default é aceitável. Documentar o comportamento e adicionar health-check que verifica conectividade com o JWKS endpoint.
-
-```python
-# shared/auth.py — inicializar uma vez
-from jwt import PyJWKClient
-
-JWKS_URL = f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/certs"
-jwks_client = PyJWKClient(JWKS_URL)  # singleton — não instanciar por request
-```
-
-**Fase:** Milestone 1 — Fase 3.
-
----
-
-### PITFALL-2D: Just-in-time provisioning sem constraint UNIQUE no banco cria usuários duplicados
-
-**O que vai errado:** O padrão de JIT provisioning é: "se não existe usuário com este `idp_sub`, criar". Em FastAPI async com múltiplas coroutines, duas requests simultâneas do mesmo usuário podem passar pelo `SELECT` antes do `INSERT` de qualquer uma delas, e ambas tentam inserir — o banco lança `UniqueConstraintViolation` na segunda, que vira HTTP 500 não tratado.
-
-**Por que acontece:** A operação "check-then-insert" não é atômica sem um lock ou `INSERT ... ON CONFLICT DO NOTHING`.
-
-**Prevenção:**
-```python
-# Padrão correto: upsert atômico
-async def get_or_create_user(session: AsyncSession, idp_sub: str, email: str, name: str) -> User:
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
-    stmt = pg_insert(User).values(idp_sub=idp_sub, email=email, name=name)
-    stmt = stmt.on_conflict_do_nothing(index_elements=["idp_sub"])
-    await session.execute(stmt)
-    await session.commit()
-    result = await session.execute(select(User).where(User.idp_sub == idp_sub))
-    return result.scalar_one()
-```
-
-Alternativamente, capturar `IntegrityError` e re-fetch. O constraint `UNIQUE` em `idp_sub` no banco (garantido pelo Alembic migration) é a linha de defesa final — nunca omiti-lo.
-
-**Fase:** Milestone 1 — Fase 3.
-
----
-
-## 3. fastapi-mcp
-
-### PITFALL-3A: MCP expõe todos os endpoints automaticamente, incluindo CRUD interno perigoso
-
-**O que vai errado:** Por padrão, `FastApiMCP(app)` descobre todos os endpoints registrados no app e os expõe como MCP tools — incluindo `DELETE /user/{uuid}`, `PATCH /family/{uuid}`, e outros endpoints administrativos ou internos que não devem ser expostos a agentes de IA.
-
-**Consequência específica:** Os 4 routers gerados atualmente (user, family, familymember, familyinvitation) incluem endpoints de deleção e listagem irrestrita. Sem filtragem explícita, um agente MCP pode deletar registros ou listar todos os usuários.
-
-**Prevenção:** Usar `include_tags` com a tag `"mcp"` como allow-list positiva — mais seguro que `exclude_operations` (deny-list, que cresce a cada novo endpoint):
-
-```python
-# Nos routers, taggear apenas o que deve ser exposto via MCP
-router = APIRouter(prefix="/familia", tags=["familia", "mcp"])
-
-# No main.py
-mcp = FastApiMCP(
-    app,
-    include_tags=["mcp"],  # apenas endpoints explicitamente taggeados
-)
-mcp.mount_http()
-```
-
-**Alternativa:** `include_operations=["list_families", "get_family"]` — mais granular mas requer manutenção manual.
-
-**Fase:** Milestone 1 — Fase de integração MCP (última fase do M1).
-
----
-
-### PITFALL-3B: `FastApiMCP` instanciado antes dos `include_router` — endpoints não aparecem no MCP
-
-**O que vai errado:** `fastapi-mcp` descobre endpoints no momento da inicialização do servidor, não em tempo de request. Se `FastApiMCP(app)` é instanciado antes de `app.include_router(...)`, os routers incluídos depois não aparecem como MCP tools.
-
-**Sinal de alerta:** `mcp.setup_server()` deve ser chamado após todos os `include_router`. Ou simplesmente: instanciar `FastApiMCP` no final de `main.py`, depois de todos os routers.
-
-**Prevenção:**
-```python
-# main.py — ordem importa
-app = FastAPI()
-
-app.include_router(familia_router, prefix="/familia")
-app.include_router(user_router, prefix="/user")
-
-# FastApiMCP DEPOIS de todos os routers
-mcp = FastApiMCP(app, include_tags=["mcp"])
-mcp.mount_http()
-```
-
-Se usar padrão de routers dinâmicos ou `lifespan`, chamar `mcp.setup_server()` após montar os routers.
-
-**Fase:** Milestone 1 — Fase de integração MCP.
-
----
-
-### PITFALL-3C: MCP endpoint não protegido por autenticação — acesso irrestrito ao agente
-
-**O que vai errado:** O endpoint `/mcp` montado por `fastapi-mcp` não herda automaticamente os `Depends` dos routers que ele expõe. Um agente sem token pode chamar ferramentas MCP que internamente chamam endpoints protegidos — mas a proteção depende de como a tool faz a chamada.
-
-**Prevenção:** Usar `AuthConfig` para proteger o próprio endpoint MCP:
-
-```python
-from fastapi_mcp import FastApiMCP, AuthConfig
-from fastapi.security import HTTPBearer
-
-mcp = FastApiMCP(
-    app,
-    include_tags=["mcp"],
-    auth_config=AuthConfig(
-        dependencies=[Depends(get_current_user)]
-    ),
-    headers=["authorization"],  # propaga o Bearer token para as tool calls
-)
-```
-
-**Fase:** Milestone 1 — Fase de integração MCP.
-
----
-
-## 4. Reorganização de estrutura por domínios
-
-### PITFALL-4A: Alembic `env.py` com imports quebrados após mover modelos
-
-**O que vai errado:** Ao mover `src/caramello/models/user.py` para `src/caramello/shared/user.py` (ou `domains/familia/models.py`), o `env.py` do Alembic continua importando do caminho antigo. Como o `env.py` é executado pelo CLI do Alembic (não pelo app), o erro de import pode não aparecer nos testes do app — só ao rodar `alembic upgrade head` ou `alembic revision`.
-
-**Sinal de alerta:** `ModuleNotFoundError: No module named 'caramello.models.user'` ao rodar qualquer comando Alembic.
-
-**Prevenção:**
-- Atualizar `env.py` imediatamente ao mover qualquer model.
-- Adicionar um smoke test no CI: `python -c "import alembic.config; alembic.config.main(['check'])"` — falha rapidamente se env.py tem imports quebrados.
-- Não mover models e gerar migrations no mesmo commit.
-
-**Fase:** Milestone 1 — Fase 3 (Reestruturação por domínios).
-
----
-
-### PITFALL-4B: Migration existente referencia tabelas/colunas do modelo errado
-
-**O que vai errado:** A única migration existente (`20260104-fix_relationships.py`) foi gerada com o modelo incorreto (`hashed_password`, `google_id`). Se o desenvolvedor não a descarta e tenta rodar `alembic upgrade head` em um banco limpo, o schema produzido diverge do modelo atual — futuros `--autogenerate` criam migrations de "correção" confusas.
-
-**Estratégia de descarte seguro:**
-1. Garantir que não há dados de produção na migration antiga (projeto ainda não tem usuários reais — confirmado em `.planning/PROJECT.md`).
-2. Deletar o arquivo `alembic/versions/20260104-*.py`.
-3. Corrigir o DSL (`user.yaml`) e regenerar os modelos.
-4. Rodar `alembic revision --autogenerate -m "initial_schema"` para criar a migration correta.
-5. Não usar `alembic stamp head` como atalho — ele marca o banco como atualizado sem aplicar as mudanças.
-
-**Fase:** Milestone 1 — Fase 1 (Correção do Modelo). Deve ser a primeira ação.
-
----
-
-### PITFALL-4C: Imports circulares ao reorganizar para `domains/`
-
-**O que vai errado:** Com estrutura plana (`models/`, `schemas/`, `services/`), os imports são unidirecionais. Ao mover para `domains/familia/models.py`, é tentador importar de `shared/user.py` dentro do model — e `shared/user.py` importar de volta alguma coisa do domínio. Python levanta `ImportError: cannot import name 'X' from partially initialized module`.
-
-**Padrão de prevenção:**
-- `shared/` nunca importa de `domains/` — fluxo unidirecional.
-- `domains/` pode importar de `shared/`.
-- Relacionamentos cross-domain via `TYPE_CHECKING` guard:
-```python
+# finances/models.py
 from __future__ import annotations
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
-    from caramello.domains.agenda.models import Event
+    from caramello.families.models import Family
 ```
 
-**Fase:** Milestone 1 — Fase 3.
+**Fase:** Fase de modelagem do domínio financeiro.
 
 ---
 
-## 5. DSL generator evolution
+### PITFALL-F17: Registrar routers do domínio financeiro após FastApiMCP — tools não aparecem no MCP
 
-### PITFALL-5A: Gerador sobrescreve arquivos com código manual sem merge
+**O que vai errado:** Adicionar `app.include_router(finances_router)` após `mcp.mount_http()` em `main.py`. O fastapi-mcp descobre ferramentas no momento da inicialização — routers registrados depois não aparecem.
 
-**O que vai errado:** O gerador atual (`generate_code.py`) usa `open(..., 'w')` — abre o arquivo em modo de escrita destrutiva. Se um desenvolvedor adicionar lógica manual em um arquivo gerado (ex: método customizado em um model), a próxima execução do gerador apaga tudo silenciosamente.
+**Sinal de alerta documentado no projeto:** O comentário em `main.py` já documenta isso: "MCP — montar DEPOIS de todos os include_router."
 
-**Consequência:** Perda de trabalho sem aviso. O gerador não tem mecanismo de detecção de conflito ou merge.
+**Prevenção:** Adicionar os novos routers do domínio financeiro ANTES da linha `mcp = FastApiMCP(...)` em `main.py`. Também manter a ordem operations antes de router para evitar rota `/{uuid}` interceptando rotas estáticas (PITFALL documentado em M1).
 
-**Prevenção obrigatória para a evolução do gerador:**
-- **Separação de fronteiras clara:** arquivos gerados ficam em `domains/{domain}/generated/` — nunca tocar. Extensões ficam em `domains/{domain}/models.py` importando do generated.
-- **Header de geração no topo de todo arquivo gerado:**
+**Fase:** Fase de integração — registro dos routers em `main.py`.
+
+---
+
+## 7. Upload de Arquivo (Importação de Extrato)
+
+### PITFALL-F18: `file.file.read()` síncrono bloqueia o event loop em async handler
+
+**O que vai errado:** Em handlers `async def`, `UploadFile.file` é um objeto `SpooledTemporaryFile` síncrono. Chamar `file.file.read()` diretamente em async context bloqueia o event loop durante a leitura do arquivo do disco (se > 1MB foi spoolado em arquivo temporário).
+
+**Prevenção:** Usar `await file.read()` (método async do `UploadFile`, não do `.file` interno):
 ```python
-# THIS FILE IS AUTO-GENERATED. DO NOT EDIT MANUALLY.
-# Regenerate with: bin/generate_code
-# Source: dsl/entities/family.yaml
-```
-- **Verificação no CI:** `git diff --name-only | grep "domains/.*/generated/"` — falha se arquivo gerado foi editado manualmente.
+# CORRETO
+content = await file.read()
 
-**Fase:** Milestone 1 — Fase 3 (evolução do DSL generator para suporte a `domain` field).
-
----
-
-### PITFALL-5B: `default_factory=datetime.utcnow` hardcoded no gerador
-
-**O que vai errado:** O gerador atual emite `default_factory=datetime.utcnow` (linha 96 de `generate_code.py`). `datetime.utcnow` está deprecated desde Python 3.12 e será removido em versão futura. Todo modelo gerado herdará o bug.
-
-**Sinal de alerta:** `DeprecationWarning: datetime.utcnow() is deprecated` aparece nos logs, mas não é um erro — passa silenciosamente em Python 3.10/3.11.
-
-**Prevenção:** Atualizar o gerador para emitir `default_factory=lambda: datetime.now(timezone.utc)` e adicionar `from datetime import timezone` nos imports gerados.
-
-**Fase:** Milestone 1 — Fase 3 (evolução do gerador). Fix simples, feito junto com a adição do campo `domain`.
-
----
-
-### PITFALL-5C: Gerador gera routers síncronos — incompatível com AsyncSession
-
-**O que vai errado:** Os routers gerados por `generate_router()` usam `def create_user(session: Session = Depends(get_session))` — síncrono. Com a migração para `AsyncSession`, esses handlers bloqueiam o event loop porque FastAPI executa `def` functions em threadpool (não `async def`), mas `AsyncSession` não é thread-safe.
-
-**Prevenção:** Atualizar o gerador para emitir `async def` em todos os handlers e `await session.exec(...)`:
-
-```python
-# Padrão gerado ERRADO (atual)
-def create_family(family_in: FamilyCreate, session: Session = Depends(get_session)):
-    ...
-
-# Padrão gerado CORRETO (após migração)
-async def create_family(family_in: FamilyCreate, session: AsyncSession = Depends(get_session)):
-    result = await session.exec(select(Family))
-    ...
+# ERRADO — bloqueia event loop se arquivo > 1MB
+content = file.file.read()
 ```
 
-**Fase:** Milestone 1 — Fase 2 (junto com a migração do driver de banco).
+`UploadFile.read()` é awaitable e não bloqueia.
+
+**Fase:** Fase de importação de Movimentações.
 
 ---
 
-## 6. Docker multi-stage com Python e uv
+## Matrix de Pitfalls por Fase
 
-### PITFALL-6A: `UV_LINK_MODE` não configurado — symlinks quebram entre stages
-
-**O que vai errado:** Por padrão, uv cria symlinks ao instalar pacotes (para velocidade). No multi-stage Docker build, o `.venv` criado no stage `builder` é copiado para o stage `runtime`. Os symlinks no `.venv` apontam para caminhos do stage `builder` que não existem no stage `runtime` — imports falham em runtime com `ModuleNotFoundError` para pacotes que parecem instalados.
-
-**Sinal de alerta:** `docker run` falha com `ModuleNotFoundError` mas `docker build` conclui sem erro.
-
-**Prevenção:**
-```dockerfile
-# No stage builder, sempre setar antes de qualquer uv sync
-ENV UV_LINK_MODE=copy
-```
-
-**Fase:** Milestone 1 — implementação do Dockerfile.
-
----
-
-### PITFALL-6B: `uv sync` sem separar dependências do projeto — layer caching ineficiente
-
-**O que vai errado:** Copiar todo o código fonte antes de `uv sync` invalida o cache Docker de dependências em cada mudança de código-fonte. Em projetos Python, as dependências mudam raramente; o código muda frequentemente.
-
-**Prevenção — padrão obrigatório:**
-```dockerfile
-FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-ENV UV_LINK_MODE=copy \
-    UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_DOWNLOADS=0
-
-WORKDIR /app
-
-# 1. Copiar APENAS os arquivos de dependência
-COPY pyproject.toml uv.lock ./
-
-# 2. Instalar dependências (sem o projeto) — camada cacheada
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --no-dev
-
-# 3. Copiar código fonte e instalar o projeto
-COPY src/ ./src/
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev
-
-FROM python:3.12-slim AS runtime
-WORKDIR /app
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
-
-ENV PATH="/app/.venv/bin:$PATH"
-# ... rest of runtime config
-```
-
-**Fase:** Milestone 1 — implementação do Dockerfile.
-
----
-
-### PITFALL-6C: `uv.lock` ausente ou não commitado — builds não reproduzíveis
-
-**O que vai errado:** `uv sync --locked` (com flag `--locked`) falha se `uv.lock` não existir ou estiver desatualizado em relação ao `pyproject.toml`. O `pyproject.toml` atual não tem `uv.lock` rastreado no git (inferido pela ausência de menção nos commits).
-
-**Sinal de alerta:** `error: uv.lock is not up-to-date` no CI/CD.
-
-**Prevenção:**
-- Sempre commitar `uv.lock` no repositório.
-- Adicionar ao `Makefile` ou script de setup: `uv lock` antes de qualquer `uv sync`.
-- No Dockerfile usar `--locked` (não `--frozen`) para builds reproduzíveis. `--frozen` permite lockfile desatualizado; `--locked` exige sincronia.
-
-**Fase:** Milestone 1 — implementação do Dockerfile e setup inicial.
-
----
-
-### PITFALL-6D: `PATH` não configurado corretamente no stage runtime
-
-**O que vai errado:** Após copiar `.venv` do builder para o runtime, se `PATH` não incluir `/app/.venv/bin`, o comando `CMD ["uvicorn", ...]` usa o `uvicorn` do sistema (que não existe na imagem slim) em vez do `.venv`.
-
-**Sinal de alerta:** `exec: "uvicorn": executable file not found in $PATH` ao iniciar o container.
-
-**Prevenção:** `ENV PATH="/app/.venv/bin:$PATH"` no stage runtime é obrigatório. Não usar `python -m uvicorn` como alternativa — isso usa o Python do sistema, não o do `.venv`.
-
-**Fase:** Milestone 1 — implementação do Dockerfile.
-
----
-
-## Phase-Specific Warning Matrix
-
-| Fase | Tópico | Armadilha principal | Mitigação |
-|------|--------|---------------------|-----------|
-| Fase 1 — Correção do Modelo | Descartar migration antiga | `alembic stamp head` sem schema correto | Deletar o arquivo, regenerar do zero |
-| Fase 2 — Stack async | Migração psycopg2→asyncpg | URL sem `+asyncpg` prefixo | Validar URL via grep antes de rodar app |
-| Fase 2 — Stack async | env.py Alembic | Engine sync no Alembic | Reescrever usando template `async` oficial |
-| Fase 2 — Stack async | DSL generator | Routers síncronos gerados | Atualizar gerador junto com a migração do driver |
-| Fase 3 — Domínios | Reorganização | Imports circulares `shared` ↔ `domains` | Fluxo unidirecional; TYPE_CHECKING para referências cruzadas |
-| Fase 3 — Domínios | Alembic env.py | Imports quebrados após mover modelos | Atualizar env.py imediatamente ao mover models |
-| Fase 3 — Auth JWT | Keycloak audience | `aud` ausente sem Audience Mapper | Configurar mapper no Keycloak antes de testar |
-| Fase 3 — Auth JWT | JIT provisioning | Race condition INSERT duplicado | Usar `ON CONFLICT DO NOTHING` + UNIQUE constraint |
-| Fase 3 — DSL evolution | Gerador | `utcnow` deprecated + routers síncronos | Corrigir ambos ao evoluir o gerador |
-| Fase 3 — MCP | fastapi-mcp | Todos os endpoints expostos por padrão | `include_tags=["mcp"]` como allow-list |
-| Fase 3 — MCP | fastapi-mcp | Instanciado antes dos routers | Instanciar FastApiMCP no final de main.py |
-| Fase 4 — Docker | Dockerfile | Symlinks quebrados entre stages | `UV_LINK_MODE=copy` obrigatório |
-| Fase 4 — Docker | uv.lock | Lock não commitado | Commitar uv.lock antes do primeiro build |
+| Fase | Tópico | Pitfall principal | Mitigação |
+|------|--------|-------------------|-----------|
+| Modelagem (Categoria) | Relacionamento self-referencial | `remote_side`/`foreign_keys` ausentes | Padrão obrigatório com `sa_relationship_kwargs` |
+| Modelagem (Categoria) | Lazy loading async | `MissingGreenlet` na serialização | `selectinload` explícito ou `lazy="selectin"` |
+| Modelagem (Categoria) | Profundidade máxima | 3+ níveis sem constraint | Validação no service layer |
+| Modelagem (Movimentação) | Precisão decimal | `float` em vez de `Decimal` | `NUMERIC(15,2)` + `Decimal` — obrigatório |
+| Modelagem (Movimentação) | Deduplicação | `IntegrityError` em lote | `INSERT ... ON CONFLICT DO NOTHING` com `dedup_hash` |
+| Modelagem (Lançamento) | Constraint 1:1 | Múltiplos Lançamentos por Movimentação | `unique=True` na FK `movimentacao_id` |
+| Modelagem (Lançamento) | Erro de constraint | HTTP 500 em vez de 409 | Capturar `IntegrityError`, retornar 409 |
+| Importação CSV | Upload | `file.file.read()` bloqueia event loop | Usar `await file.read()` |
+| Importação CSV | Validação | Arquivo binário crashando `DictReader` | Validar `content_type` + capturar `UnicodeDecodeError` |
+| Importação CSV | Lote grande | Lote inteiro em memória | Chunk de 500 linhas para `executemany` |
+| Relatórios | Agregação | N+1 via ORM relationships | Agregar no banco com `func.sum` + `GROUP BY` |
+| Relatórios | GROUP BY | Expressão sem label | Sempre usar `.label()` em `date_trunc`/`func.*` |
+| Migration | Nova migration | `down_revision` incorreto | Verificar manualmente + `alembic history` |
+| Migration | FK sem nome | `create_foreign_key(None, ...)` | Naming convention em `env.py` |
+| Integração | Imports circulares | `finances` ↔ `families` | Fluxo unidirecional; `TYPE_CHECKING` para tipos |
+| Integração | MCP + routers | Router registrado após `mcp.mount_http()` | Routers ANTES de `FastApiMCP(...)` |
+| Schemas | Decimal JSON | `Decimal` serializado como string | Configurar `json_encoders` ou documentar comportamento |
 
 ---
 
 ## Sources
 
-- SQLAlchemy 2.0 async docs: https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html
-- Alembic async template: https://github.com/sqlalchemy/alembic/blob/main/alembic/templates/async/env.py
-- fastapi-mcp customization: https://fastapi-mcp.tadata.com/configurations/customization
-- fastapi-mcp transport: https://fastapi-mcp.tadata.com/advanced/transport
-- PyJWT JWKS usage: https://github.com/jpadilla/pyjwt
-- PyJWKClient cache issue: https://github.com/jpadilla/pyjwt/issues/1051
-- Keycloak audience configuration: https://dev.to/metacosmos/how-to-configure-audience-in-keycloak-kp4
-- uv Docker guide: https://docs.astral.sh/uv/guides/integration/docker/
-- uv Docker pitfalls: https://hynek.me/articles/docker-uv/
-- SQLAlchemy MissingGreenlet: https://medium.com/@vickypalaniappan12/sqlalchemy-missinggreenleterror-656825b3ce13
-- FastAPI Keycloak auth: https://skycloak.io/blog/keycloak-fastapi-python-api-authentication/
+- SQLAlchemy async docs: https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html
+- SQLModel self-referential issue: https://github.com/fastapi/sqlmodel/issues/127
+- SQLModel async relationship issue: https://github.com/fastapi/sqlmodel/issues/74
+- SQLModel async relationships part 2: https://dev.to/arunanshub/the-async-side-of-sqlmodel-relationships-part-2-4ebc
+- asyncpg Decimal/NUMERIC: https://magicstack.github.io/asyncpg/current/usage.html
+- PostgreSQL money types: https://www.crunchydata.com/blog/working-with-money-in-postgres
+- SQLAlchemy Numeric precision: https://github.com/sqlalchemy/sqlalchemy/issues/1625
+- Alembic FK naming convention: https://peerlist.io/saish_naik/articles/alembic-migration-issue-createforeignkeynone---and-why-your-
+- Alembic FK table ordering: https://github.com/sqlalchemy/alembic/issues/1059
+- FastAPI file upload streaming: https://medium.com/@connect.hashblock/async-file-uploads-in-fastapi-handling-gigabyte-scale-data-smoothly-aec421335680
+- SQLAlchemy ON CONFLICT batch: https://docs.sqlalchemy.org/en/21/dialects/postgresql.html
+- expire_on_commit async: https://github.com/sqlalchemy/sqlalchemy/discussions/11495
+- SQLAlchemy GROUP BY aggregation: https://sqlalchemy-utils.readthedocs.io/en/latest/aggregates.html
