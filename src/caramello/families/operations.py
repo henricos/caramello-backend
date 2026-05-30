@@ -14,6 +14,7 @@ NÃO implementado nesta fase (D-04 — deferidos para M2):
   - FAMILY-05: POST /families/invitations/{code}/join (solicitação de entrada)
   - FAMILY-06: PATCH /families/invitations/{id} (aprovar/rejeitar)
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -168,6 +169,7 @@ async def list_my_families(
 ) -> list[Family]:
     """FAMILY-02: lista famílias onde o usuário autenticado é membro."""
     from caramello.families.services import list_my_families as svc
+
     return await svc(session, current_user)
 
 
@@ -269,9 +271,7 @@ async def remove_member(
     family, _ = await _require_owner(family_uuid, current_user, session)
 
     # Localizar o user-alvo
-    target_result = await session.exec(
-        select(User).where(User.uuid == user_uuid)
-    )
+    target_result = await session.exec(select(User).where(User.uuid == user_uuid))
     target_user = target_result.first()
     if target_user is None:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")

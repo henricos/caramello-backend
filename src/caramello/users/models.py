@@ -27,7 +27,11 @@ class User(SQLModel, table=True):
     )
 
     families: list["Family"] = Relationship(
-        back_populates="members", sa_relationship_kwargs={"secondary": "family_member"}
+        back_populates="members",
+        sa_relationship_kwargs={
+            "secondary": "family_member",
+            "overlaps": "user,family",
+        },
     )  # noqa: UP037
     sent_invitations: list["FamilyInvitation"] = Relationship(back_populates="inviter")  # noqa: UP037
 

@@ -56,6 +56,7 @@ relationships:
     type: "list[User]"
     link_model: "FamilyMember"
     back_populates: "families"
+    overlaps: "user,family"
     description: "Members belonging to this family."
 
   - name: invitations

@@ -22,8 +22,10 @@ class FamilyMember(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
 
-    user: "User" = Relationship()
-    family: "Family" = Relationship()
+    user: "User" = Relationship(sa_relationship_kwargs={"overlaps": "families,members"})
+    family: "Family" = Relationship(
+        sa_relationship_kwargs={"overlaps": "families,members"}
+    )
 
 
 class Family(SQLModel, table=True):
@@ -44,7 +46,9 @@ class Family(SQLModel, table=True):
     )
 
     members: list["User"] = Relationship(
-        back_populates="families", link_model=FamilyMember
+        back_populates="families",
+        link_model=FamilyMember,
+        sa_relationship_kwargs={"overlaps": "user,family"},
     )
     invitations: list["FamilyInvitation"] = Relationship(back_populates="family")
 

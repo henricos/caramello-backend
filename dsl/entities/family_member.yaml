@@ -36,8 +36,8 @@ fields:
 relationships:
   - name: user
     type: "User"
-    type: "User"
+    overlaps: "families,members"
 
   - name: family
     type: "Family"
-    type: "Family"
+    overlaps: "families,members"

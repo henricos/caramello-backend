@@ -151,14 +151,25 @@ def generate_relationships(
         if rel.get("back_populates"):
             args.append(f"back_populates={rel['back_populates']!r}")
         lm = rel.get("link_model")
+        overlaps = rel.get("overlaps", "")
         if lm and lm not in skip:
             args.append(f"link_model={lm}")
+            if overlaps:
+                args.append(f'sa_relationship_kwargs={{"overlaps": "{overlaps}"}}')
         elif lm and lm in skip and lm in sa_sec:
             # Link model cross-domain: não importamos a classe para evitar
             # import circular. Usamos sa_relationship_kwargs com secondary como
             # string (nome da tabela) — SQLAlchemy resolve lazily via metadata.
             table_name = sa_sec[lm]
-            args.append(f'sa_relationship_kwargs={{"secondary": "{table_name}"}}')
+            if overlaps:
+                args.append(
+                    f'sa_relationship_kwargs={{"secondary": "{table_name}",'
+                    f' "overlaps": "{overlaps}"}}'
+                )
+            else:
+                args.append(f'sa_relationship_kwargs={{"secondary": "{table_name}"}}')
+        elif overlaps:
+            args.append(f'sa_relationship_kwargs={{"overlaps": "{overlaps}"}}')
 
         # Detectar se rtype referencia classe late-bound (sob TYPE_CHECKING).
         # Nesse caso anotar `# noqa: UP037` para impedir que ruff
@@ -350,11 +361,11 @@ def generate_router(entity_data: dict[str, Any]) -> str:
     url_table_name = table_name.replace("_", "-")
 
     # Import de User necessário para `_: User = Depends(get_current_user)`.
-    # No domain 'user', a classe já é importada via linha principal de modelos.
-    if domain == "user":
+    # No domain 'users', a classe já é importada via linha principal de modelos.
+    if domain in ("user", "users"):
         user_import_line = ""
     else:
-        user_import_line = "from caramello.user.models import User\n"
+        user_import_line = "from caramello.users.models import User\n"
 
     domain_import = (
         f"from caramello.{domain}.models"

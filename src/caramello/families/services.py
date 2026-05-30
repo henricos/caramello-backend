@@ -3,6 +3,7 @@
 Funções recebem AsyncSession e User como parâmetros diretos (não via Depends),
 tornando-as reutilizáveis em contextos MCP, testes e outros callers sem framework.
 """
+
 from __future__ import annotations
 
 from sqlmodel import select
