@@ -78,6 +78,20 @@ properties:
         - type
         - relationship_type
 
+  filters:
+    type: array
+    description: "Filtros naturais da entidade — geram Index no banco via __table_args__."
+    items:
+      type: object
+      properties:
+        fields:
+          type: array
+          description: "Campos que compõem o filtro (índice simples ou composto)."
+          items:
+            type: string
+      required:
+        - fields
+
 required:
   - name
   - domain

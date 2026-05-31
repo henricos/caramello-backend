@@ -2,14 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Domínio Financeiro
-status: not_started
-stopped_at: Roadmap defined — ready to plan Phase 6
-last_updated: "2026-05-30T00:00:00.000Z"
-last_activity: 2026-05-30 -- Milestone v2.0 roadmap created (4 phases, 24 requirements)
+status: executing
+last_updated: "2026-05-31T08:38:09.390Z"
+last_activity: 2026-05-31 -- Phase 6 execution started
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -21,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-30)
 
 **Core value:** Um backend sólido, seguro e extensível onde cada novo domínio de negócio pode ser adicionado sem tocar no que já existe.
-**Current focus:** Phase 06 — fundacao-dsl-schema (not started)
+**Current focus:** Phase 6 — fundacao-dsl-schema
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
-Status: Roadmap defined — awaiting `/gsd-plan-phase 6`
-Last activity: 2026-05-30
+Phase: 6 (fundacao-dsl-schema) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 6
+Last activity: 2026-05-31 -- Phase 6 execution started
 
 Progress: [__________] 0% (0/4 phases complete)
 
@@ -98,6 +97,6 @@ Nenhum bloqueador conhecido. Fase 6 pode começar imediatamente.
 
 ## Session Continuity
 
-Last session: 2026-05-30
-Stopped at: Roadmap M2 criado — 4 fases, 24 requisitos mapeados
+Last session: 2026-05-31T01:08:06.237Z
+Stopped at: Phase 6 context gathered
 Resume: `/gsd-plan-phase 6` para iniciar planejamento da Phase 6
