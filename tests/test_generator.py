@@ -263,3 +263,118 @@ def test_operations_family_yaml_exists_with_six_operations():
     assert not missing, (
         f"Operações faltando em dsl/operations/family.yaml: {missing}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — Plano 01: extensão do gerador para Decimal e filters:
+# ---------------------------------------------------------------------------
+
+
+def test_generator_decimal_emits_numeric():
+    """Phase 6 Plan 01 (D-01/SC-7): generate_models emite Column(Numeric(15, 2)) para campo Decimal.
+
+    Verifica que:
+    - o código gerado contém `Column(Numeric(15, 2)` com nullable=False
+    - o cabeçalho importa `from decimal import Decimal`
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT))
+    try:
+        from scripts.generate_code import generate_models
+    finally:
+        if str(REPO_ROOT) in sys.path:
+            sys.path.remove(str(REPO_ROOT))
+
+    entity_data = {
+        "name": "Movement",
+        "table_name": "movement",
+        "domain": "finances",
+        "description": "Movimentação financeira bruta.",
+        "fields": [
+            {"name": "id", "type": "int", "primary_key": True, "nullable": False},
+            {
+                "name": "uuid",
+                "type": "UUID",
+                "unique": True,
+                "default_factory": "uuid4",
+                "nullable": False,
+            },
+            {"name": "amount", "type": "Decimal", "nullable": False},
+        ],
+        "relationships": [],
+    }
+    code = generate_models(entity_data, entity_domain={})
+
+    assert "from decimal import Decimal" in code, (
+        "O cabeçalho gerado deve importar `from decimal import Decimal`; "
+        f"código gerado:\n{code}"
+    )
+    assert "Numeric(15, 2)" in code, (
+        "O campo Decimal deve gerar `Column(Numeric(15, 2)` no código; "
+        f"código gerado:\n{code}"
+    )
+    assert "nullable=False" in code, (
+        "O campo Decimal não-nullable deve emitir `nullable=False`; "
+        f"código gerado:\n{code}"
+    )
+
+
+def test_generator_filters_emits_table_args():
+    """Phase 6 Plan 01 (D-11/SC-8): generate_models emite __table_args__ com Index para entidades com filters:.
+
+    Verifica que:
+    - o código gerado contém `__table_args__ = (`
+    - índices individuais: `Index("ix_movement_account_id", "account_id")`
+    - índice composto: `Index("ix_movement_competencia_year_competencia_month", ...)`
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT))
+    try:
+        from scripts.generate_code import generate_models
+    finally:
+        if str(REPO_ROOT) in sys.path:
+            sys.path.remove(str(REPO_ROOT))
+
+    entity_data = {
+        "name": "Movement",
+        "table_name": "movement",
+        "domain": "finances",
+        "description": "Movimentação financeira bruta.",
+        "fields": [
+            {"name": "id", "type": "int", "primary_key": True, "nullable": False},
+            {
+                "name": "uuid",
+                "type": "UUID",
+                "unique": True,
+                "default_factory": "uuid4",
+                "nullable": False,
+            },
+            {"name": "account_id", "type": "int", "nullable": False},
+            {"name": "competencia_year", "type": "int", "nullable": False},
+            {"name": "competencia_month", "type": "int", "nullable": False},
+        ],
+        "relationships": [],
+        "filters": [
+            {"fields": ["account_id"]},
+            {"fields": ["competencia_year", "competencia_month"]},
+        ],
+    }
+    code = generate_models(entity_data, entity_domain={})
+
+    assert "__table_args__ = (" in code, (
+        "Entidade com filters: deve gerar `__table_args__ = (`; "
+        f"código gerado:\n{code}"
+    )
+    assert 'Index("ix_movement_account_id", "account_id")' in code, (
+        "Deve gerar Index para filtro simples `account_id`; "
+        f"código gerado:\n{code}"
+    )
+    assert (
+        'Index("ix_movement_competencia_year_competencia_month", '
+        '"competencia_year", "competencia_month")'
+    ) in code, (
+        "Deve gerar Index composto para filtro `competencia_year + competencia_month`; "
+        f"código gerado:\n{code}"
+    )

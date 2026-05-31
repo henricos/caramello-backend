@@ -34,6 +34,7 @@ DOMAIN_TO_ENTITY_NAME: dict[str, str] = {
     "users": "User",
     "family": "Family",
     "families": "Family",
+    "finances": "Account",
 }
 
 
@@ -67,6 +68,7 @@ def map_type_to_python(dsl_type: str) -> str:
         "bool": "bool",
         "datetime": "datetime",
         "emailstr": "EmailStr",
+        "decimal": "Decimal",
     }
     mapped = type_map.get(clean_type.lower())
     if mapped:
@@ -110,6 +112,14 @@ def get_field_definition(field: dict[str, Any], force_optional: bool = False) ->
             field_args.append(f"default={val}")
     elif is_nullable or force_optional:
         field_args.append("default=None")
+    # Campos Decimal usam sa_column para garantir NUMERIC(15,2) no banco.
+    # Não combinar unique=True com sa_column (Pitfall 3 do RESEARCH.md).
+    if ftype == "Decimal":
+        nullable_kw = "nullable=False" if not is_nullable else "nullable=True"
+        return (
+            f"    {fname}: {type_str} = "
+            f"Field(sa_column=Column(Numeric(15, 2), {nullable_kw}))"
+        )
     if not is_nullable:
         field_args.append("nullable=False")
     return f"    {fname}: {type_str} = Field({', '.join(field_args)})"
@@ -189,6 +199,25 @@ def generate_relationships(
     return lines
 
 
+def _build_table_args(entity_data: dict[str, Any]) -> str | None:
+    """Gera o bloco __table_args__ a partir do campo filters: do YAML.
+
+    Retorna None quando não há filters declarados.
+    O bloco deve ser injetado na classe table=True, nunca nas classes Read/Create/Update.
+    """
+    filters = entity_data.get("filters", [])
+    if not filters:
+        return None
+    table_name = entity_data["table_name"]
+    index_lines = []
+    for f in filters:
+        fields = f["fields"]
+        index_name = f"ix_{table_name}_{'_'.join(fields)}"
+        field_args = ", ".join(f'"{col}"' for col in fields)
+        index_lines.append(f'        Index("{index_name}", {field_args}),')
+    return "    __table_args__ = (\n" + "\n".join(index_lines) + "\n    )\n"
+
+
 def generate_models(
     entity_data: dict[str, Any],
     entity_domain: dict[str, str],
@@ -216,6 +245,8 @@ def generate_models(
         for f in fields
     )
     needs_emailstr = any(f.get("type", "").lower() == "emailstr" for f in fields)
+    needs_decimal = any(f.get("type", "").lower() == "decimal" for f in fields)
+    needs_table_args = bool(entity_data.get("filters"))
 
     # Imports cross-domain para link_models
     cross_imports: list[str] = []
@@ -248,12 +279,27 @@ def generate_models(
 
     # Imports de stdlib e terceiros
     stdlib_imports: list[str] = []
+    if needs_decimal:
+        stdlib_imports.append("from decimal import Decimal")
     if needs_datetime:
         stdlib_imports.append("from datetime import datetime, timezone")
     if needs_uuid:
         stdlib_imports.append("from uuid import UUID, uuid4")
     if stdlib_imports:
         code += "\n".join(stdlib_imports) + "\n\n"
+
+    # Imports SQLAlchemy para Decimal (Column, Numeric) e filters (Index)
+    sa_imports: list[str] = []
+    if needs_decimal:
+        sa_imports += ["Column", "Numeric"]
+    if needs_table_args:
+        if "Index" not in sa_imports:
+            sa_imports.append("Index")
+        if "Column" not in sa_imports:
+            sa_imports.insert(0, "Column")
+    if sa_imports:
+        sa_symbols = ", ".join(sorted(sa_imports))
+        code += f"from sqlalchemy import {sa_symbols}\n"
 
     third_party: list[str] = []
     if needs_emailstr:
@@ -277,6 +323,11 @@ def generate_models(
         # Multi-line: texto na linha seguinte
         code += f'    """\n    {description}\n    """\n'
     code += f'    __tablename__ = "{table_name}"\n\n'
+
+    # __table_args__ com Index — APENAS na classe table=True (nunca em Read/Create/Update)
+    table_args_block = _build_table_args(entity_data)
+    if table_args_block:
+        code += table_args_block + "\n"
 
     for f in fields:
         code += get_field_definition(f) + "\n"
@@ -907,13 +958,19 @@ def main() -> None:
 
 
 def _run_ruff_fix(src_dir: Path) -> None:
-    """Executa ruff --fix e ruff format nos arquivos gerados."""
+    """Executa ruff --fix e ruff format nos arquivos gerados.
+
+    Descobre dinamicamente os diretórios de domínio em src_dir,
+    excluindo diretórios internos (_*), shared e core.
+    """
     import subprocess
 
     dirs = [
-        str(src_dir / d)
-        for d in ("user", "family", "users", "families")
-        if (src_dir / d).exists()
+        str(d)
+        for d in sorted(src_dir.iterdir())
+        if d.is_dir()
+        and not d.name.startswith("_")
+        and d.name not in ("shared", "core")
     ]
     if not dirs:
         return
