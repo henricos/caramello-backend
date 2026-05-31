@@ -378,3 +378,70 @@ def test_generator_filters_emits_table_args():
         "Deve gerar Index composto para filtro `competencia_year + competencia_month`; "
         f"código gerado:\n{code}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — Plano 02: YAMLs financeiros, geração, importação (Wave 0)
+# ---------------------------------------------------------------------------
+
+
+def test_finances_yamls_have_domain_finances():
+    """Phase 6 Plan 02 (SC-5): os 5 YAMLs financeiros declaram domain: finances.
+
+    Verifica que cada um dos 5 YAMLs tem domain == 'finances'.
+    """
+    yaml_files = [
+        "account.yaml",
+        "movement.yaml",
+        "financial_entry.yaml",
+        "category.yaml",
+        "subcategory.yaml",
+    ]
+    for fname in yaml_files:
+        data = yaml.safe_load((DSL_ENTITIES_DIR / fname).read_text())
+        assert data.get("domain") == "finances", (
+            f"{fname} deve declarar domain: finances; "
+            f"encontrado: {data.get('domain')!r}"
+        )
+
+
+def test_finances_models_no_float():
+    """Phase 6 Plan 02 (SC-6): src/caramello/finances/models.py não usa float em campos monetários.
+
+    Verifica que o models.py gerado não contém `: float` nem `Float(` em campos de valor.
+    O campo amount deve usar Numeric(15, 2) via sa_column.
+    """
+    models_path = REPO_ROOT / "src/caramello/finances/models.py"
+    assert models_path.exists(), (
+        "src/caramello/finances/models.py deve existir (gerador deve ter rodado)"
+    )
+    content = models_path.read_text()
+    # Verifica ausência de float em campos de valor
+    assert ": float" not in content, (
+        "models.py não deve conter `: float` em campos de valor monetário; "
+        "campos Decimal devem usar Numeric(15, 2)"
+    )
+    assert "Float(" not in content, (
+        "models.py não deve conter `Float(` em campos de valor monetário; "
+        "campos Decimal devem usar Numeric(15, 2)"
+    )
+    # Verifica presença do tipo correto
+    assert "Numeric(15, 2)" in content, (
+        "models.py deve conter `Numeric(15, 2)` para campos monetários (SC-6)"
+    )
+
+
+def test_finances_models_import_ok():
+    """Phase 6 Plan 02 (SC-4): from caramello.finances import models não levanta ImportError.
+
+    Verifica que o código gerado é importável sem erros.
+    """
+    import importlib
+
+    try:
+        mod = importlib.import_module("caramello.finances.models")
+        assert mod is not None, "módulo importado deve ser não-nulo"
+    except ImportError as exc:
+        raise AssertionError(
+            f"from caramello.finances import models levantou ImportError: {exc}"
+        ) from exc
