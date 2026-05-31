@@ -11,7 +11,7 @@
 
 ### Phases
 
-- [ ] **Phase 6: Fundação DSL + Schema** - YAMLs, geração, pós-processamento Category e migration 0002
+- [ ] **Phase 6: Fundação DSL + Schema** - YAMLs, extensão do gerador (Decimal + filters), Category + Subcategory e migration 0002
 - [ ] **Phase 7: CRUD Account + Category** - Operações de negócio com controle de acesso e validações
 - [ ] **Phase 8: Movimentações + Importação** - Registro individual, importação CSV/OFX/XLSX e deduplicação
 - [ ] **Phase 9: Conciliação + Relatórios + MCP** - Lançamentos financeiros, saldos, breakdown e ferramentas MCP
@@ -35,8 +35,12 @@
   2. `alembic downgrade -1` reverte completamente sem erro
   3. Tabelas `account`, `movement`, `financial_entry`, `category` existem com todas as colunas e constraints corretas (NUMERIC(15,2), UNIQUE em movement_id e import_hash)
   4. Código gerado em `src/caramello/finances/` passa em `python -c "from caramello.finances import models"` sem ImportError
-  5. Category self-referencial: `alembic upgrade head` não falha em FK circular; `models.py` pós-processado não dá erro de relationship
-**Plans**: TBD
+  5. Hierarquia de categorias em duas entidades (`Category` + `Subcategory`, D-06): `Subcategory.category_id` → `Category.id`; sem self-referencial nem pós-processamento manual
+**Plans**: 3 plans
+Plans:
+- [ ] 06-01-PLAN.md — Estende o gerador DSL: tipo Decimal→Numeric(15,2), bloco filters→__table_args__, finances em DOMAIN_TO_ENTITY_NAME, ruff dinâmico + testes Wave 0
+- [ ] 06-02-PLAN.md — Cria 5 YAMLs financeiros (Category+Subcategory), manifest, operations stub; gera src/caramello/finances/ + testes Wave 0
+- [ ] 06-03-PLAN.md — naming_convention em alembic/env.py, imports finances, migration 0002 + verificação upgrade/downgrade em banco real
 
 ### Phase 7: CRUD Account + Category
 **Goal**: Usuário autenticado pode gerenciar contas e categorias hierárquicas da sua família
