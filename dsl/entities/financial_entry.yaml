@@ -1,0 +1,72 @@
+# dsl/entities/financial_entry.yaml
+# Lançamento financeiro classificado — herda amount/type de Movement (D-05).
+# Domain: finances (Phase 6, Plano 02)
+
+name: FinancialEntry
+domain: finances
+description: "Lançamento financeiro classificado. Herda valor e tipo de Movement via relação 1:1 (D-05)."
+table_name: financial_entry
+
+fields:
+  - name: id
+    type: int
+    primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
+    default_factory: uuid4
+    nullable: false
+    description: "Identificador público único (UUID)."
+
+  - name: movement_id
+    type: int
+    foreign_key: "movement.id"
+    unique: true
+    nullable: false
+    description: "FK para Movement (relação 1:1 — cada movement tem no máximo 1 entry). D-05."
+
+  - name: subcategory_id
+    type: int
+    foreign_key: "subcategory.id"
+    nullable: false
+    description: "FK para subcategoria de classificação do lançamento (D-08)."
+
+  - name: competencia_year
+    type: int
+    nullable: false
+    description: "Ano de competência do lançamento (ex: 2024). D-04."
+
+  - name: competencia_month
+    type: int
+    nullable: false
+    description: "Mês de competência do lançamento (1-12). D-04."
+
+  - name: notes
+    type: str
+    max_length: 500
+    nullable: true
+    description: "Observações adicionais sobre o lançamento (opcional)."
+
+  - name: is_recorrente
+    type: bool
+    default: false
+    nullable: false
+    description: "Indica se o lançamento é recorrente (LAN-04)."
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data de criação do registro."
+
+  - name: updated_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data da última atualização do registro."
+
+filters:
+  - fields: [competencia_year, competencia_month]
+  - fields: [subcategory_id]

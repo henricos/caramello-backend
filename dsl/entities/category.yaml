@@ -1,0 +1,50 @@
+# dsl/entities/category.yaml
+# Categoria de classificação financeira (nível 1 da hierarquia).
+# Domain: finances (Phase 6, Plano 02)
+# Nota: hierarquia de 2 níveis via entidade separada Subcategory (D-06/D-07).
+# Sem self-referencial (D-09).
+
+name: Category
+domain: finances
+description: "Categoria de classificação financeira — nível 1 da hierarquia (D-06). Filha: Subcategory."
+table_name: category
+
+fields:
+  - name: id
+    type: int
+    primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
+    default_factory: uuid4
+    nullable: false
+    description: "Identificador público único (UUID)."
+
+  - name: family_id
+    type: int
+    foreign_key: "family.id"
+    nullable: false
+    description: "FK para família dona da categoria."
+
+  - name: name
+    type: str
+    max_length: 100
+    nullable: false
+    description: "Nome da categoria (ex: Alimentação, Transporte)."
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data de criação do registro."
+
+  - name: updated_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data da última atualização do registro."
+
+filters:
+  - fields: [family_id]

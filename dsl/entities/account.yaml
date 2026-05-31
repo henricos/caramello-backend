@@ -1,0 +1,67 @@
+# dsl/entities/account.yaml
+# Conta bancária, cartão, poupança ou investimento de um membro da família.
+# Domain: finances (Phase 6, Plano 02)
+
+name: Account
+domain: finances
+description: "Conta bancária, cartão, poupança ou investimento de um membro da família."
+table_name: account
+
+fields:
+  - name: id
+    type: int
+    primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
+    default_factory: uuid4
+    nullable: false
+    description: "Identificador público único (UUID)."
+
+  - name: family_id
+    type: int
+    foreign_key: "family.id"
+    nullable: false
+    description: "FK para família dona da conta."
+
+  - name: name
+    type: str
+    max_length: 100
+    nullable: false
+    description: "Nome descritivo da conta (ex: Nubank PF, Caixa Poupança)."
+
+  - name: type
+    type: str
+    max_length: 20
+    nullable: false
+    description: "Tipo: corrente, poupanca, cartao, investimento."
+
+  - name: currency
+    type: str
+    max_length: 3
+    default: "BRL"
+    nullable: false
+    description: "Código ISO 4217 da moeda (ex: BRL, USD)."
+
+  - name: is_active
+    type: bool
+    default: true
+    nullable: false
+    description: "Conta ativa (false = arquivada)."
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data de criação do registro."
+
+  - name: updated_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data da última atualização do registro."
+
+filters:
+  - fields: [family_id]

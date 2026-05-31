@@ -1,0 +1,11 @@
+# dsl/operations/finances.yaml
+# Operações de negócio do domínio finances (Phase 6, Plano 02 — stub).
+# Implementação real ocorre na Phase 7 (Account + Category CRUD) e Phase 8 (Movement + Import).
+# Gera src/caramello/finances/operations.py (stub: # CARAMELLO-GENERATED: stub).
+
+domain: finances
+operations:
+  - name: list_accounts
+    method: GET
+    path: /finances/account
+    description: "Lista contas bancárias da família autenticada."
