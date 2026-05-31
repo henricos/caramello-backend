@@ -18,6 +18,16 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 from sqlmodel import SQLModel  # noqa: E402
 
+# naming_convention DEVE ser definida antes de qualquer import de modelo (Pitfall 6)
+# Garante nomes determinísticos para constraints no PostgreSQL — sem nomes automáticos
+SQLModel.metadata.naming_convention = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
 from caramello.core.config import settings  # noqa: E402
 from caramello.families.models import (  # noqa: E402, F401
     Family,
@@ -25,6 +35,13 @@ from caramello.families.models import (  # noqa: E402, F401
     FamilyMember,
 )
 from caramello.users.models import User  # noqa: E402, F401
+from caramello.finances.models import (  # noqa: E402, F401
+    Account,
+    Category,
+    FinancialEntry,
+    Movement,
+    Subcategory,
+)
 
 target_metadata = SQLModel.metadata
 

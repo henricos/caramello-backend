@@ -1,0 +1,171 @@
+"""0002_finances_schema
+
+Schema financeiro do domínio finances — 5 tabelas:
+- category: categorias de classificação financeira (nível 1)
+- subcategory: subcategorias (nível 2, FK → category)
+- account: contas bancárias/cartões da família
+- movement: movimentações brutas do extrato (amount: NUMERIC(15,2))
+- financial_entry: lançamentos classificados (1:1 com movement via movement_id UNIQUE)
+
+Revision ID: 0002
+Revises: 0001
+Create Date: 2026-05-31
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+import sqlmodel  # noqa: F401
+from alembic import op
+
+revision: str = "0002"
+down_revision: str | Sequence[str] | None = "0001"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    # Tabelas sem dependências internas ao domínio finances primeiro
+    op.create_table(
+        "category",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("uuid", sa.Uuid(), nullable=False),
+        sa.Column("family_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["family_id"], ["family.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("uuid"),
+    )
+    op.create_index("ix_category_family_id", "category", ["family_id"], unique=False)
+
+    op.create_table(
+        "account",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("uuid", sa.Uuid(), nullable=False),
+        sa.Column("family_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+        ),
+        sa.Column(
+            "type", sqlmodel.sql.sqltypes.AutoString(length=20), nullable=False
+        ),
+        sa.Column(
+            "currency", sqlmodel.sql.sqltypes.AutoString(length=3), nullable=False
+        ),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["family_id"], ["family.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("uuid"),
+    )
+    op.create_index("ix_account_family_id", "account", ["family_id"], unique=False)
+
+    # Subcategory depende de category
+    op.create_table(
+        "subcategory",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("uuid", sa.Uuid(), nullable=False),
+        sa.Column("category_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["category_id"], ["category.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("uuid"),
+    )
+    op.create_index(
+        "ix_subcategory_category_id", "subcategory", ["category_id"], unique=False
+    )
+
+    # Movement depende de account; amount usa NUMERIC(15,2) — sem float (D-02)
+    op.create_table(
+        "movement",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("uuid", sa.Uuid(), nullable=False),
+        sa.Column("account_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "type", sqlmodel.sql.sqltypes.AutoString(length=10), nullable=False
+        ),
+        sa.Column("date", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("amount", sa.Numeric(precision=15, scale=2), nullable=False),
+        sa.Column(
+            "description", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False
+        ),
+        sa.Column("import_hash", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("is_duplicate", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["account_id"], ["account.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("import_hash"),  # deduplicação de extrato (D-10)
+        sa.UniqueConstraint("uuid"),
+    )
+    op.create_index(
+        "ix_movement_account_id", "movement", ["account_id"], unique=False
+    )
+
+    # FinancialEntry depende de movement e subcategory; movement_id UNIQUE → 1:1 (D-05)
+    # Sem coluna amount ou type próprios (D-05)
+    op.create_table(
+        "financial_entry",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("uuid", sa.Uuid(), nullable=False),
+        sa.Column("movement_id", sa.Integer(), nullable=False),
+        sa.Column("subcategory_id", sa.Integer(), nullable=False),
+        sa.Column("competencia_year", sa.Integer(), nullable=False),
+        sa.Column("competencia_month", sa.Integer(), nullable=False),
+        sa.Column(
+            "notes", sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True
+        ),
+        sa.Column("is_recorrente", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["movement_id"], ["movement.id"]),
+        sa.ForeignKeyConstraint(["subcategory_id"], ["subcategory.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("movement_id"),  # garante relação 1:1 com movement (D-05)
+        sa.UniqueConstraint("uuid"),
+    )
+    op.create_index(
+        "ix_financial_entry_competencia_year_competencia_month",
+        "financial_entry",
+        ["competencia_year", "competencia_month"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_financial_entry_subcategory_id",
+        "financial_entry",
+        ["subcategory_id"],
+        unique=False,
+    )
+
+
+def downgrade() -> None:
+    # Drop em ordem reversa de FK (financial_entry → movement → subcategory → account → category)
+    op.drop_index(
+        "ix_financial_entry_subcategory_id", table_name="financial_entry"
+    )
+    op.drop_index(
+        "ix_financial_entry_competencia_year_competencia_month",
+        table_name="financial_entry",
+    )
+    op.drop_table("financial_entry")
+
+    op.drop_index("ix_movement_account_id", table_name="movement")
+    op.drop_table("movement")
+
+    op.drop_index("ix_subcategory_category_id", table_name="subcategory")
+    op.drop_table("subcategory")
+
+    op.drop_index("ix_account_family_id", table_name="account")
+    op.drop_table("account")
+
+    op.drop_index("ix_category_family_id", table_name="category")
+    op.drop_table("category")
