@@ -44,7 +44,7 @@
 **Plans**: 3 plansPlans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Estende o gerador DSL: tipo Decimal→Numeric(15,2), bloco filters→__table_args__, finances em DOMAIN_TO_ENTITY_NAME, ruff dinâmico + testes Wave 0
+- [x] 06-01-PLAN.md — Estende o gerador DSL: tipo Decimal→Numeric(15,2), bloco filters→__table_args__, finances em DOMAIN_TO_ENTITY_NAME, ruff dinâmico + testes Wave 0
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -136,7 +136,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Fundação DSL + Schema | 0/? | Not started | - |
+| 6. Fundação DSL + Schema | 1/3 | In Progress|  |
 | 7. CRUD Account + Category | 0/? | Not started | - |
 | 8. Movimentações + Importação | 0/? | Not started | - |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
