@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Domínio Financeiro
-status: executing
-last_updated: "2026-05-31T08:38:09.390Z"
+status: ready_to_plan
+last_updated: 2026-05-31T12:06:33.885Z
 last_activity: 2026-05-31 -- Phase 6 execution started
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 28
   percent: 0
+stopped_at: Phase 6 complete (3/3) — ready to discuss Phase 7
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-30)
 
 **Core value:** Um backend sólido, seguro e extensível onde cada novo domínio de negócio pode ser adicionado sem tocar no que já existe.
-**Current focus:** Phase 6 — fundacao-dsl-schema
+**Current focus:** Phase 7 — crud account + category
 
 ## Current Position
 
-Phase: 6 (fundacao-dsl-schema) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 6
-Last activity: 2026-05-31 -- Phase 6 execution started
+Phase: 7
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-31
 
 Progress: [__________] 0% (0/4 phases complete)
 
@@ -46,7 +47,7 @@ Progress: [__________] 0% (0/4 phases complete)
 
 **Velocity:**
 
-- Total plans completed: 0 (M2)
+- Total plans completed: 3 (M2)
 - Average duration: —
 - Total execution time: —
 
@@ -58,6 +59,7 @@ Progress: [__________] 0% (0/4 phases complete)
 | 07 | TBD | - | - |
 | 08 | TBD | - | - |
 | 09 | TBD | - | - |
+| 6 | 3 | - | - |
 
 **Recent Trend:** N/A — M2 não iniciado
 
