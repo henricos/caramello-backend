@@ -10,3 +10,8 @@ x-caramello-entities:
   - family.yaml
   - family_member.yaml
   - family_invitation.yaml
+  - account.yaml
+  - movement.yaml
+  - financial_entry.yaml
+  - category.yaml
+  - subcategory.yaml

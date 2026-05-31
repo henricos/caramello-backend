@@ -1,0 +1,50 @@
+# dsl/entities/subcategory.yaml
+# Subcategoria de classificação financeira (nível 2 da hierarquia).
+# Domain: finances (Phase 6, Plano 02)
+# Hierarquia de 2 níveis: Category → Subcategory (D-06).
+# Sem campo apontando para outra Subcategory (D-09 — CAT-03 enforced pelo schema).
+
+name: Subcategory
+domain: finances
+description: "Subcategoria de classificação financeira — nível 2 da hierarquia (D-06). Pai: Category."
+table_name: subcategory
+
+fields:
+  - name: id
+    type: int
+    primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
+    default_factory: uuid4
+    nullable: false
+    description: "Identificador público único (UUID)."
+
+  - name: category_id
+    type: int
+    foreign_key: "category.id"
+    nullable: false
+    description: "FK para categoria pai (nível 1). D-06 — hierarquia de 2 níveis."
+
+  - name: name
+    type: str
+    max_length: 100
+    nullable: false
+    description: "Nome da subcategoria (ex: Restaurante, Combustível)."
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data de criação do registro."
+
+  - name: updated_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data da última atualização do registro."
+
+filters:
+  - fields: [category_id]

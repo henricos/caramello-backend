@@ -1,0 +1,76 @@
+# dsl/entities/movement.yaml
+# Movimentação financeira bruta importada do banco.
+# Domain: finances (Phase 6, Plano 02)
+
+name: Movement
+domain: finances
+description: "Movimentação financeira bruta importada do extrato bancário."
+table_name: movement
+
+fields:
+  - name: id
+    type: int
+    primary_key: true
+    description: "Chave primária interna (numérica)."
+
+  - name: uuid
+    type: UUID
+    unique: true
+    default_factory: uuid4
+    nullable: false
+    description: "Identificador público único (UUID)."
+
+  - name: account_id
+    type: int
+    foreign_key: "account.id"
+    nullable: false
+    description: "FK para conta bancária de origem da movimentação."
+
+  - name: type
+    type: str
+    max_length: 10
+    nullable: false
+    description: "Tipo da movimentação: credito ou debito."
+
+  - name: date
+    type: datetime
+    nullable: false
+    description: "Data/hora da movimentação conforme extrato."
+
+  - name: amount
+    type: Decimal
+    nullable: false
+    description: "Valor da movimentação em NUMERIC(15,2). Sempre positivo; type define direção."
+
+  - name: description
+    type: str
+    max_length: 255
+    nullable: false
+    description: "Descrição da movimentação conforme extrato bancário."
+
+  - name: import_hash
+    type: str
+    unique: true
+    nullable: true
+    description: "Hash SHA-256 do registro importado para deduplicação (D-10). Null quando entrada manual."
+
+  - name: is_duplicate
+    type: bool
+    default: false
+    nullable: false
+    description: "Indica se a movimentação foi marcada como duplicata (MOV-05)."
+
+  - name: created_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data de criação do registro."
+
+  - name: updated_at
+    type: datetime
+    default_factory: now_utc
+    nullable: false
+    description: "Data da última atualização do registro."
+
+filters:
+  - fields: [account_id]
