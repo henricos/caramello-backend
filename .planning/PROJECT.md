@@ -67,6 +67,10 @@ A fundação está completa e pronta para receber novos domínios de negócio.
 | FAMILY-04/05/06 deferidos para M2 | Fluxo de convite reutilizável fora do escopo do grupo fechado de 1-5 usuários | ⏭ Deferido — D-04 |
 | Testes contra caramello_dev com rollback por savepoint | Sem banco separado caramello_test; isolamento via transação revertida | ✅ Implementado — D-TEST-01 |
 | Migration única 0001_initial_schema.py | 2 migrations anteriores nunca executadas em banco real; consolidadas em uma limpa | ✅ Implementado — M1 close |
+| Precisão monetária: `Decimal` no DSL → `NUMERIC(15,2)` no banco | Zero `float` em campos de valor — pitfall P1 eliminado pelo gerador | ✅ Implementado — Phase 6 — scripts/generate_code.py |
+| Hierarquia Category+Subcategory (2 entidades, D-06) | Substitui self-referencial com pós-processamento manual; 2 níveis enforced pelo schema | ✅ Implementado — Phase 6 — dsl/entities/category.yaml + subcategory.yaml |
+| `filters:` no DSL → `__table_args__` com `Index` (D-11) | Índices declarados na fonte de verdade YAML, nunca editados manualmente nos models | ✅ Implementado — Phase 6 — scripts/generate_code.py `_build_table_args` |
+| `naming_convention` em alembic/env.py antes dos imports de modelo | Constraints recebem nomes determinísticos no PostgreSQL — reverter/recriar sem nome aleatório | ✅ Implementado — Phase 6 — alembic/env.py |
 
 ## Out of Scope (permanente)
 
@@ -76,4 +80,4 @@ A fundação está completa e pronta para receber novos domínios de negócio.
 - Token introspection remota — validação local com JWKS cacheado
 
 ---
-*Last updated: 2026-05-30 — início do Milestone 2 (Domínio Financeiro)*
+*Last updated: 2026-05-31 — Phase 6 completa: schema financeiro fundado (gerador + YAMLs + migration 0002)*
