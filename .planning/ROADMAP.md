@@ -11,7 +11,7 @@
 
 ### Phases
 
-- [ ] **Phase 6: Fundação DSL + Schema** - YAMLs, extensão do gerador (Decimal + filters), Category + Subcategory e migration 0002
+- [x] **Phase 6: Fundação DSL + Schema** - YAMLs, extensão do gerador (Decimal + filters), Category + Subcategory e migration 0002 (completed 2026-05-31)
 - [ ] **Phase 7: CRUD Account + Category** - Operações de negócio com controle de acesso e validações
 - [ ] **Phase 8: Movimentações + Importação** - Registro individual, importação CSV/OFX/XLSX e deduplicação
 - [ ] **Phase 9: Conciliação + Relatórios + MCP** - Lançamentos financeiros, saldos, breakdown e ferramentas MCP
@@ -52,7 +52,7 @@
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-03-PLAN.md — naming_convention em alembic/env.py, imports finances, migration 0002 + verificação upgrade/downgrade em banco real
+- [x] 06-03-PLAN.md — naming_convention em alembic/env.py, imports finances, migration 0002 + verificação upgrade/downgrade em banco real
 
 ### Phase 7: CRUD Account + Category
 
@@ -136,7 +136,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Fundação DSL + Schema | 2/3 | In Progress|  |
+| 6. Fundação DSL + Schema | 3/3 | Complete   | 2026-05-31 |
 | 7. CRUD Account + Category | 0/? | Not started | - |
 | 8. Movimentações + Importação | 0/? | Not started | - |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
