@@ -78,7 +78,7 @@
 **Plans**: 3 plans
 **Wave 0**
 
-- [ ] 07-01-PLAN.md — Scaffold tests/test_finances_operations.py (Nyquist): testes skipados cobrindo ACC-01..03, CAT-01..04, AUTH-FIN-01..02
+- [x] 07-01-PLAN.md — Scaffold tests/test_finances_operations.py (Nyquist): testes skipados cobrindo ACC-01..03, CAT-01..04, AUTH-FIN-01..02
 
 **Wave 1** *(blocked on Wave 0 completion)*
 
@@ -149,7 +149,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
-| 7. CRUD Account + Category | 0/3 | Planned     | - |
+| 7. CRUD Account + Category | 1/3 | In Progress|  |
 | 8. Movimentações + Importação | 0/? | Not started | - |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
