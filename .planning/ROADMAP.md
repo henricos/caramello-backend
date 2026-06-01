@@ -61,21 +61,33 @@
 **Requirements**: ACC-01, ACC-02, ACC-03, CAT-01, CAT-02, CAT-03, CAT-04, AUTH-FIN-01, AUTH-FIN-02
 **Technical constraints**:
 
-- `finances/operations.py`: CRUD de Account e Category
-- Helper `_require_account_access(account_uuid, current_user, session)` via JOIN `Account → Family → FamilyMember` — retorna 403 se usuário não é membro
-- Validação max 2 níveis em Category: rejeitar criação de subcategoria cujo `parent_id` já tem `parent_id` definido
-- Routers `account_router` e `category_router` registrados em `main.py` ANTES de `FastApiMCP(...)` (pitfall P7)
-- `selectinload` explícito em queries que serializam relacionamentos (pitfall P3)
+- `finances/operations.py`: CRUD de Account, Category e Subcategory com schemas públicos `*Public` (UUID, nunca `id`/`family_id`)
+- Helper `_require_family_access(family_id, current_user, session)` em `shared/auth.py` (import lazy de FamilyMember) — retorna 403 se usuário não é membro; reutilizável nas Phases 8/9
+- Hierarquia max 2 níveis (CAT-03) enforced ESTRUTURALMENTE pelo schema de duas tabelas (Subcategory → Category); sem validação de `parent_id`
+- Router `finances_operations.router` registrado em `main.py` ANTES de `FastApiMCP(...)` (pitfall P7); `finances/router.py` gerado NÃO registrado (D-01/D-02)
+- `updated_at` definido manualmente no PATCH (sem `onupdate` automático)
 
 **Success Criteria** (what must be TRUE):
 
-  1. `POST /finances/accounts` cria conta com nome, tipo e moeda; resposta inclui `uuid`
-  2. `GET /finances/accounts` retorna apenas contas da família do usuário autenticado; 401 sem token; 403 para família alheia
+  1. `POST /finances/accounts` cria conta com nome, tipo e moeda; resposta inclui `uuid`, sem `id`/`family_id`
+  2. `GET /finances/accounts` retorna apenas contas da família do usuário autenticado; 403 sem token; 403 para família alheia
   3. `PATCH /finances/accounts/{uuid}` arquiva conta com `is_active=false`; movimentações existentes permanecem
-  4. `POST /finances/categories` cria categoria pai (sem `parent_id`)
-  5. `POST /finances/categories` com `parent_id` de nível 1 cria subcategoria; com `parent_id` de nível 2 retorna 422
+  4. `POST /finances/categories` cria categoria pai (nível 1)
+  5. `POST /finances/subcategory` com `category_uuid` válido cria subcategoria (nível 2); não existe rota de nível 3 (CAT-03 estrutural)
 
-**Plans**: TBD
+**Plans**: 3 plans
+**Wave 0**
+
+- [ ] 07-01-PLAN.md — Scaffold tests/test_finances_operations.py (Nyquist): testes skipados cobrindo ACC-01..03, CAT-01..04, AUTH-FIN-01..02
+
+**Wave 1** *(blocked on Wave 0 completion)*
+
+- [ ] 07-02-PLAN.md — Helper `_require_family_access` em shared/auth.py + CRUD de Account (schemas públicos, arquivamento) + registro do router em main.py antes do MCP
+
+**Wave 2** *(blocked on Wave 1 completion — mesmo arquivo operations.py)*
+
+- [ ] 07-03-PLAN.md — CRUD de Category (nível 1) + Subcategory (nível 2, rotas planas) scoped por família; CAT-03 estrutural; 6 paths do router
+
 **UI hint**: no
 
 ### Phase 8: Movimentações + Importação
@@ -137,7 +149,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
-| 7. CRUD Account + Category | 0/? | Not started | - |
+| 7. CRUD Account + Category | 0/3 | Planned     | - |
 | 8. Movimentações + Importação | 0/? | Not started | - |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
