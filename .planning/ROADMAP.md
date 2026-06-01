@@ -82,7 +82,7 @@
 
 **Wave 1** *(blocked on Wave 0 completion)*
 
-- [ ] 07-02-PLAN.md — Helper `_require_family_access` em shared/auth.py + CRUD de Account (schemas públicos, arquivamento) + registro do router em main.py antes do MCP
+- [x] 07-02-PLAN.md — Helper `_require_family_access` em shared/auth.py + CRUD de Account (schemas públicos, arquivamento) + registro do router em main.py antes do MCP
 
 **Wave 2** *(blocked on Wave 1 completion — mesmo arquivo operations.py)*
 
@@ -149,7 +149,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
-| 7. CRUD Account + Category | 1/3 | In Progress|  |
+| 7. CRUD Account + Category | 2/3 | In Progress|  |
 | 8. Movimentações + Importação | 0/? | Not started | - |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
