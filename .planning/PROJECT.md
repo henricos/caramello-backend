@@ -80,4 +80,4 @@ A fundação está completa e pronta para receber novos domínios de negócio.
 - Token introspection remota — validação local com JWKS cacheado
 
 ---
-*Last updated: 2026-05-31 — Phase 6 completa: schema financeiro fundado (gerador + YAMLs + migration 0002)*
+*Last updated: 2026-06-01 — Phase 7 completa: CRUD Account + Category com controle de acesso por família, schemas públicos sem IDs internos, e auth 401 corrigido (RFC 7235)*
