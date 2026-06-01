@@ -223,3 +223,36 @@ async def get_current_user(
         await session.commit()
 
     return user
+
+
+# ----------------------------------------------------------------------
+# _require_family_access — helper reutilizável para controle de acesso por família
+# ----------------------------------------------------------------------
+
+
+async def _require_family_access(
+    family_id: int,
+    current_user: "User",
+    session: AsyncSession,
+) -> None:
+    """Verifica que current_user é membro de family_id. Levanta 403 se não for.
+
+    Import lazy de FamilyMember para evitar ciclo shared/ ↔ families/
+    (mesmo padrão de get_current_user, linhas 202-205).
+
+    Reutilizável nas Phases 7, 8 e 9.
+    """
+    # Import lazy para evitar ciclo entre shared/ e families/ (pitfall #6 RESEARCH.md)
+    from caramello.families.models import FamilyMember  # noqa: PLC0415
+
+    result = await session.exec(
+        select(FamilyMember).where(
+            FamilyMember.family_id == family_id,
+            FamilyMember.user_id == current_user.id,
+        )
+    )
+    if result.first() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não é membro desta família",
+        )
