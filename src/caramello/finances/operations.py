@@ -13,7 +13,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field as PydanticField
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -34,9 +34,9 @@ router = APIRouter(prefix="/finances", tags=["Finances"])
 
 class AccountCreatePublic(BaseModel):
     family_uuid: UUID
-    name: str
+    name: str = PydanticField(max_length=100)
     type: Literal["corrente", "poupanca", "cartao", "investimento"]
-    currency: str = "BRL"
+    currency: str = PydanticField(default="BRL", max_length=3)
 
 
 class AccountReadPublic(BaseModel):
@@ -51,15 +51,15 @@ class AccountReadPublic(BaseModel):
 
 
 class AccountUpdatePublic(BaseModel):
-    name: str | None = None
+    name: str | None = PydanticField(default=None, max_length=100)
     type: Literal["corrente", "poupanca", "cartao", "investimento"] | None = None
-    currency: str | None = None
+    currency: str | None = PydanticField(default=None, max_length=3)
     is_active: bool | None = None
 
 
 class CategoryCreatePublic(BaseModel):
     family_uuid: UUID
-    name: str
+    name: str = PydanticField(max_length=100)
 
 
 class CategoryReadPublic(BaseModel):
@@ -71,12 +71,12 @@ class CategoryReadPublic(BaseModel):
 
 
 class CategoryUpdatePublic(BaseModel):
-    name: str | None = None
+    name: str | None = PydanticField(default=None, max_length=100)
 
 
 class SubcategoryCreatePublic(BaseModel):
     category_uuid: UUID
-    name: str
+    name: str = PydanticField(max_length=100)
 
 
 class SubcategoryReadPublic(BaseModel):
@@ -88,7 +88,7 @@ class SubcategoryReadPublic(BaseModel):
 
 
 class SubcategoryUpdatePublic(BaseModel):
-    name: str | None = None
+    name: str | None = PydanticField(default=None, max_length=100)
 
 
 # ---------------------------------------------------------------------------
