@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import select
@@ -45,9 +45,21 @@ if TYPE_CHECKING:
 # quando um kid desconhecido aparece (key rotation).
 _jwks_cache: dict[str, Any] = {}
 
-# Extrator de Bearer token: auto_error=True levanta 403 quando header ausente.
-# Mantemos esse comportamento (HTTPBearer já é coerente com AUTH-01).
-http_bearer = HTTPBearer()
+# Extrator de Bearer token com auto_error=False para permitir levantar 401
+# em vez do 403 padrão. RFC 7235 §3.1: 401 para ausência de credenciais.
+_http_bearer_extractor = HTTPBearer(auto_error=False)
+
+
+async def http_bearer(request: Request) -> HTTPAuthorizationCredentials:
+    """Extrai o Bearer token e levanta 401 (não 403) quando ausente."""
+    credentials = await _http_bearer_extractor(request)
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return credentials
 
 
 # ----------------------------------------------------------------------

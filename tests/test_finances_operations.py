@@ -273,10 +273,9 @@ def test_list_accounts_scoped_to_family():
 
 
 def test_accounts_require_auth():
-    """AUTH-FIN-01: sem override de get_current_user, /finances/accounts retorna 403.
+    """AUTH-FIN-01: sem override de get_current_user, /finances/accounts retorna 401.
 
-    HTTPBearer(auto_error=True) retorna 403 (não 401) para token ausente —
-    comportamento documentado do projeto (ver 07-RESEARCH.md Open Question 2).
+    _HTTPBearer401 retorna 401 para token ausente (RFC 7235 §3.1).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -296,13 +295,13 @@ def test_accounts_require_auth():
     def _session_override():
         yield mock_session
 
-    # Não sobrescreve get_current_user — HTTPBearer levanta 403
+    # Não sobrescreve get_current_user — _HTTPBearer401 levanta 401
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
         response = client.get(f"/finances/accounts?family_uuid={uuid4()}")
-        assert response.status_code == 403, (
-            f"Esperado 403 para requisição sem autenticação; recebido: {response.status_code}. "
+        assert response.status_code == 401, (
+            f"Esperado 401 para requisição sem autenticação; recebido: {response.status_code}. "
             f"Body: {response.text}"
         )
     finally:
