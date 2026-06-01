@@ -22,16 +22,16 @@
 
 ### Contas
 
-- [ ] **ACC-01**: Usuário autenticado pode criar conta para sua família (nome, tipo: corrente/poupança/cartão/investimento, moeda)
-- [ ] **ACC-02**: Usuário pode listar, detalhar e atualizar contas da família
-- [ ] **ACC-03**: Usuário pode arquivar conta (`is_active=false`) sem perder histórico de movimentações
+- [x] **ACC-01**: Usuário autenticado pode criar conta para sua família (nome, tipo: corrente/poupança/cartão/investimento, moeda)
+- [x] **ACC-02**: Usuário pode listar, detalhar e atualizar contas da família
+- [x] **ACC-03**: Usuário pode arquivar conta (`is_active=false`) sem perder histórico de movimentações
 
 ### Categorias
 
-- [ ] **CAT-01**: Usuário pode criar categoria de nível 1 (pai) para a família
-- [ ] **CAT-02**: Usuário pode criar subcategoria de nível 2 vinculada a uma categoria pai
-- [ ] **CAT-03**: Sistema rejeita criação de subcategoria filha de subcategoria — máximo 2 níveis
-- [ ] **CAT-04**: Usuário pode listar e atualizar categorias da família
+- [x] **CAT-01**: Usuário pode criar categoria de nível 1 (pai) para a família
+- [x] **CAT-02**: Usuário pode criar subcategoria de nível 2 vinculada a uma categoria pai
+- [x] **CAT-03**: Sistema rejeita criação de subcategoria filha de subcategoria — máximo 2 níveis
+- [x] **CAT-04**: Usuário pode listar e atualizar categorias da família
 
 ### Movimentações
 
@@ -59,8 +59,8 @@
 
 ### Autorização
 
-- [ ] **AUTH-FIN-01**: Todos os endpoints do domínio finances exigem Bearer token válido (401 sem token)
-- [ ] **AUTH-FIN-02**: Usuário só acessa contas, movimentações e lançamentos de famílias das quais é membro (403 caso contrário)
+- [x] **AUTH-FIN-01**: Todos os endpoints do domínio finances exigem Bearer token válido (401 sem token)
+- [x] **AUTH-FIN-02**: Usuário só acessa contas, movimentações e lançamentos de famílias das quais é membro (403 caso contrário)
 
 ---
 
@@ -92,15 +92,15 @@
 
 | Requisito | Fase | Status |
 |-----------|------|--------|
-| ACC-01 | Phase 7 | Pending |
-| ACC-02 | Phase 7 | Pending |
-| ACC-03 | Phase 7 | Pending |
-| CAT-01 | Phase 7 | Pending |
-| CAT-02 | Phase 7 | Pending |
-| CAT-03 | Phase 7 | Pending |
-| CAT-04 | Phase 7 | Pending |
-| AUTH-FIN-01 | Phase 7 | Pending |
-| AUTH-FIN-02 | Phase 7 | Pending |
+| ACC-01 | Phase 7 | Complete |
+| ACC-02 | Phase 7 | Complete |
+| ACC-03 | Phase 7 | Complete |
+| CAT-01 | Phase 7 | Complete |
+| CAT-02 | Phase 7 | Complete |
+| CAT-03 | Phase 7 | Complete |
+| CAT-04 | Phase 7 | Complete |
+| AUTH-FIN-01 | Phase 7 | Complete |
+| AUTH-FIN-02 | Phase 7 | Complete |
 | MOV-01 | Phase 8 | Pending |
 | MOV-02 | Phase 8 | Pending |
 | MOV-03 | Phase 8 | Pending |

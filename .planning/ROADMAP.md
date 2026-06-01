@@ -149,7 +149,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
-| 7. CRUD Account + Category | 3/3 | Complete   | 2026-06-01 |
+| 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
 | 8. Movimentações + Importação | 0/? | Not started | - |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
