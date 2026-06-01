@@ -332,6 +332,36 @@ async def list_categories(
     ]
 
 
+@router.get("/categories/{category_uuid}", response_model=CategoryReadPublic)
+async def get_category(
+    category_uuid: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CategoryReadPublic:
+    """CAT-04: Detalhe de categoria pelo UUID público."""
+    result = await session.exec(
+        select(Category).where(Category.uuid == category_uuid)
+    )
+    db_category = result.first()
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+
+    family_result = await session.exec(
+        select(Family).where(Family.id == db_category.family_id)
+    )
+    family = family_result.first()
+    await _require_family_access(db_category.family_id, current_user, session)
+
+    return CategoryReadPublic(
+        uuid=db_category.uuid,
+        family_uuid=family.uuid if family else category_uuid,
+        name=db_category.name,
+        created_at=db_category.created_at,
+        updated_at=db_category.updated_at,
+    )
+
+
+
 @router.patch("/categories/{category_uuid}", response_model=CategoryReadPublic)
 async def update_category(
     category_uuid: UUID,
@@ -427,37 +457,34 @@ async def create_subcategory(
 
 @router.get("/subcategory", response_model=list[SubcategoryReadPublic])
 async def list_subcategories(
-    category_uuid: UUID | None = None,
+    category_uuid: UUID,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[SubcategoryReadPublic]:
-    """CAT-04: Lista subcategorias; category_uuid como filtro opcional."""
-    if category_uuid is not None:
-        category_result = await session.exec(
-            select(Category).where(Category.uuid == category_uuid)
-        )
-        db_category = category_result.first()
-        if db_category is None:
-            raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    """CAT-04: Lista subcategorias; category_uuid obrigatório (D-12)."""
+    category_result = await session.exec(
+        select(Category).where(Category.uuid == category_uuid)
+    )
+    db_category = category_result.first()
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
 
-        await _require_family_access(db_category.family_id, current_user, session)
+    await _require_family_access(db_category.family_id, current_user, session)
 
-        subcategories_result = await session.exec(
-            select(Subcategory).where(Subcategory.category_id == db_category.id)
+    subcategories_result = await session.exec(
+        select(Subcategory).where(Subcategory.category_id == db_category.id)
+    )
+    subcategories = list(subcategories_result.all())
+    return [
+        SubcategoryReadPublic(
+            uuid=s.uuid,
+            category_uuid=category_uuid,
+            name=s.name,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
         )
-        subcategories = list(subcategories_result.all())
-        return [
-            SubcategoryReadPublic(
-                uuid=s.uuid,
-                category_uuid=category_uuid,
-                name=s.name,
-                created_at=s.created_at,
-                updated_at=s.updated_at,
-            )
-            for s in subcategories
-        ]
-    # Sem filtro — retorna lista vazia (seguro por padrão)
-    return []
+        for s in subcategories
+    ]
 
 
 @router.get("/subcategory/{subcategory_uuid}", response_model=SubcategoryReadPublic)
