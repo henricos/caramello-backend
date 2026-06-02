@@ -120,7 +120,7 @@
 
 **Wave 1** *(blocked on Wave 0 completion)*
 
-- [ ] 08-02-PLAN.md — movement.yaml sem type/is_duplicate (D-01/D-02) + regenerar models + migration 0003 (D-03)
+- [x] 08-02-PLAN.md — movement.yaml sem type/is_duplicate (D-01/D-02) + regenerar models + migration 0003 (D-03)
 
 **Wave 2** *(blocked on Wave 1 — usa o ORM regenerado)*
 
@@ -165,7 +165,7 @@
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
-| 8. Movimentações + Importação | 1/4 | In Progress|  |
+| 8. Movimentações + Importação | 2/4 | In Progress|  |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
 ---
