@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Domínio Financeiro
 status: executing
-last_updated: "2026-06-02T19:31:31.230Z"
-last_activity: 2026-06-02 -- Phase 8 planning complete
+last_updated: "2026-06-02T20:34:08.981Z"
+last_activity: 2026-06-02 -- Phase 08 execution started
 progress:
   total_phases: 4
   completed_phases: 2
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-30)
 
 **Core value:** Um backend sólido, seguro e extensível onde cada novo domínio de negócio pode ser adicionado sem tocar no que já existe.
-**Current focus:** Phase 8 — movimentações + importação
+**Current focus:** Phase 08 — movimenta-es-importa-o
 
 ## Current Position
 
-Phase: 8
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-02 -- Phase 8 planning complete
+Phase: 08 (movimenta-es-importa-o) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 08
+Last activity: 2026-06-02 -- Phase 08 execution started
 
 Progress: [__________] 0% (0/4 phases complete)
 

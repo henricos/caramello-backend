@@ -116,7 +116,7 @@
 **Plans**: 4 plans
 **Wave 0**
 
-- [ ] 08-01-PLAN.md — Stubs Nyquist de MOV-01..05 (test_finances_operations + test_finances_service) + deps ofxparse/openpyxl
+- [x] 08-01-PLAN.md — Stubs Nyquist de MOV-01..05 (test_finances_operations + test_finances_service) + deps ofxparse/openpyxl
 
 **Wave 1** *(blocked on Wave 0 completion)*
 
@@ -165,7 +165,7 @@
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
-| 8. Movimentações + Importação | 0/4 | Planned | - |
+| 8. Movimentações + Importação | 1/4 | In Progress|  |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
 ---
