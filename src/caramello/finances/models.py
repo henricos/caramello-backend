@@ -65,12 +65,10 @@ class Movement(SQLModel, table=True):
     id: int | None = Field(primary_key=True, default=None)
     uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
     account_id: int = Field(foreign_key="account.id", nullable=False)
-    type: str = Field(max_length=10, nullable=False)
     date: datetime = Field(nullable=False)
     amount: Decimal = Field(sa_column=Column(Numeric(15, 2), nullable=False))
     description: str = Field(max_length=255, nullable=False)
     import_hash: str | None = Field(unique=True, default=None)
-    is_duplicate: bool = Field(default=False, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -82,34 +80,28 @@ class Movement(SQLModel, table=True):
 class MovementRead(SQLModel):
     uuid: UUID
     account_id: int
-    type: str
     date: datetime
     amount: Decimal
     description: str
     import_hash: str | None
-    is_duplicate: bool
     created_at: datetime
     updated_at: datetime
 
 
 class MovementCreate(SQLModel):
     account_id: int
-    type: str
     date: datetime
     amount: Decimal
     description: str
     import_hash: str | None = None
-    is_duplicate: bool | None = None
 
 
 class MovementUpdate(SQLModel):
     account_id: int | None = None
-    type: str | None = None
     date: datetime | None = None
     amount: Decimal | None = None
     description: str | None = None
     import_hash: str | None = None
-    is_duplicate: bool | None = None
 
 
 class FinancialEntry(SQLModel, table=True):
