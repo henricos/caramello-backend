@@ -1668,11 +1668,8 @@ def test_movements_require_auth():
         if call_count_403[0] == 1:
             # Resolve Account por uuid
             r.first.return_value = fake_account
-        elif call_count_403[0] == 2:
-            # Resolve Family por id
-            r.first.return_value = fake_family_other
         else:
-            # Membership check: não-membro
+            # Membership check: não-membro (FamilyMember ausente → 403)
             r.first.return_value = None
         r.all.return_value = []
         return r

@@ -1,26 +1,35 @@
 # CARAMELLO-GENERATED: implemented
-"""Operações de negócio do domínio finances — Phase 7.
+"""Operações de negócio do domínio finances — Phase 7 + Phase 8.
 
 Cobre:
   - ACC-01/02/03: CRUD de Account scoped por família
   - CAT-01/02/04: CRUD de Category e Subcategory scoped por família
   - AUTH-FIN-01/02: 401/403 via get_current_user + _require_family_access
+  - MOV-01..05: registro individual, importação CSV/OFX/XLSX e confirmação
+  - D-15: listagem paginada de movimentações
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal
-from uuid import UUID
+from decimal import Decimal
+from typing import Any, Literal
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field as PydanticField
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from caramello.finances.models import Account, Category, Subcategory
+from caramello.finances.models import Account, Category, Movement, Subcategory
 from caramello.families.models import Family
 from caramello.shared.auth import get_current_user, _require_family_access
 from caramello.shared.database import get_session
+from caramello.finances.services import (
+    _compute_hash,
+    _normalize_description,
+    import_movements,
+    ParsedRow,
+)
 from caramello.users.models import User
 
 router = APIRouter(prefix="/finances", tags=["Finances"])
@@ -89,6 +98,41 @@ class SubcategoryReadPublic(BaseModel):
 
 class SubcategoryUpdatePublic(BaseModel):
     name: str | None = PydanticField(default=None, max_length=100)
+
+
+# ---------------------------------------------------------------------------
+# Schemas públicos de Movement — D-16 (sem account_uuid, sem id interno)
+# T-08-11: não vazam id/family_id
+# ---------------------------------------------------------------------------
+
+
+class MovementCreatePublic(BaseModel):
+    date: str  # ISO 8601 ou DD/MM/YYYY — parseado pela camada de serviço
+    amount: Decimal
+    description: str
+
+
+class MovementReadPublic(BaseModel):
+    uuid: UUID
+    date: datetime
+    amount: Decimal
+    description: str
+    import_hash: str | None = None  # D-16: opcional, para debug
+    created_at: datetime
+    updated_at: datetime
+
+
+class ImportResultPublic(BaseModel):
+    inserted: int
+    duplicates_skipped: int
+    potential_duplicates: list[dict[str, Any]]
+    error_lines: list[dict[str, Any]]
+    movements: list[MovementReadPublic]
+
+
+class ConfirmImportPublic(BaseModel):
+    account_uuid: UUID
+    movements: list[MovementCreatePublic]  # movimentações confirmadas a inserir
 
 
 # ---------------------------------------------------------------------------
@@ -561,4 +605,252 @@ async def update_subcategory(
         name=db_subcategory.name,
         created_at=db_subcategory.created_at,
         updated_at=db_subcategory.updated_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Movement — MOV-01..05, D-15, D-16, D-17, AUTH-FIN-01/02
+# T-08-09/10/11/12/13
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/accounts/{account_uuid}/movements",
+    response_model=MovementReadPublic,
+    status_code=201,
+)
+async def create_movement(
+    account_uuid: UUID,
+    movement_in: MovementCreatePublic,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MovementReadPublic:
+    """MOV-01: Registra movimentação individual scoped por conta/família.
+
+    D-17: retorna 409 com existing_uuid se hash já existe.
+    T-08-09: IDOR mitigado via _require_family_access.
+    T-08-10: Depends(get_current_user) → 401 sem token.
+    """
+    # Resolver account_uuid → Account (404 se inválido)
+    result = await session.exec(select(Account).where(Account.uuid == account_uuid))
+    db_account = result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    # Verificar membership — T-08-09: 403 para não-membro (IDOR mitigado)
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    # Parsear data (D-12: ISO primeiro, BR fallback)
+    from caramello.finances.services import _parse_date
+    date_val = _parse_date(movement_in.date, line=1)
+
+    # Computar hash para deduplicação (D-07)
+    row = ParsedRow(
+        date=date_val,
+        amount=movement_in.amount,
+        description=movement_in.description,
+        fitid=None,
+    )
+    computed_hash = _compute_hash(db_account.id, row)
+
+    # D-17: verificar se hash já existe → 409 com existing_uuid
+    dup_result = await session.exec(
+        select(Movement).where(Movement.import_hash == computed_hash)
+    )
+    dup = dup_result.first()
+    if dup is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "Movimentação já existe", "existing_uuid": str(dup.uuid)},
+        )
+
+    # Persistir movimentação
+    db_movement = Movement(
+        account_id=db_account.id,
+        date=date_val,
+        amount=movement_in.amount,
+        description=movement_in.description,
+        import_hash=computed_hash,
+    )
+    session.add(db_movement)
+    await session.commit()
+    await session.refresh(db_movement)
+
+    return MovementReadPublic(
+        uuid=db_movement.uuid,
+        date=db_movement.date,
+        amount=db_movement.amount,
+        description=db_movement.description,
+        import_hash=db_movement.import_hash,
+        created_at=db_movement.created_at,
+        updated_at=db_movement.updated_at,
+    )
+
+
+@router.get("/accounts/{account_uuid}/movements", response_model=list[MovementReadPublic])
+async def list_movements(
+    account_uuid: UUID,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[MovementReadPublic]:
+    """D-15: Lista movimentações da conta com paginação e filtros opcionais de data.
+
+    T-08-09: IDOR mitigado via _require_family_access.
+    T-08-10: Depends(get_current_user) → 401 sem token.
+    """
+    # Resolver account_uuid → Account
+    result = await session.exec(select(Account).where(Account.uuid == account_uuid))
+    db_account = result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    # Verificar membership — T-08-09: 403 para não-membro
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    # Construir query com filtros opcionais
+    # Usar session.execute() (não session.exec()) para queries com limit/offset (P8)
+    stmt = select(Movement).where(Movement.account_id == db_account.id)
+    if date_from:
+        from caramello.finances.services import _parse_date
+        stmt = stmt.where(Movement.date >= _parse_date(date_from, line=0))
+    if date_to:
+        from caramello.finances.services import _parse_date
+        stmt = stmt.where(Movement.date <= _parse_date(date_to, line=0))
+    stmt = stmt.order_by(Movement.date.desc()).offset(offset).limit(limit)
+
+    movements_execute_result = await session.execute(stmt)
+    movements = [row[0] for row in movements_execute_result.fetchall()]
+
+    return [
+        MovementReadPublic(
+            uuid=m.uuid,
+            date=m.date,
+            amount=m.amount,
+            description=m.description,
+            import_hash=m.import_hash,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
+        )
+        for m in movements
+    ]
+
+
+@router.post("/accounts/{account_uuid}/movements/import", response_model=ImportResultPublic)
+async def import_movements_endpoint(
+    account_uuid: UUID,
+    file: UploadFile = File(...),
+    format: Literal["csv", "ofx", "xlsx"] = Query(...),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ImportResultPublic:
+    """MOV-02/03/04/05: Importa arquivo de extrato bancário (CSV, OFX ou XLSX).
+
+    D-09: formato via query param.
+    D-13: >50% linhas inválidas → 422.
+    T-08-09: IDOR mitigado via _require_family_access.
+    T-08-12/13: on_conflict_do_nothing + error threshold.
+    """
+    # Resolver account_uuid → Account
+    result = await session.exec(select(Account).where(Account.uuid == account_uuid))
+    db_account = result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    # Verificar membership
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    content: bytes = await file.read()
+
+    try:
+        service_result = await import_movements(content, format, db_account.id, session)
+    except ValueError as e:
+        # D-13: abortar lote com >50% inválidas → 422
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Converter movements[] para MovementReadPublic
+    movements_public = []
+    for m in service_result.get("movements", []):
+        movements_public.append(
+            MovementReadPublic(
+                uuid=m["uuid"],
+                date=m["date"],
+                amount=m["amount"],
+                description=m["description"],
+                import_hash=None,
+                created_at=m.get("created_at", datetime.now(timezone.utc)),
+                updated_at=m.get("created_at", datetime.now(timezone.utc)),
+            )
+        )
+
+    return ImportResultPublic(
+        inserted=service_result["inserted"],
+        duplicates_skipped=service_result["duplicates_skipped"],
+        potential_duplicates=service_result["potential_duplicates"],
+        error_lines=service_result["error_lines"],
+        movements=movements_public,
+    )
+
+
+@router.post("/import/confirm", response_model=ImportResultPublic)
+async def confirm_import(
+    confirm_in: ConfirmImportPublic,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ImportResultPublic:
+    """D-08, MOV-05: Confirma e insere movimentações suspeitas de duplicata.
+
+    P4: import_hash=None nas confirmadas — PostgreSQL permite múltiplos NULL em UNIQUE.
+    T-08-09: IDOR mitigado via _require_family_access.
+    T-08-12: import_hash=None evita colisão de UNIQUE constraint.
+    """
+    # Resolver account_uuid → Account
+    result = await session.exec(
+        select(Account).where(Account.uuid == confirm_in.account_uuid)
+    )
+    db_account = result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    # Verificar membership
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    # Inserir movimentações confirmadas com import_hash=None (P4/D-08)
+    from caramello.finances.services import _parse_date
+    inserted_movements: list[MovementReadPublic] = []
+
+    for movement_in in confirm_in.movements:
+        date_val = _parse_date(movement_in.date, line=1)
+        db_movement = Movement(
+            account_id=db_account.id,
+            date=date_val,
+            amount=movement_in.amount,
+            description=movement_in.description,
+            import_hash=None,  # P4: permite múltiplos NULL em UNIQUE
+        )
+        session.add(db_movement)
+        await session.commit()
+        await session.refresh(db_movement)
+
+        inserted_movements.append(
+            MovementReadPublic(
+                uuid=db_movement.uuid,
+                date=db_movement.date,
+                amount=db_movement.amount,
+                description=db_movement.description,
+                import_hash=None,
+                created_at=db_movement.created_at,
+                updated_at=db_movement.updated_at,
+            )
+        )
+
+    return ImportResultPublic(
+        inserted=len(inserted_movements),
+        duplicates_skipped=0,
+        potential_duplicates=[],
+        error_lines=[],
+        movements=inserted_movements,
     )
