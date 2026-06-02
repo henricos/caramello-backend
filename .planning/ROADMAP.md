@@ -124,7 +124,7 @@
 
 **Wave 2** *(blocked on Wave 1 — usa o ORM regenerado)*
 
-- [ ] 08-03-PLAN.md — finances/services.py: parsers CSV/OFX/XLSX, hash, normalização e import_movements com dedup em lote
+- [x] 08-03-PLAN.md — finances/services.py: parsers CSV/OFX/XLSX, hash, normalização e import_movements com dedup em lote
 
 **Wave 3** *(blocked on Wave 2 — consome import_movements)*
 
@@ -165,7 +165,7 @@
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
-| 8. Movimentações + Importação | 2/4 | In Progress|  |
+| 8. Movimentações + Importação | 3/4 | In Progress|  |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
 ---
