@@ -113,7 +113,22 @@
   4. Reimportar o mesmo arquivo não duplica linhas no banco — linhas já existentes ficam com `is_duplicate=true`
   5. Campos de valor persistidos como `NUMERIC(15,2)` — `0.10 + 0.20 == 0.30` sem erro de ponto flutuante
 
-**Plans**: TBD
+**Plans**: 4 plans
+**Wave 0**
+
+- [ ] 08-01-PLAN.md — Stubs Nyquist de MOV-01..05 (test_finances_operations + test_finances_service) + deps ofxparse/openpyxl
+
+**Wave 1** *(blocked on Wave 0 completion)*
+
+- [ ] 08-02-PLAN.md — movement.yaml sem type/is_duplicate (D-01/D-02) + regenerar models + migration 0003 (D-03)
+
+**Wave 2** *(blocked on Wave 1 — usa o ORM regenerado)*
+
+- [ ] 08-03-PLAN.md — finances/services.py: parsers CSV/OFX/XLSX, hash, normalização e import_movements com dedup em lote
+
+**Wave 3** *(blocked on Wave 2 — consome import_movements)*
+
+- [ ] 08-04-PLAN.md — Endpoints de Movement em operations.py: POST individual (409), import CSV/OFX/XLSX, import/confirm, GET paginado
 
 ### Phase 9: Conciliação + Relatórios + MCP
 
@@ -150,7 +165,7 @@
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
-| 8. Movimentações + Importação | 0/? | Not started | - |
+| 8. Movimentações + Importação | 0/4 | Planned | - |
 | 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
 
 ---
