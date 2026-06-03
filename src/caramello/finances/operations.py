@@ -241,11 +241,13 @@ async def get_account(
         select(Family).where(Family.id == db_account.family_id)
     )
     family = family_result.first()
+    if family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
     await _require_family_access(db_account.family_id, current_user, session)
 
     return AccountReadPublic(
         uuid=db_account.uuid,
-        family_uuid=family.uuid if family else account_uuid,
+        family_uuid=family.uuid,
         name=db_account.name,
         type=db_account.type,
         currency=db_account.currency,
@@ -278,6 +280,8 @@ async def update_account(
         select(Family).where(Family.id == db_account.family_id)
     )
     family = family_result.first()
+    if family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
 
     # Verificar membership
     await _require_family_access(db_account.family_id, current_user, session)
@@ -296,7 +300,7 @@ async def update_account(
 
     return AccountReadPublic(
         uuid=db_account.uuid,
-        family_uuid=family.uuid if family else account_uuid,
+        family_uuid=family.uuid,
         name=db_account.name,
         type=db_account.type,
         currency=db_account.currency,
@@ -394,11 +398,13 @@ async def get_category(
         select(Family).where(Family.id == db_category.family_id)
     )
     family = family_result.first()
+    if family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
     await _require_family_access(db_category.family_id, current_user, session)
 
     return CategoryReadPublic(
         uuid=db_category.uuid,
-        family_uuid=family.uuid if family else category_uuid,
+        family_uuid=family.uuid,
         name=db_category.name,
         created_at=db_category.created_at,
         updated_at=db_category.updated_at,
@@ -428,6 +434,8 @@ async def update_category(
         select(Family).where(Family.id == db_category.family_id)
     )
     family = family_result.first()
+    if family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
 
     await _require_family_access(db_category.family_id, current_user, session)
 
@@ -442,7 +450,7 @@ async def update_category(
 
     return CategoryReadPublic(
         uuid=db_category.uuid,
-        family_uuid=family.uuid if family else category_uuid,
+        family_uuid=family.uuid,
         name=db_category.name,
         created_at=db_category.created_at,
         updated_at=db_category.updated_at,
