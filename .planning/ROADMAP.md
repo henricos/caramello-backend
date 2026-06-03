@@ -153,9 +153,25 @@
   3. `GET /finances/accounts/{uuid}/balance` retorna soma correta (Decimal) de créditos − débitos
   4. `GET /finances/families/{uuid}/balance` retorna saldo consolidado de todas as contas ativas
   5. `GET /finances/reports/monthly` agrupa lançamentos por competência e categoria pai; detalhe por subcategoria disponível com filtro de categoria
-  6. Ferramenta `suggest_category` e `list_my_financial_entries` aparecem em `GET /mcp` com Bearer token válido
+  6. ~~Ferramenta `suggest_category` e `list_my_financial_entries` aparecem em `GET /mcp` com Bearer token válido~~ — **deferido para M3 (decisão D-MCP-01 em 09-CONTEXT.md)**: APIs e services devem amadurecer antes de expor via MCP. `suggest_category` é entregue nesta fase como endpoint REST (`GET /finances/movements/{uuid}/suggest-category`), não como ferramenta MCP.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 0**
+
+- [ ] 09-01-PLAN.md — Stubs Nyquist (LAN-01..05, REL-01..05, D-MOV) + checkpoint de legitimidade + `uv add rapidfuzz`
+
+**Wave 1** *(paralelo ao Wave 0 — arquivos distintos)*
+
+- [ ] 09-02-PLAN.md — `responsible_user_id` em FinancialEntry + migration 0004 (down_revision="0003") + YAML DSL
+
+**Wave 2** *(blocked on 09-01 + 09-02)*
+
+- [ ] 09-03-PLAN.md — suggest_category (rapidfuzz) + POST reconcile (409) + GET/PATCH/GET-list entries com schema rico (LAN-01..05)
+
+**Wave 3** *(blocked on 09-03 — mesmo operations.py/services.py)*
+
+- [ ] 09-04-PLAN.md — Saldos conta/família + breakdown mensal/por membro (competência) + entry_uuid/filtro reconciled em Movement (REL-01..05, D-MOV)
 
 ---
 
@@ -166,7 +182,7 @@
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
 | 8. Movimentações + Importação | 4/4 | Complete   | 2026-06-02 |
-| 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
+| 9. Conciliação + Relatórios + MCP | 0/4 | Planned     | - |
 
 ---
 
