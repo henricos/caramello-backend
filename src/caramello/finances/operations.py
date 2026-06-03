@@ -26,6 +26,7 @@ from caramello.shared.auth import get_current_user, _require_family_access
 from caramello.shared.database import get_session
 from caramello.finances.services import (
     _compute_hash,
+    _parse_date,
     import_movements,
     ParsedRow,
 )
@@ -648,7 +649,6 @@ async def create_movement(
     await _require_family_access(db_account.family_id, current_user, session)
 
     # Parsear data (D-12: ISO primeiro, BR fallback)
-    from caramello.finances.services import _parse_date
     date_val = _parse_date(movement_in.date, line=1)
 
     # Computar hash para deduplicação (D-07)
@@ -722,10 +722,8 @@ async def list_movements(
     # Usar session.execute() (não session.exec()) para queries com limit/offset (P8)
     stmt = select(Movement).where(Movement.account_id == db_account.id)
     if date_from:
-        from caramello.finances.services import _parse_date
         stmt = stmt.where(Movement.date >= _parse_date(date_from, line=0))
     if date_to:
-        from caramello.finances.services import _parse_date
         stmt = stmt.where(Movement.date <= _parse_date(date_to, line=0))
     stmt = stmt.order_by(Movement.date.desc()).offset(offset).limit(limit)
 
@@ -828,7 +826,6 @@ async def confirm_import(
     # Inserir movimentações confirmadas com import_hash=None (P4/D-08)
     # Acumula todos os objetos antes do commit para garantir atomicidade —
     # evita estado parcial caso uma inserção falhe no meio do lote (CR-03).
-    from caramello.finances.services import _parse_date
     db_movements: list[Movement] = []
 
     for movement_in in confirm_in.movements:
