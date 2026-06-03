@@ -827,8 +827,10 @@ async def confirm_import(
     await _require_family_access(db_account.family_id, current_user, session)
 
     # Inserir movimentações confirmadas com import_hash=None (P4/D-08)
+    # Acumula todos os objetos antes do commit para garantir atomicidade —
+    # evita estado parcial caso uma inserção falhe no meio do lote (CR-03).
     from caramello.finances.services import _parse_date
-    inserted_movements: list[MovementReadPublic] = []
+    db_movements: list[Movement] = []
 
     for movement_in in confirm_in.movements:
         date_val = _parse_date(movement_in.date, line=1)
@@ -840,9 +842,15 @@ async def confirm_import(
             import_hash=None,  # P4: permite múltiplos NULL em UNIQUE
         )
         session.add(db_movement)
-        await session.commit()
-        await session.refresh(db_movement)
+        db_movements.append(db_movement)
 
+    # Um único commit — atômico para todo o lote
+    await session.commit()
+
+    # Refresh de todos após o commit
+    inserted_movements: list[MovementReadPublic] = []
+    for db_movement in db_movements:
+        await session.refresh(db_movement)
         inserted_movements.append(
             MovementReadPublic(
                 uuid=db_movement.uuid,
