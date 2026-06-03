@@ -427,7 +427,13 @@ async def import_movements(
         movements_result = await session.execute(
             select(Movement).where(Movement.import_hash.in_(inserted_hashes))
         )
-        for mvt in movements_result.scalars().all():
+        fetched = movements_result.scalars().all()
+        # Diferença entre enviados e recuperados indica race condition (on_conflict_do_nothing
+        # descartou silenciosamente linhas inseridas por chamada concorrente)
+        race_condition_skipped = len(values) - len(fetched)
+        if race_condition_skipped > 0:
+            duplicates_skipped += race_condition_skipped
+        for mvt in fetched:
             inserted_movements.append({
                 "uuid": str(mvt.uuid),
                 "date": mvt.date.isoformat(),
