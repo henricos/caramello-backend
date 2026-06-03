@@ -26,7 +26,6 @@ from caramello.shared.auth import get_current_user, _require_family_access
 from caramello.shared.database import get_session
 from caramello.finances.services import (
     _compute_hash,
-    _normalize_description,
     import_movements,
     ParsedRow,
 )
