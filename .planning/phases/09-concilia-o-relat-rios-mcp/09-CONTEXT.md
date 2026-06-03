@@ -105,11 +105,11 @@ Implementar conciliação de movimentações em lançamentos financeiros classif
 
 ### MCP
 
-- **D-MCP-01:** Todas as ferramentas MCP financeiras (`suggest_category`, `list_my_financial_entries`) deferidas para M3. Phase 9 não modifica a whitelist de `main.py`. Motivo: APIs e services devem amadurecer antes de expor via MCP.
+- **D-MCP-01** [informational]: Todas as ferramentas MCP financeiras (`suggest_category`, `list_my_financial_entries`) deferidas para M3. Phase 9 não modifica a whitelist de `main.py`. Motivo: APIs e services devem amadurecer antes de expor via MCP.
 
 ### Splits (deferidos para M3)
 
-- **D-SPLITS-DEFER:** Splits (1:N) fora do escopo desta fase. Arquitetura para M3: remover constraint `UNIQUE` em `financial_entry.movement_id` + adicionar campo `amount: NUMERIC(15,2) NOT NULL` por split + adicionar `responsible_user_id` por split. Phase 9 mantém 1:1 — nenhuma porta fechada.
+- **D-SPLITS-DEFER** [informational]: Splits (1:N) fora do escopo desta fase. Arquitetura para M3: remover constraint `UNIQUE` em `financial_entry.movement_id` + adicionar campo `amount: NUMERIC(15,2) NOT NULL` por split + adicionar `responsible_user_id` por split. Phase 9 mantém 1:1 — nenhuma porta fechada.
 
 ### Claude's Discretion
 

@@ -575,7 +575,7 @@ class BalanceResponse(BaseModel):
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`FinancialEntryRichPublic` — Pydantic model separado ou schema inline?**
    - What we know: CONTEXT.md delega ao planner (Claude's Discretion).
