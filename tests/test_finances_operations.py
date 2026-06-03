@@ -101,6 +101,9 @@ def test_finances_router_paths():
         "/finances/categories/{category_uuid}",
         "/finances/subcategory",
         "/finances/subcategory/{subcategory_uuid}",
+        "/finances/accounts/{account_uuid}/movements",
+        "/finances/accounts/{account_uuid}/movements/import",
+        "/finances/import/confirm",
     }
     missing = expected - paths
     assert not missing, (
