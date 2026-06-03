@@ -137,8 +137,8 @@ def _parse_csv_with_errors(
             fitid=None,
         ))
 
-    # D-13: abort se >50% das linhas falharem
-    if total_data_rows > 0 and len(error_lines) / total_data_rows > 0.5:
+    # D-13: abort se >=50% das linhas falharem (inclusive — alinha com mensagem de erro)
+    if total_data_rows > 0 and len(error_lines) / total_data_rows >= 0.5:
         raise ValueError(
             f"Mais de 50% das linhas falharam ({len(error_lines)}/{total_data_rows}). "
             "Verificar formato do arquivo."
