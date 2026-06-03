@@ -29,9 +29,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.add_column(
         "movement",
-        sa.Column("type", sa.String(length=10), nullable=False, server_default="credito"),
+        sa.Column("type", sa.String(length=10), nullable=False, server_default=sa.text("'credito'")),
     )
     op.add_column(
         "movement",
-        sa.Column("is_duplicate", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("is_duplicate", sa.Boolean(), nullable=False, server_default=sa.text("false")),
     )
