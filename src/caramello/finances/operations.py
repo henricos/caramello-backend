@@ -1619,9 +1619,7 @@ async def get_family_balance(
     await _require_family_access(db_family.id, current_user, session)
 
     accounts_result = await session.exec(
-        select(Account).where(
-            Account.family_id == db_family.id, Account.is_active == True
-        )  # noqa: E712
+        select(Account).where(Account.family_id == db_family.id, Account.is_active)  # noqa: E712
     )
     accounts = list(accounts_result.all())
 
