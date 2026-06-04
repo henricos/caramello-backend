@@ -1362,8 +1362,9 @@ async def update_entry(
         db_entry.competencia_year = entry_in.competencia_year
     if entry_in.competencia_month is not None:
         db_entry.competencia_month = entry_in.competencia_month
-    if entry_in.notes is not None:
-        db_entry.notes = entry_in.notes
+    # WR-04: usa model_fields_set para notes (campo nullable) — distingue "não enviado" de null=limpar
+    if "notes" in entry_in.model_fields_set:
+        db_entry.notes = entry_in.notes  # None = limpar nota; valor = atualizar
     if entry_in.is_recorrente is not None:
         db_entry.is_recorrente = entry_in.is_recorrente
 
