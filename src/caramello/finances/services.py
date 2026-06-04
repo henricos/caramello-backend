@@ -16,10 +16,9 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from caramello.finances.models import Movement
 
@@ -124,19 +123,23 @@ def _parse_csv_with_errors(
         try:
             amount_val = Decimal(str(amount_str))
         except (InvalidOperation, ValueError):
-            error_lines.append({
-                "line_number": i,
-                "reason": f"amount inválido: {amount_str!r}",
-            })
+            error_lines.append(
+                {
+                    "line_number": i,
+                    "reason": f"amount inválido: {amount_str!r}",
+                }
+            )
             continue
 
         description = norm.get("description", "").strip()
-        rows.append(ParsedRow(
-            date=date_val,
-            amount=amount_val,
-            description=description,
-            fitid=None,
-        ))
+        rows.append(
+            ParsedRow(
+                date=date_val,
+                amount=amount_val,
+                description=description,
+                fitid=None,
+            )
+        )
 
     # D-13: abort se >=50% das linhas falharem (inclusive — alinha com mensagem de erro)
     if total_data_rows > 0 and len(error_lines) / total_data_rows >= 0.5:
@@ -191,7 +194,9 @@ def _parse_ofx_with_errors(
             if not isinstance(date_val, datetime):
                 # ofxparse pode retornar date ou datetime
                 date_val = datetime(
-                    date_val.year, date_val.month, date_val.day,
+                    date_val.year,
+                    date_val.month,
+                    date_val.day,
                     tzinfo=timezone.utc,
                 )
             elif date_val.tzinfo is None:
@@ -201,12 +206,14 @@ def _parse_ofx_with_errors(
             description = str(txn.memo or txn.payee or "").strip()
             fitid = str(txn.id) if txn.id else None
 
-            rows.append(ParsedRow(
-                date=date_val,
-                amount=amount_val,
-                description=description,
-                fitid=fitid,
-            ))
+            rows.append(
+                ParsedRow(
+                    date=date_val,
+                    amount=amount_val,
+                    description=description,
+                    fitid=fitid,
+                )
+            )
         except Exception as e:
             error_lines.append({"line_number": i, "reason": str(e)})
 
@@ -260,10 +267,12 @@ def _parse_xlsx_with_errors(
 
             # Garantir que temos células suficientes
             if len(cells) <= max(date_idx, amount_idx, desc_idx):
-                error_lines.append({
-                    "line_number": i,
-                    "reason": "Linha com colunas insuficientes",
-                })
+                error_lines.append(
+                    {
+                        "line_number": i,
+                        "reason": "Linha com colunas insuficientes",
+                    }
+                )
                 continue
 
             date_raw = cells[date_idx]
@@ -274,7 +283,8 @@ def _parse_xlsx_with_errors(
             try:
                 if isinstance(date_raw, datetime):
                     date_val = (
-                        date_raw if date_raw.tzinfo
+                        date_raw
+                        if date_raw.tzinfo
                         else date_raw.replace(tzinfo=timezone.utc)
                     )
                 elif date_raw is not None:
@@ -289,19 +299,23 @@ def _parse_xlsx_with_errors(
             try:
                 amount_val = Decimal(str(amount_raw))
             except (InvalidOperation, ValueError, TypeError):
-                error_lines.append({
-                    "line_number": i,
-                    "reason": f"amount inválido: {amount_raw!r}",
-                })
+                error_lines.append(
+                    {
+                        "line_number": i,
+                        "reason": f"amount inválido: {amount_raw!r}",
+                    }
+                )
                 continue
 
             description = str(desc_raw or "").strip()
-            rows.append(ParsedRow(
-                date=date_val,
-                amount=amount_val,
-                description=description,
-                fitid=None,
-            ))
+            rows.append(
+                ParsedRow(
+                    date=date_val,
+                    amount=amount_val,
+                    description=description,
+                    fitid=None,
+                )
+            )
     finally:
         wb.close()  # P5: OBRIGATÓRIO em read_only mode
 
@@ -323,11 +337,12 @@ async def suggest_category(
     a complexidade (Open Question 2 do RESEARCH).
     """
     from rapidfuzz import fuzz
+
     from caramello.finances.models import (
+        Account,
+        Category,
         FinancialEntry,
         Subcategory,
-        Category,
-        Account,
     )
 
     # 1. Buscar Movement alvo pelo UUID (session.execute — não session.exec, pitfall P3)
@@ -396,7 +411,9 @@ async def account_balance(account_id: int, session: AsyncSession) -> Decimal:
     total = result.scalar_one_or_none()
     if total is None:
         return Decimal("0.00")
-    return Decimal(str(total))  # CR-04: garante Decimal independente do tipo retornado pelo driver
+    return Decimal(
+        str(total)
+    )  # CR-04: garante Decimal independente do tipo retornado pelo driver
 
 
 async def family_balance(family_id: int, session: AsyncSession) -> Decimal:
@@ -431,11 +448,12 @@ async def monthly_breakdown(
     Usa session.execute() com func.sum + group_by (pitfall P3, D-REP-04).
     """
     from sqlalchemy import func
+
     from caramello.finances.models import (
+        Account,
+        Category,
         FinancialEntry,
         Subcategory,
-        Category,
-        Account,
     )
     from caramello.users.models import User
 
@@ -470,9 +488,7 @@ async def monthly_breakdown(
     # Filtro opcional por membro (D-REP-01)
     # WR-02: usa session.exec para single-entity select, evitando ambiguidade de row-wrapping
     if member_uuid is not None:
-        user_result = await session.exec(
-            select(User).where(User.uuid == member_uuid)
-        )
+        user_result = await session.exec(select(User).where(User.uuid == member_uuid))
         user = user_result.first()
         if user is not None:
             stmt = stmt.where(FinancialEntry.responsible_user_id == user.id)
@@ -505,9 +521,10 @@ async def by_member_breakdown(
     Usa session.execute() com func.sum + group_by (pitfall P3, D-REP-04).
     """
     from sqlalchemy import func
+
     from caramello.finances.models import (
-        FinancialEntry,
         Account,
+        FinancialEntry,
     )
     from caramello.users.models import User
 
@@ -518,7 +535,9 @@ async def by_member_breakdown(
             func.sum(Movement.amount).label("total"),
             func.count(FinancialEntry.id).label("count"),
         )
-        .select_from(FinancialEntry)  # CR-02: FROM clause explícito para evitar ProgrammingError
+        .select_from(
+            FinancialEntry
+        )  # CR-02: FROM clause explícito para evitar ProgrammingError
         .outerjoin(User, FinancialEntry.responsible_user_id == User.id)
         .join(Movement, FinancialEntry.movement_id == Movement.id)
         .join(Account, Movement.account_id == Account.id)
@@ -624,15 +643,17 @@ async def import_movements(
 
         for h in csv_xlsx_existing:
             row = hash_map[h]
-            potential_duplicates.append({
-                "new_row": {
-                    "date": row.date.date().isoformat(),
-                    "amount": str(row.amount),
-                    "description": row.description,
-                },
-                "existing_movement_uuid": hash_to_uuid.get(h),
-                "hash": h,
-            })
+            potential_duplicates.append(
+                {
+                    "new_row": {
+                        "date": row.date.date().isoformat(),
+                        "amount": str(row.amount),
+                        "description": row.description,
+                    },
+                    "existing_movement_uuid": hash_to_uuid.get(h),
+                    "hash": h,
+                }
+            )
 
     # Inserir rows sem duplicata via pg_insert + on_conflict_do_nothing (P4 safety net)
     inserted_movements: list[dict[str, Any]] = []
@@ -642,16 +663,18 @@ async def import_movements(
         values = []
         for h, row in to_insert:
             now = datetime.now(timezone.utc)
-            values.append({
-                "uuid": uuid4(),
-                "account_id": account_id,
-                "date": row.date,
-                "amount": row.amount,
-                "description": row.description,
-                "import_hash": h,
-                "created_at": now,
-                "updated_at": now,
-            })
+            values.append(
+                {
+                    "uuid": uuid4(),
+                    "account_id": account_id,
+                    "date": row.date,
+                    "amount": row.amount,
+                    "description": row.description,
+                    "import_hash": h,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
 
         stmt = (
             pg_insert(Movement.__table__)
@@ -673,14 +696,16 @@ async def import_movements(
         if race_condition_skipped > 0:
             duplicates_skipped += race_condition_skipped
         for mvt in fetched:
-            inserted_movements.append({
-                "uuid": str(mvt.uuid),
-                "date": mvt.date.isoformat(),
-                "amount": str(mvt.amount),
-                "description": mvt.description,
-                "created_at": mvt.created_at.isoformat(),
-                "updated_at": mvt.updated_at.isoformat(),  # WR-03: retornar updated_at para fidelidade no response
-            })
+            inserted_movements.append(
+                {
+                    "uuid": str(mvt.uuid),
+                    "date": mvt.date.isoformat(),
+                    "amount": str(mvt.amount),
+                    "description": mvt.description,
+                    "created_at": mvt.created_at.isoformat(),
+                    "updated_at": mvt.updated_at.isoformat(),  # WR-03: retornar updated_at para fidelidade no response
+                }
+            )
 
     return {
         "inserted": len(inserted_movements),

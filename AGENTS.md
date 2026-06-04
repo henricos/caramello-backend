@@ -12,9 +12,26 @@ Para orientação geral:
 
 ## DSL First
 
-Este projeto gera código automaticamente a partir de definições YAML em `dsl/`. Models, routers e testes são produzidos por geração - nunca devem ser editados diretamente em `src/caramello/models` ou `src/caramello/api/generated`, pois serão sobrescritos.
+Este projeto gera código automaticamente a partir de definições YAML em `dsl/`. O DSL é **sempre a origem** — nunca escreva código gerado diretamente.
 
-O fluxo: editar YAML → gerar → validar. Comandos em `docs/dev.md`.
+### Entidades (`dsl/entities/*.yaml`)
+
+Models, routers e testes são gerados automaticamente. Nunca edite diretamente:
+- `src/caramello/{domain}/models.py`
+- `src/caramello/{domain}/router.py`
+
+Fluxo: editar YAML → `bin/generate_code` → validar.
+
+### Operações de negócio (`dsl/operations/{domain}.yaml`)
+
+Endpoints de negócio em `{domain}/operations.py` também seguem DSL first — **sem exceções**.
+
+**Fluxo obrigatório para qualquer novo endpoint:**
+1. Declarar a operação em `dsl/operations/{domain}.yaml`
+2. Rodar `bin/generate_code` → cria stub com `raise NotImplementedError`
+3. Implementar o stub
+
+**Nunca** adicione endpoints diretamente em `operations.py` sem passar pelo DSL. Se `operations.py` estiver marcado `# CARAMELLO-GENERATED: implemented`, isso não é licença para adicionar rotas sem DSL — apenas autoriza editar implementações já declaradas.
 
 Regras detalhadas da DSL: `docs/dsl_rules.md`.
 
