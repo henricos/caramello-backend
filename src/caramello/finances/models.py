@@ -149,6 +149,7 @@ class FinancialEntryRead(SQLModel):
     competencia_month: int
     notes: str | None
     is_recorrente: bool
+    responsible_user_uuid: UUID | None = None  # CR-03: campo ausente nos schemas DSL
     created_at: datetime
     updated_at: datetime
 
@@ -159,7 +160,8 @@ class FinancialEntryCreate(SQLModel):
     competencia_year: int
     competencia_month: int
     notes: str | None = None
-    is_recorrente: bool | None = None
+    is_recorrente: bool = False  # IN-01: default consistente com DSL (nullable=false, default=false)
+    responsible_user_uuid: UUID | None = None  # CR-03: campo ausente nos schemas DSL
 
 
 class FinancialEntryUpdate(SQLModel):
@@ -169,6 +171,7 @@ class FinancialEntryUpdate(SQLModel):
     competencia_month: int | None = None
     notes: str | None = None
     is_recorrente: bool | None = None
+    responsible_user_uuid: UUID | None = None  # CR-03: campo ausente nos schemas DSL
 
 
 class Category(SQLModel, table=True):
