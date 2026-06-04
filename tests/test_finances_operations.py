@@ -119,10 +119,10 @@ def test_finances_router_paths():
 
 
 def test_finances_router_paths_phase9():
-    """Stubs Nyquist para os 8 paths da fase 9.
+    """Valida os 8 paths da fase 9 — todos implementados pelo plano 09-03/09-04.
 
-    Salta se qualquer um dos paths ainda não existir no router (plano 09-04
-    Task 3 remove esse skip quando todos os endpoints forem implementados).
+    Plano 09-04 Task 3: guard _skip_if_phase9_missing removido — endpoints agora
+    são assertados diretamente sem condição de skip.
     """
     _skip_if_stub()
     ops_mod = pytest.importorskip("caramello.finances.operations")
@@ -139,9 +139,10 @@ def test_finances_router_paths_phase9():
         "/finances/reports/by-member",
     }
     missing = phase9_expected - paths
-    if missing:
-        pytest.skip(f"Fase 9 paths ainda não implementados: {missing}")
-    assert not missing
+    assert not missing, (
+        f"Fase 9 paths ausentes em finances.operations.router: {missing}. "
+        f"Encontrados: {paths}"
+    )
 
 
 def test_create_account_returns_uuid():
@@ -1738,8 +1739,8 @@ def test_reconcile_movement():
 
     Resposta deve incluir schema rico: uuid, movement, subcategory_uuid,
     competencia_year, is_recorrente.
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
@@ -1856,8 +1857,8 @@ def test_reconcile_409_duplicate():
 
     Quando session.commit levanta IntegrityError, o endpoint deve fazer
     rollback e retornar 409 com mensagem de erro (D-REC-01).
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from sqlalchemy.exc import IntegrityError
@@ -1944,8 +1945,8 @@ def test_suggest_category():
 
     Retorna lista ordenada por score desc. Cada item deve ter:
     subcategory_uuid, subcategory_name, category_uuid, category_name, score.
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
     """
-    _skip_if_phase9_missing()
     from fastapi.testclient import TestClient
 
     from caramello.main import app
@@ -1993,8 +1994,8 @@ def test_update_entry():
     """LAN-05, D-REC-04: PATCH /finances/entries/{uuid} atualiza lançamento.
 
     Atualiza subcategory_uuid, competencia_year, notes e retorna schema rico.
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
@@ -2096,8 +2097,8 @@ def test_entry_responsible_user_uuid():
     """D-ATTR, D-REC-04: PATCH entries/{uuid} com responsible_user_uuid atribui responsável.
 
     PATCH com responsible_user_uuid: null deve limpar o campo (sentinela model_fields_set).
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
     """
-    _skip_if_phase9_missing()
     from fastapi.testclient import TestClient
 
     from caramello.main import app
@@ -2153,8 +2154,8 @@ def test_account_balance():
     """REL-01, D-BAL-01: GET /finances/accounts/{uuid}/balance retorna saldo.
 
     Resposta: {account_uuid, balance (string), currency}.
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
@@ -2216,8 +2217,8 @@ def test_family_balance():
     """REL-02, D-BAL-02: GET /finances/families/{uuid}/balance retorna saldo consolidado.
 
     Resposta: {family_uuid, total_balance, accounts: [...]}.
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
@@ -2285,8 +2286,8 @@ def test_monthly_report():
 
     Resposta: {period, total, rows} onde cada row tem category_uuid,
     subcategory_uuid e total.
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
@@ -2347,8 +2348,8 @@ def test_report_uses_competencia():
 
     Verifica que a rota existe e aceita os parâmetros corretos.
     O relatório opera sobre competencia_year/month — não sobre Movement.date.
+    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
     """
-    _skip_if_phase9_missing()
     from fastapi.testclient import TestClient
 
     from caramello.families.models import Family  # type: ignore[import-not-found]
@@ -2412,8 +2413,8 @@ def test_movement_entry_uuid_field():
 
     entry_uuid: UUID | None — null para movimentações pendentes de conciliação.
     Implementado via LEFT JOIN com FinancialEntry.
+    Plano 09-04 Task 3: guard removido — campo e LEFT JOIN implementados em 09-04.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
@@ -2492,8 +2493,8 @@ def test_movement_reconciled_filter():
 
     Filtro opcional: reconciled=false retorna apenas movimentos sem lançamento;
     reconciled=true retorna apenas conciliados. Implementado via LEFT JOIN + IS NULL.
+    Plano 09-04 Task 3: guard removido — filtro implementado em 09-04.
     """
-    _skip_if_phase9_missing()
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
