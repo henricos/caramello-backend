@@ -55,6 +55,12 @@ fields:
     nullable: false
     description: "Indica se o lançamento é recorrente (LAN-04)."
 
+  - name: responsible_user_id
+    type: int
+    foreign_key: "user.id"
+    nullable: true
+    description: "FK nullable para User — atribuição de responsável pelo lançamento (D-SCHEMA-01/02, D-ATTR-03)."
+
   - name: created_at
     type: datetime
     default_factory: now_utc
