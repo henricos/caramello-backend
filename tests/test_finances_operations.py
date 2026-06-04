@@ -1310,6 +1310,19 @@ def test_import_deduplication():
 
     csv_content = b"date,amount,description\n2026-01-15,-150.00,PIX FULANO\n"
 
+    # WR-05: calcular o hash real para que o pre-check mock rejeite a linha corretamente
+    from decimal import Decimal
+
+    from caramello.finances.services import ParsedRow, _compute_hash  # type: ignore[import-not-found]
+
+    real_row = ParsedRow(
+        date=datetime(2026, 1, 15, tzinfo=timezone.utc),
+        amount=Decimal("-150.00"),
+        description="PIX FULANO",
+        fitid=None,
+    )
+    real_hash = _compute_hash(account_id=10, row=real_row)
+
     call_count = [0]
 
     async def _exec(_stmt):
@@ -1324,10 +1337,10 @@ def test_import_deduplication():
         r.all.return_value = []
         return r
 
-    # Pre-check retorna o hash como já existente — simula reimportação
+    # Pre-check retorna o hash real como já existente — simula reimportação (WR-05)
     mock_execute_result = MagicMock()
     mock_execute_result.fetchall.return_value = [
-        ("abc123hash_already_in_db",)
+        (real_hash,)
     ]
 
     mock_session = AsyncMock()
@@ -2002,10 +2015,12 @@ def test_update_entry():
 
     from caramello.finances.models import (  # type: ignore[import-not-found]
         Account,
+        Category,
         FinancialEntry,
         Movement,
         Subcategory,
     )
+    from caramello.families.models import FamilyMember  # type: ignore[import-not-found]
     from caramello.main import app
     from caramello.shared.auth import get_current_user
     from caramello.shared.database import get_session
@@ -2013,6 +2028,7 @@ def test_update_entry():
     fake_user = _make_fake_user()
     entry_uuid = uuid4()
     sub_uuid = uuid4()
+    cat_uuid = uuid4()
 
     fake_entry = FinancialEntry(
         id=1,
@@ -2047,21 +2063,61 @@ def test_update_entry():
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
+    fake_subcategory = Subcategory(
+        id=1,
+        uuid=sub_uuid,
+        category_id=1,
+        family_id=1,
+        name="Sub Teste",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    fake_category = Category(
+        id=1,
+        uuid=cat_uuid,
+        family_id=1,
+        name="Cat Teste",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    fake_member = FamilyMember(
+        family_id=1,
+        user_id=fake_user.id,
+        role="member",
+        joined_at=datetime.now(timezone.utc),
+    )
+
+    # WR-06: mock com contador de chamadas — retorna objeto correto por ordem de exec
+    # Ordem: 1=FinancialEntry, 2=Movement(auth), 3=Account, 4=FamilyMember(_require_family_access),
+    #        5=Subcategory(update), 6=Subcategory(reload pós-commit), 7=Category(reload pós-commit)
+    exec_call_count = [0]
 
     async def _exec(stmt):
         r = MagicMock()
-        r.first.return_value = fake_entry
+        exec_call_count[0] += 1
+        n = exec_call_count[0]
+        if n == 1:
+            r.first.return_value = fake_entry
+        elif n == 2:
+            r.first.return_value = fake_movement
+        elif n == 3:
+            r.first.return_value = fake_account
+        elif n == 4:
+            r.first.return_value = fake_member
+        elif n == 5:
+            r.first.return_value = fake_subcategory
+        elif n == 6:
+            r.first.return_value = fake_subcategory
+        elif n == 7:
+            r.first.return_value = fake_category
+        else:
+            r.first.return_value = None
         r.all.return_value = []
-        return r
-
-    async def _execute(stmt):
-        r = MagicMock()
-        r.first.return_value = fake_account
         return r
 
     mock_session = AsyncMock()
     mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(side_effect=_execute)
+    mock_session.execute = AsyncMock(return_value=MagicMock())
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock()
@@ -2082,13 +2138,14 @@ def test_update_entry():
                 "notes": "Nota atualizada",
             },
         )
-        # 200 esperado; 404 aceitável (entry não existe no mock)
-        assert response.status_code in (200, 404), (
-            f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
+        # WR-06: asserta apenas 200 e valida shape do body (não aceita 404 como sucesso)
+        assert response.status_code == 200, (
+            f"Esperado 200; foi {response.status_code}: {response.text}"
         )
-        if response.status_code == 200:
-            body = response.json()
-            assert "uuid" in body, "Resposta deve conter 'uuid'"
+        body = response.json()
+        assert "uuid" in body, "Resposta deve conter 'uuid'"
+        assert "subcategory_uuid" in body, "Resposta deve conter 'subcategory_uuid'"
+        assert "category_uuid" in body, "Resposta deve conter 'category_uuid'"
     finally:
         app.dependency_overrides.clear()
 
