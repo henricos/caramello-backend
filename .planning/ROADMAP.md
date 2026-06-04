@@ -159,11 +159,11 @@
 
 **Wave 0**
 
-- [ ] 09-01-PLAN.md — Stubs Nyquist (LAN-01..05, REL-01..05, D-MOV) + checkpoint de legitimidade + `uv add rapidfuzz`
+- [x] 09-01-PLAN.md — Stubs Nyquist (LAN-01..05, REL-01..05, D-MOV) + checkpoint de legitimidade + `uv add rapidfuzz`
 
 **Wave 1** *(paralelo ao Wave 0 — arquivos distintos)*
 
-- [ ] 09-02-PLAN.md — `responsible_user_id` em FinancialEntry + migration 0004 (down_revision="0003") + YAML DSL
+- [x] 09-02-PLAN.md — `responsible_user_id` em FinancialEntry + migration 0004 (down_revision="0003") + YAML DSL
 
 **Wave 2** *(blocked on 09-01 + 09-02)*
 
@@ -182,7 +182,7 @@
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
 | 8. Movimentações + Importação | 4/4 | Complete   | 2026-06-02 |
-| 9. Conciliação + Relatórios + MCP | 0/4 | Planned     | - |
+| 9. Conciliação + Relatórios + MCP | 2/4 | In Progress|  |
 
 ---
 
