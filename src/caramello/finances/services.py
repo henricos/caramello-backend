@@ -515,6 +515,7 @@ async def by_member_breakdown(
             func.sum(Movement.amount).label("total"),
             func.count(FinancialEntry.id).label("count"),
         )
+        .select_from(FinancialEntry)  # CR-02: FROM clause explícito para evitar ProgrammingError
         .outerjoin(User, FinancialEntry.responsible_user_id == User.id)
         .join(Movement, FinancialEntry.movement_id == Movement.id)
         .join(Account, Movement.account_id == Account.id)
