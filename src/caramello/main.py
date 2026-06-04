@@ -23,6 +23,7 @@ from caramello.users import operations as user_operations
 from caramello.users import router as user_router
 from caramello.families import operations as families_operations  # noqa: E402
 from caramello.families import router as families_router  # noqa: E402
+from caramello.finances import operations as finances_operations  # noqa: E402
 
 
 @asynccontextmanager
@@ -56,6 +57,7 @@ app.include_router(user_operations.router)
 app.include_router(user_router.router)
 app.include_router(families_operations.router)
 app.include_router(families_router.router)
+app.include_router(finances_operations.router)
 
 # MCP — montar DEPOIS de todos os include_router. Routers registrados após
 # mount_http() não aparecem como ferramentas (RESEARCH.md Pitfall 2).

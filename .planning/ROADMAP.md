@@ -12,8 +12,8 @@
 ### Phases
 
 - [x] **Phase 6: Fundação DSL + Schema** - YAMLs, extensão do gerador (Decimal + filters), Category + Subcategory e migration 0002 (completed 2026-05-31)
-- [ ] **Phase 7: CRUD Account + Category** - Operações de negócio com controle de acesso e validações
-- [ ] **Phase 8: Movimentações + Importação** - Registro individual, importação CSV/OFX/XLSX e deduplicação
+- [x] **Phase 7: CRUD Account + Category** - Operações de negócio com controle de acesso e validações (completed 2026-06-01)
+- [x] **Phase 8: Movimentações + Importação** - Registro individual, importação CSV/OFX/XLSX e deduplicação (completed 2026-06-02)
 - [ ] **Phase 9: Conciliação + Relatórios + MCP** - Lançamentos financeiros, saldos, breakdown e ferramentas MCP
 
 ---
@@ -61,21 +61,33 @@
 **Requirements**: ACC-01, ACC-02, ACC-03, CAT-01, CAT-02, CAT-03, CAT-04, AUTH-FIN-01, AUTH-FIN-02
 **Technical constraints**:
 
-- `finances/operations.py`: CRUD de Account e Category
-- Helper `_require_account_access(account_uuid, current_user, session)` via JOIN `Account → Family → FamilyMember` — retorna 403 se usuário não é membro
-- Validação max 2 níveis em Category: rejeitar criação de subcategoria cujo `parent_id` já tem `parent_id` definido
-- Routers `account_router` e `category_router` registrados em `main.py` ANTES de `FastApiMCP(...)` (pitfall P7)
-- `selectinload` explícito em queries que serializam relacionamentos (pitfall P3)
+- `finances/operations.py`: CRUD de Account, Category e Subcategory com schemas públicos `*Public` (UUID, nunca `id`/`family_id`)
+- Helper `_require_family_access(family_id, current_user, session)` em `shared/auth.py` (import lazy de FamilyMember) — retorna 403 se usuário não é membro; reutilizável nas Phases 8/9
+- Hierarquia max 2 níveis (CAT-03) enforced ESTRUTURALMENTE pelo schema de duas tabelas (Subcategory → Category); sem validação de `parent_id`
+- Router `finances_operations.router` registrado em `main.py` ANTES de `FastApiMCP(...)` (pitfall P7); `finances/router.py` gerado NÃO registrado (D-01/D-02)
+- `updated_at` definido manualmente no PATCH (sem `onupdate` automático)
 
 **Success Criteria** (what must be TRUE):
 
-  1. `POST /finances/accounts` cria conta com nome, tipo e moeda; resposta inclui `uuid`
-  2. `GET /finances/accounts` retorna apenas contas da família do usuário autenticado; 401 sem token; 403 para família alheia
+  1. `POST /finances/accounts` cria conta com nome, tipo e moeda; resposta inclui `uuid`, sem `id`/`family_id`
+  2. `GET /finances/accounts` retorna apenas contas da família do usuário autenticado; 403 sem token; 403 para família alheia
   3. `PATCH /finances/accounts/{uuid}` arquiva conta com `is_active=false`; movimentações existentes permanecem
-  4. `POST /finances/categories` cria categoria pai (sem `parent_id`)
-  5. `POST /finances/categories` com `parent_id` de nível 1 cria subcategoria; com `parent_id` de nível 2 retorna 422
+  4. `POST /finances/categories` cria categoria pai (nível 1)
+  5. `POST /finances/subcategory` com `category_uuid` válido cria subcategoria (nível 2); não existe rota de nível 3 (CAT-03 estrutural)
 
-**Plans**: TBD
+**Plans**: 3 plans
+**Wave 0**
+
+- [x] 07-01-PLAN.md — Scaffold tests/test_finances_operations.py (Nyquist): testes skipados cobrindo ACC-01..03, CAT-01..04, AUTH-FIN-01..02
+
+**Wave 1** *(blocked on Wave 0 completion)*
+
+- [x] 07-02-PLAN.md — Helper `_require_family_access` em shared/auth.py + CRUD de Account (schemas públicos, arquivamento) + registro do router em main.py antes do MCP
+
+**Wave 2** *(blocked on Wave 1 completion — mesmo arquivo operations.py)*
+
+- [x] 07-03-PLAN.md — CRUD de Category (nível 1) + Subcategory (nível 2, rotas planas) scoped por família; CAT-03 estrutural; 6 paths do router
+
 **UI hint**: no
 
 ### Phase 8: Movimentações + Importação
@@ -101,7 +113,22 @@
   4. Reimportar o mesmo arquivo não duplica linhas no banco — linhas já existentes ficam com `is_duplicate=true`
   5. Campos de valor persistidos como `NUMERIC(15,2)` — `0.10 + 0.20 == 0.30` sem erro de ponto flutuante
 
-**Plans**: TBD
+**Plans**: 4 plans
+**Wave 0**
+
+- [x] 08-01-PLAN.md — Stubs Nyquist de MOV-01..05 (test_finances_operations + test_finances_service) + deps ofxparse/openpyxl
+
+**Wave 1** *(blocked on Wave 0 completion)*
+
+- [x] 08-02-PLAN.md — movement.yaml sem type/is_duplicate (D-01/D-02) + regenerar models + migration 0003 (D-03)
+
+**Wave 2** *(blocked on Wave 1 — usa o ORM regenerado)*
+
+- [x] 08-03-PLAN.md — finances/services.py: parsers CSV/OFX/XLSX, hash, normalização e import_movements com dedup em lote
+
+**Wave 3** *(blocked on Wave 2 — consome import_movements)*
+
+- [x] 08-04-PLAN.md — Endpoints de Movement em operations.py: POST individual (409), import CSV/OFX/XLSX, import/confirm, GET paginado
 
 ### Phase 9: Conciliação + Relatórios + MCP
 
@@ -126,9 +153,25 @@
   3. `GET /finances/accounts/{uuid}/balance` retorna soma correta (Decimal) de créditos − débitos
   4. `GET /finances/families/{uuid}/balance` retorna saldo consolidado de todas as contas ativas
   5. `GET /finances/reports/monthly` agrupa lançamentos por competência e categoria pai; detalhe por subcategoria disponível com filtro de categoria
-  6. Ferramenta `suggest_category` e `list_my_financial_entries` aparecem em `GET /mcp` com Bearer token válido
+  6. ~~Ferramenta `suggest_category` e `list_my_financial_entries` aparecem em `GET /mcp` com Bearer token válido~~ — **deferido para M3 (decisão D-MCP-01 em 09-CONTEXT.md)**: APIs e services devem amadurecer antes de expor via MCP. `suggest_category` é entregue nesta fase como endpoint REST (`GET /finances/movements/{uuid}/suggest-category`), não como ferramenta MCP.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 0**
+
+- [x] 09-01-PLAN.md — Stubs Nyquist (LAN-01..05, REL-01..05, D-MOV) + checkpoint de legitimidade + `uv add rapidfuzz`
+
+**Wave 1** *(paralelo ao Wave 0 — arquivos distintos)*
+
+- [x] 09-02-PLAN.md — `responsible_user_id` em FinancialEntry + migration 0004 (down_revision="0003") + YAML DSL
+
+**Wave 2** *(blocked on 09-01 + 09-02)*
+
+- [ ] 09-03-PLAN.md — suggest_category (rapidfuzz) + POST reconcile (409) + GET/PATCH/GET-list entries com schema rico (LAN-01..05)
+
+**Wave 3** *(blocked on 09-03 — mesmo operations.py/services.py)*
+
+- [ ] 09-04-PLAN.md — Saldos conta/família + breakdown mensal/por membro (competência) + entry_uuid/filtro reconciled em Movement (REL-01..05, D-MOV)
 
 ---
 
@@ -137,9 +180,9 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
-| 7. CRUD Account + Category | 0/? | Not started | - |
-| 8. Movimentações + Importação | 0/? | Not started | - |
-| 9. Conciliação + Relatórios + MCP | 0/? | Not started | - |
+| 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
+| 8. Movimentações + Importação | 4/4 | Complete   | 2026-06-02 |
+| 9. Conciliação + Relatórios + MCP | 2/4 | In Progress|  |
 
 ---
 
