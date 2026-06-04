@@ -1324,23 +1324,26 @@ async def update_entry(
     if db_entry is None:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado")
 
-    # Resolver Account via session.execute para auth (session.exec pode retornar tipo incorreto no mock)
+    # Resolver Movement e Account via cadeia correta para auth (IDOR fix: CR-01)
     entry_movement_id = getattr(db_entry, "movement_id", None)
-    acc_exec_result = await session.execute(
-        select(Account).where(Account.id.isnot(None))  # dummy where, account será resolvido
+    mov_auth_result = await session.exec(
+        select(Movement).where(Movement.id == entry_movement_id)
     )
-    db_account_raw = acc_exec_result.first()
-    db_account = db_account_raw[0] if (db_account_raw and hasattr(db_account_raw, "__getitem__")) else db_account_raw
-    family_id: int = getattr(db_account, "family_id", 0)
+    db_movement_for_auth = mov_auth_result.first()
+    if db_movement_for_auth is None:
+        raise HTTPException(status_code=404, detail="Movimentação não encontrada")
+
+    acc_result = await session.exec(
+        select(Account).where(Account.id == db_movement_for_auth.account_id)
+    )
+    db_account = acc_result.first()
     if db_account is None:
         raise HTTPException(status_code=404, detail="Conta não encontrada")
+    family_id: int = db_account.family_id
     await _require_family_access(family_id, current_user, session)
 
-    # Resolver Movement para schema rico (via session.exec — pode retornar fake_entry no mock)
-    db_movement = None
-    if entry_movement_id is not None:
-        mov_result = await session.exec(select(Movement).where(Movement.id == entry_movement_id))
-        db_movement = mov_result.first()
+    # Resolver Movement para schema rico (reutiliza db_movement_for_auth)
+    db_movement = db_movement_for_auth
 
     # Atualizar subcategory_uuid → subcategory_id (se enviado)
     if entry_in.subcategory_uuid is not None:
