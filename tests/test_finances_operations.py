@@ -1337,15 +1337,27 @@ def test_import_deduplication():
         r.all.return_value = []
         return r
 
-    # Pre-check retorna o hash real como já existente — simula reimportação (WR-05)
-    mock_execute_result = MagicMock()
-    mock_execute_result.fetchall.return_value = [
-        (real_hash,)
-    ]
+    # Mocks para session.execute: 2 chamadas distintas (WR-05)
+    # 1ª chamada: pre-check de hashes existentes (retorna real_hash como já presente)
+    mock_precheck_result = MagicMock()
+    mock_precheck_result.fetchall.return_value = [(real_hash,)]
+
+    # 2ª chamada: busca UUID das duplicatas CSV/XLSX (hash → uuid da movimentação existente)
+    existing_movement_uuid = uuid4()
+    mock_uuid_result = MagicMock()
+    mock_uuid_result.fetchall.return_value = [(real_hash, existing_movement_uuid)]
+
+    execute_call_count = [0]
+
+    async def _execute_import(stmt):
+        execute_call_count[0] += 1
+        if execute_call_count[0] == 1:
+            return mock_precheck_result
+        return mock_uuid_result
 
     mock_session = AsyncMock()
     mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute = _execute_import
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
 
@@ -1362,8 +1374,8 @@ def test_import_deduplication():
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        # Reimportação: nenhuma inserção nova (inserted=0 ou duplicates_skipped>0)
-        assert body.get("inserted", -1) == 0 or body.get("duplicates_skipped", 0) > 0, (
+        # Reimportação CSV: hash já existe → potential_duplicates[] (não duplicates_skipped, pois sem fitid)
+        assert body.get("potential_duplicates") or body.get("duplicates_skipped", 0) > 0, (
             f"Reimportação não deve inserir duplicatas; body: {body}"
         )
     finally:
@@ -1760,10 +1772,12 @@ def test_reconcile_movement():
 
     from caramello.finances.models import (  # type: ignore[import-not-found]
         Account,
+        Category,
         FinancialEntry,
         Movement,
         Subcategory,
     )
+    from caramello.families.models import FamilyMember  # type: ignore[import-not-found]
     from caramello.main import app
     from caramello.shared.auth import get_current_user
     from caramello.shared.database import get_session
@@ -1803,6 +1817,20 @@ def test_reconcile_movement():
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
+    fake_category = Category(
+        id=1,
+        uuid=cat_uuid,
+        family_id=1,
+        name="Alimentação",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    fake_member = FamilyMember(
+        family_id=1,
+        user_id=fake_user.id,
+        role="member",
+        joined_at=datetime.now(timezone.utc),
+    )
     fake_entry = FinancialEntry(
         id=1,
         uuid=entry_uuid,
@@ -1818,16 +1846,31 @@ def test_reconcile_movement():
 
     added = []
 
+    # CR-05 fix: mock com contador — execução correta por ordem de sessão.exec
+    # Ordem: 1=Movement, 2=FamilyMember(_require_family_access), 3=Subcategory(fallback), 4=Category
+    exec_call_count = [0]
+
     async def _exec(stmt):
         r = MagicMock()
-        r.first.return_value = fake_movement
+        exec_call_count[0] += 1
+        n = exec_call_count[0]
+        if n == 1:
+            r.first.return_value = fake_movement
+        elif n == 2:
+            r.first.return_value = fake_member
+        elif n == 3:
+            r.first.return_value = fake_subcategory
+        elif n == 4:
+            r.first.return_value = fake_category
+        else:
+            r.first.return_value = None
         r.all.return_value = []
         return r
 
     async def _execute(stmt):
         r = MagicMock()
         r.first.return_value = fake_account
-        r.fetchone.return_value = None
+        r.fetchone.return_value = None  # faz cair no fallback individual de Subcategory+Category
         r.fetchall.return_value = []
         r.scalar_one_or_none.return_value = None
         return r
