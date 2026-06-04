@@ -14,7 +14,7 @@
 - [x] **Phase 6: Fundação DSL + Schema** - YAMLs, extensão do gerador (Decimal + filters), Category + Subcategory e migration 0002 (completed 2026-05-31)
 - [x] **Phase 7: CRUD Account + Category** - Operações de negócio com controle de acesso e validações (completed 2026-06-01)
 - [x] **Phase 8: Movimentações + Importação** - Registro individual, importação CSV/OFX/XLSX e deduplicação (completed 2026-06-02)
-- [ ] **Phase 9: Conciliação + Relatórios + MCP** - Lançamentos financeiros, saldos, breakdown e ferramentas MCP
+- [x] **Phase 9: Conciliação + Relatórios + MCP** - Lançamentos financeiros, saldos, breakdown e ferramentas MCP (completed 2026-06-04)
 
 ---
 
@@ -171,7 +171,7 @@
 
 **Wave 3** *(blocked on 09-03 — mesmo operations.py/services.py)*
 
-- [ ] 09-04-PLAN.md — Saldos conta/família + breakdown mensal/por membro (competência) + entry_uuid/filtro reconciled em Movement (REL-01..05, D-MOV)
+- [x] 09-04-PLAN.md — Saldos conta/família + breakdown mensal/por membro (competência) + entry_uuid/filtro reconciled em Movement (REL-01..05, D-MOV)
 
 ---
 
@@ -182,7 +182,7 @@
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
 | 8. Movimentações + Importação | 4/4 | Complete   | 2026-06-02 |
-| 9. Conciliação + Relatórios + MCP | 3/4 | In Progress|  |
+| 9. Conciliação + Relatórios + MCP | 4/4 | Complete   | 2026-06-04 |
 
 ---
 
