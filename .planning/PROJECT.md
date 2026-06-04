@@ -80,4 +80,4 @@ A fundação está completa e pronta para receber novos domínios de negócio.
 - Token introspection remota — validação local com JWKS cacheado
 
 ---
-*Last updated: 2026-06-01 — Phase 7 completa: CRUD Account + Category com controle de acesso por família, schemas públicos sem IDs internos, e auth 401 corrigido (RFC 7235)*
+*Last updated: 2026-06-04 — Phase 9 completa: conciliação de movimentações (POST reconcile + IntegrityError→409), sugestão de categoria via rapidfuzz, relatórios mensais e por membro filtrando por competência, saldos de conta e família, schema responsible_user_id com migration 0004. Milestone v2.0 Domínio Financeiro concluído.*
