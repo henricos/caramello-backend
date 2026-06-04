@@ -468,13 +468,14 @@ async def monthly_breakdown(
     )
 
     # Filtro opcional por membro (D-REP-01)
+    # WR-02: usa session.exec para single-entity select, evitando ambiguidade de row-wrapping
     if member_uuid is not None:
-        user_result = await session.execute(
+        user_result = await session.exec(
             select(User).where(User.uuid == member_uuid)
         )
-        user_row = user_result.fetchone()
-        if user_row is not None:
-            stmt = stmt.where(FinancialEntry.responsible_user_id == user_row[0].id)
+        user = user_result.first()
+        if user is not None:
+            stmt = stmt.where(FinancialEntry.responsible_user_id == user.id)
 
     result = await session.execute(stmt)
     rows = result.fetchall()
