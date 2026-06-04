@@ -167,7 +167,7 @@
 
 **Wave 2** *(blocked on 09-01 + 09-02)*
 
-- [ ] 09-03-PLAN.md — suggest_category (rapidfuzz) + POST reconcile (409) + GET/PATCH/GET-list entries com schema rico (LAN-01..05)
+- [x] 09-03-PLAN.md — suggest_category (rapidfuzz) + POST reconcile (409) + GET/PATCH/GET-list entries com schema rico (LAN-01..05)
 
 **Wave 3** *(blocked on 09-03 — mesmo operations.py/services.py)*
 
@@ -182,7 +182,7 @@
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
 | 8. Movimentações + Importação | 4/4 | Complete   | 2026-06-02 |
-| 9. Conciliação + Relatórios + MCP | 2/4 | In Progress|  |
+| 9. Conciliação + Relatórios + MCP | 3/4 | In Progress|  |
 
 ---
 
