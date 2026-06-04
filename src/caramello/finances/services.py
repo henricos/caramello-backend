@@ -394,7 +394,9 @@ async def account_balance(account_id: int, session: AsyncSession) -> Decimal:
         select(func.sum(Movement.amount)).where(Movement.account_id == account_id)
     )
     total = result.scalar_one_or_none()
-    return total if total is not None else Decimal("0.00")
+    if total is None:
+        return Decimal("0.00")
+    return Decimal(str(total))  # CR-04: garante Decimal independente do tipo retornado pelo driver
 
 
 async def family_balance(family_id: int, session: AsyncSession) -> Decimal:
