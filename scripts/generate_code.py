@@ -236,7 +236,9 @@ def generate_models(
 
     # Calcular quais imports serão necessários
     needs_uuid = any(
-        f.get("type", "").lower() in ("uuid",) or f.get("default_factory") == "uuid4"
+        f.get("type", "").lower() in ("uuid",)
+        or f.get("default_factory") == "uuid4"
+        or f.get("expose_as_uuid")  # FK exposto como UUID nos schemas públicos
         for f in fields
     )
     needs_datetime = any(
@@ -353,6 +355,13 @@ def generate_models(
         if f["name"] in read_skip:
             continue
         any_read_field = True
+        if f.get("expose_as_uuid"):
+            # FK int substituído por UUID público nos schemas — CR-03 pattern.
+            base = f["name"].removesuffix("_id")
+            nullable = f.get("nullable", True)
+            suffix = " | None = None" if nullable else ""
+            code += f"    {base}_uuid: UUID{suffix}\n"
+            continue
         ftype = map_type_to_python(f["type"])
         nullable = f.get("nullable", True)
         if nullable:
@@ -370,6 +379,11 @@ def generate_models(
         if f["name"] in create_skip:
             continue
         any_create_field = True
+        if f.get("expose_as_uuid"):
+            base = f["name"].removesuffix("_id")
+            nullable = f.get("nullable", True) or "default" in f or f.get("default_factory")
+            code += f"    {base}_uuid: UUID | None = None\n" if nullable else f"    {base}_uuid: UUID\n"
+            continue
         fname = f["name"]
         ftype = map_type_to_python(f["type"])
         is_optional = (
@@ -393,6 +407,10 @@ def generate_models(
         if f["name"] in update_skip:
             continue
         any_update_field = True
+        if f.get("expose_as_uuid"):
+            base = f["name"].removesuffix("_id")
+            code += f"    {base}_uuid: UUID | None = None\n"
+            continue
         fname = f["name"]
         ftype = map_type_to_python(f["type"])
         code += f"    {fname}: {ftype} | None = None\n"
