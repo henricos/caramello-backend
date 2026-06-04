@@ -39,6 +39,14 @@ A única exceção admissível são jargões tecnológicos globais enraizados qu
 
 Este repositório é um monorepo: cada módulo é uma unidade técnica autônoma. Trabalhe dentro do módulo afetado para tarefas locais; use a raiz apenas para coordenação e mudanças que atravessam todos os módulos.
 
+**Nomenclatura dos módulos:**
+
+| Contexto | Nome correto |
+|----------|-------------|
+| O projeto como um todo (monorepo, plataforma) | `caramello` |
+| Módulo backend — nome do projeto Python e imagem de container | `caramello-api` |
+| Módulo frontend — nome do app e pacote npm | `caramello-app` |
+
 Regras principais:
 
 - Trate cada módulo como uma unidade técnica bem delimitada.

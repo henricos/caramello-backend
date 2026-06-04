@@ -60,7 +60,7 @@ O domínio financeiro está completo. O projeto tem dois domínios de negócio f
 
 ## Out of Scope (permanente)
 
-- Frontend React/Capacitor — repositório separado (`caramello-app`)
+- Frontend React/Capacitor — módulo `apps/frontend` neste monorepo (ainda não iniciado)
 - Autenticação local com senha — Keycloak é o único IdP
 - Multi-tenancy entre grupos — este repo serve exclusivamente o Grupo Família
 - Token introspection remota — validação local com JWKS cacheado
