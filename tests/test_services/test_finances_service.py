@@ -207,8 +207,13 @@ def _load_service(func_name: str):
 
 
 def _run(coro):
-    """Executa uma coroutine no event loop padrão."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Executa uma coroutine de forma compatível com Python 3.10+ e pytest-asyncio.
+
+    Usa asyncio.run() para criar um novo event loop por chamada, evitando
+    conflito com event loops criados/fechados por pytest-asyncio nos testes
+    de outros módulos (test_family_service.py usa async def tests).
+    """
+    return asyncio.run(coro)
 
 
 
