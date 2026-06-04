@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from uuid import UUID
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -305,6 +306,240 @@ def _parse_xlsx_with_errors(
         wb.close()  # P5: OBRIGATÓRIO em read_only mode
 
     return rows, error_lines
+
+
+async def suggest_category(
+    movement_uuid: UUID,
+    family_id: int,
+    session: AsyncSession,
+) -> list[dict]:
+    """LAN-03, D-CAT-01/02/03/04: Retorna top-5 sugestões de subcategoria por similaridade.
+
+    Compara a descrição da movimentação alvo com descrições de lançamentos
+    anteriores da mesma família via rapidfuzz.fuzz.token_set_ratio.
+    Sem threshold mínimo — retorna o top-5 do que existir.
+    Retorna [] se movimento não existe ou se não há histórico de lançamentos.
+    Não usa run_in_executor — volume é pequeno (1-5 usuários família), overhead não justifica
+    a complexidade (Open Question 2 do RESEARCH).
+    """
+    from rapidfuzz import fuzz
+    from caramello.finances.models import (
+        FinancialEntry,
+        Subcategory,
+        Category,
+        Account,
+    )
+
+    # 1. Buscar Movement alvo pelo UUID (session.execute — não session.exec, pitfall P3)
+    result = await session.execute(
+        select(Movement).where(Movement.uuid == movement_uuid)
+    )
+    row = result.fetchone()
+    if row is None:
+        return []
+    target_desc = row[0].description
+
+    # 2. Buscar histórico da família: description + subcategory_id/uuid/name + category_uuid/name
+    #    via JOINs FinancialEntry → Subcategory → Category → Movement → Account
+    stmt = (
+        select(
+            Movement.description,
+            Subcategory.id.label("subcategory_id"),
+            Subcategory.uuid.label("subcategory_uuid"),
+            Subcategory.name.label("subcategory_name"),
+            Category.uuid.label("category_uuid"),
+            Category.name.label("category_name"),
+        )
+        .join(FinancialEntry, FinancialEntry.movement_id == Movement.id)
+        .join(Subcategory, FinancialEntry.subcategory_id == Subcategory.id)
+        .join(Category, Subcategory.category_id == Category.id)
+        .join(Account, Movement.account_id == Account.id)
+        .where(Account.family_id == family_id)
+    )
+    entries_result = await session.execute(stmt)
+    entries = entries_result.fetchall()
+
+    if not entries:
+        return []  # D-CAT-03: sem histórico → lista vazia, sem erro
+
+    # 3. Calcular score por subcategoria — mantém o maior score por subcategory_id
+    #    A1: token_set_ratio retorna float, cast para int conforme contrato público (D-CAT-02)
+    scored: dict[int, dict] = {}
+    for entry in entries:
+        score = int(fuzz.token_set_ratio(target_desc, entry[0]))
+        sub_id = entry[1]
+        if sub_id not in scored or score > scored[sub_id]["score"]:
+            scored[sub_id] = {
+                "subcategory_uuid": entry[2],
+                "subcategory_name": entry[3],
+                "category_uuid": entry[4],
+                "category_name": entry[5],
+                "score": score,
+            }
+
+    # 4. Ordenar descrescente por score, retornar top-5 (D-CAT-01: sem threshold mínimo)
+    top5 = sorted(scored.values(), key=lambda x: x["score"], reverse=True)[:5]
+    return top5
+
+
+async def account_balance(account_id: int, session: AsyncSession) -> Decimal:
+    """REL-01, D-BAL-01: Calcula saldo da conta via SUM(movement.amount).
+
+    Retorna Decimal('0.00') quando não há movimentações (pitfall P6 — SUM vazio = NULL).
+    Usa session.execute() — nunca session.exec() para agregações (pitfall P3).
+    """
+    from sqlalchemy import func
+
+    result = await session.execute(
+        select(func.sum(Movement.amount)).where(Movement.account_id == account_id)
+    )
+    total = result.scalar_one_or_none()
+    return total if total is not None else Decimal("0.00")
+
+
+async def family_balance(family_id: int, session: AsyncSession) -> Decimal:
+    """REL-02, D-BAL-02: Calcula saldo consolidado de todas as contas ativas da família.
+
+    Itera sobre contas ativas e soma os saldos via account_balance().
+    Retorna Decimal('0.00') quando não há contas ativas.
+    """
+    from caramello.finances.models import Account
+
+    accounts_result = await session.exec(
+        select(Account).where(Account.family_id == family_id, Account.is_active == True)  # noqa: E712
+    )
+    accounts = accounts_result.all()
+    total = Decimal("0.00")
+    for account in accounts:
+        total += await account_balance(account.id, session)
+    return total
+
+
+async def monthly_breakdown(
+    family_id: int,
+    year: int,
+    month: int,
+    session: AsyncSession,
+    member_uuid: UUID | None = None,
+) -> list[dict]:
+    """REL-03/04, D-REP-01/03: Breakdown mensal por subcategoria (competência, não data).
+
+    Retorna lista plana com total por subcategoria para o período de competência informado.
+    Parâmetro member_uuid opcional — filtra por responsible_user_uuid (D-REP-01).
+    Usa session.execute() com func.sum + group_by (pitfall P3, D-REP-04).
+    """
+    from sqlalchemy import func
+    from caramello.finances.models import (
+        FinancialEntry,
+        Subcategory,
+        Category,
+        Account,
+    )
+    from caramello.users.models import User
+
+    stmt = (
+        select(
+            Category.uuid.label("category_uuid"),
+            Category.name.label("category_name"),
+            Subcategory.uuid.label("subcategory_uuid"),
+            Subcategory.name.label("subcategory_name"),
+            func.sum(Movement.amount).label("total"),
+            func.count(FinancialEntry.id).label("count"),
+        )
+        .join(Subcategory, FinancialEntry.subcategory_id == Subcategory.id)
+        .join(Category, Subcategory.category_id == Category.id)
+        .join(Movement, FinancialEntry.movement_id == Movement.id)
+        .join(Account, Movement.account_id == Account.id)
+        .where(
+            Account.family_id == family_id,
+            FinancialEntry.competencia_year == year,
+            FinancialEntry.competencia_month == month,
+        )
+        .group_by(
+            Category.id,
+            Category.uuid,
+            Category.name,
+            Subcategory.id,
+            Subcategory.uuid,
+            Subcategory.name,
+        )
+    )
+
+    # Filtro opcional por membro (D-REP-01)
+    if member_uuid is not None:
+        user_result = await session.execute(
+            select(User).where(User.uuid == member_uuid)
+        )
+        user_row = user_result.fetchone()
+        if user_row is not None:
+            stmt = stmt.where(FinancialEntry.responsible_user_id == user_row[0].id)
+
+    result = await session.execute(stmt)
+    rows = result.fetchall()
+    return [
+        {
+            "category_uuid": row.category_uuid,
+            "category_name": row.category_name,
+            "subcategory_uuid": row.subcategory_uuid,
+            "subcategory_name": row.subcategory_name,
+            "total": row.total if row.total is not None else Decimal("0.00"),
+            "count": row.count,
+        }
+        for row in rows
+    ]
+
+
+async def by_member_breakdown(
+    family_id: int,
+    year: int,
+    month: int,
+    session: AsyncSession,
+) -> list[dict]:
+    """D-REP-02: Breakdown por responsável para o período de competência.
+
+    Lançamentos sem responsible_user_id agrupados em linha com user_uuid=None
+    e name='Não atribuído' — não são descartados dos totais (pitfall P7).
+    Usa session.execute() com func.sum + group_by (pitfall P3, D-REP-04).
+    """
+    from sqlalchemy import func
+    from caramello.finances.models import (
+        FinancialEntry,
+        Account,
+    )
+    from caramello.users.models import User
+
+    stmt = (
+        select(
+            User.uuid.label("user_uuid"),
+            User.name.label("name"),
+            func.sum(Movement.amount).label("total"),
+            func.count(FinancialEntry.id).label("count"),
+        )
+        .outerjoin(User, FinancialEntry.responsible_user_id == User.id)
+        .join(Movement, FinancialEntry.movement_id == Movement.id)
+        .join(Account, Movement.account_id == Account.id)
+        .where(
+            Account.family_id == family_id,
+            FinancialEntry.competencia_year == year,
+            FinancialEntry.competencia_month == month,
+        )
+        .group_by(
+            User.id,
+            User.uuid,
+            User.name,
+        )
+    )
+    result = await session.execute(stmt)
+    rows = result.fetchall()
+    return [
+        {
+            "user_uuid": row.user_uuid,
+            "name": row.name if row.name is not None else "Não atribuído",
+            "total": row.total if row.total is not None else Decimal("0.00"),
+            "count": row.count,
+        }
+        for row in rows
+    ]
 
 
 async def import_movements(
