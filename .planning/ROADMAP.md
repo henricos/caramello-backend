@@ -182,7 +182,7 @@
 | 6. Fundação DSL + Schema | 3/3 | Complete    | 2026-05-31 |
 | 7. CRUD Account + Category | 3/3 | Complete    | 2026-06-01 |
 | 8. Movimentações + Importação | 4/4 | Complete   | 2026-06-02 |
-| 9. Conciliação + Relatórios + MCP | 4/4 | Complete   | 2026-06-04 |
+| 9. Conciliação + Relatórios + MCP | 4/4 | Complete    | 2026-06-04 |
 
 ---
 

@@ -43,19 +43,19 @@
 
 ### Lançamentos Financeiros (Conciliação)
 
-- [ ] **LAN-01**: Usuário pode conciliar uma movimentação criando um lançamento financeiro (subcategoria, competência ano/mês, notas)
-- [ ] **LAN-02**: Uma movimentação só pode ter um lançamento financeiro (1:1) — tentativa de duplicar retorna 409
-- [ ] **LAN-03**: Sistema propõe subcategoria baseado em similaridade de descrição com lançamentos anteriores (semi-automático, usuário confirma)
-- [ ] **LAN-04**: Usuário pode marcar lançamento financeiro como recorrente (sem geração automática neste milestone)
-- [ ] **LAN-05**: Usuário pode atualizar subcategoria e competência de lançamento financeiro existente
+- [x] **LAN-01**: Usuário pode conciliar uma movimentação criando um lançamento financeiro (subcategoria, competência ano/mês, notas)
+- [x] **LAN-02**: Uma movimentação só pode ter um lançamento financeiro (1:1) — tentativa de duplicar retorna 409
+- [x] **LAN-03**: Sistema propõe subcategoria baseado em similaridade de descrição com lançamentos anteriores (semi-automático, usuário confirma)
+- [x] **LAN-04**: Usuário pode marcar lançamento financeiro como recorrente (sem geração automática neste milestone)
+- [x] **LAN-05**: Usuário pode atualizar subcategoria e competência de lançamento financeiro existente
 
 ### Relatórios e Saldos
 
-- [ ] **REL-01**: Usuário pode consultar saldo atual de uma conta (soma créditos − débitos de movimentações)
-- [ ] **REL-02**: Usuário pode consultar saldo consolidado de todas as contas da família
-- [ ] **REL-03**: Usuário pode consultar breakdown mensal por categoria pai (total de lançamentos financeiros por competência agrupado por nível 1)
-- [ ] **REL-04**: Usuário pode detalhar breakdown por subcategoria dentro de uma categoria pai e competência
-- [ ] **REL-05**: Todos os relatórios analíticos operam sobre lançamentos financeiros e filtram por competência, não por data da movimentação
+- [x] **REL-01**: Usuário pode consultar saldo atual de uma conta (soma créditos − débitos de movimentações)
+- [x] **REL-02**: Usuário pode consultar saldo consolidado de todas as contas da família
+- [x] **REL-03**: Usuário pode consultar breakdown mensal por categoria pai (total de lançamentos financeiros por competência agrupado por nível 1)
+- [x] **REL-04**: Usuário pode detalhar breakdown por subcategoria dentro de uma categoria pai e competência
+- [x] **REL-05**: Todos os relatórios analíticos operam sobre lançamentos financeiros e filtram por competência, não por data da movimentação
 
 ### Autorização
 
@@ -106,16 +106,16 @@
 | MOV-03 | Phase 8 | Pending |
 | MOV-04 | Phase 8 | Pending |
 | MOV-05 | Phase 8 | Pending |
-| LAN-01 | Phase 9 | Pending |
-| LAN-02 | Phase 9 | Pending |
-| LAN-03 | Phase 9 | Pending |
-| LAN-04 | Phase 9 | Pending |
-| LAN-05 | Phase 9 | Pending |
-| REL-01 | Phase 9 | Pending |
-| REL-02 | Phase 9 | Pending |
-| REL-03 | Phase 9 | Pending |
-| REL-04 | Phase 9 | Pending |
-| REL-05 | Phase 9 | Pending |
+| LAN-01 | Phase 9 | Complete |
+| LAN-02 | Phase 9 | Complete |
+| LAN-03 | Phase 9 | Complete |
+| LAN-04 | Phase 9 | Complete |
+| LAN-05 | Phase 9 | Complete |
+| REL-01 | Phase 9 | Complete |
+| REL-02 | Phase 9 | Complete |
+| REL-03 | Phase 9 | Complete |
+| REL-04 | Phase 9 | Complete |
+| REL-05 | Phase 9 | Complete |
 
 **Cobertura:** 24 requisitos · 24 mapeados · 0 fora do escopo
 
