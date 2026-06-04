@@ -1197,11 +1197,13 @@ async def reconcile_movement(
         )
 
     # 6. Construir schema rico sem lazy load (evitar pitfall selectinload)
-    # Usar entry_in.subcategory_uuid como fallback quando lookup não retornou uuid correto
+    # CR-05: se db_category for None após ambos os caminhos, retornar 404 em vez de uuid4() fabricado
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
     sub_uuid_val = getattr(db_subcategory, "uuid", entry_in.subcategory_uuid)
     sub_name_val = getattr(db_subcategory, "name", "")
-    cat_uuid_val = getattr(db_category, "uuid", uuid4()) if db_category else uuid4()
-    cat_name_val = getattr(db_category, "name", "") if db_category else ""
+    cat_uuid_val = db_category.uuid
+    cat_name_val = db_category.name
     return FinancialEntryRichPublic(
         uuid=db_entry.uuid,
         movement=MovementSummaryPublic(
@@ -1429,14 +1431,17 @@ async def update_entry(
             responsible_user_uuid = getattr(responsible_user, "uuid", None)
 
     # Construir schema rico com getattr fallbacks para compatibilidade com mock
+    # CR-05: se db_category for None após recarregamento, retornar 404 em vez de uuid4() fabricado
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
     mov_uuid = getattr(db_movement, "uuid", uuid4()) if db_movement else getattr(db_entry, "uuid", uuid4())
     mov_date = getattr(db_movement, "date", datetime.now(timezone.utc)) if db_movement else datetime.now(timezone.utc)
     mov_amount = getattr(db_movement, "amount", Decimal("0.00")) if db_movement else Decimal("0.00")
     mov_desc = getattr(db_movement, "description", "") if db_movement else ""
     sub_uuid_r = getattr(db_subcategory, "uuid", entry_in.subcategory_uuid or uuid4())
     sub_name_r = getattr(db_subcategory, "name", "")
-    cat_uuid_r = getattr(db_category, "uuid", uuid4()) if db_category else uuid4()
-    cat_name_r = getattr(db_category, "name", "") if db_category else ""
+    cat_uuid_r = db_category.uuid
+    cat_name_r = db_category.name
 
     return FinancialEntryRichPublic(
         uuid=db_entry.uuid,
