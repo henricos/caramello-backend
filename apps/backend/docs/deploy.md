@@ -4,7 +4,7 @@
 
 Este documento descreve como subir a aplicação `caramello-api` via Docker Compose, usando a imagem publicada.
 
-Use este guia quando o objetivo for colocar a aplicação em produção. Para desenvolvimento local, use `docs/dev.md`. Para criar uma nova release, use `docs/release.md`.
+Use este guia quando o objetivo for colocar a aplicação em produção. Para desenvolvimento local, use `docs/development.md`. Para criar uma nova release, use `docs/release.md`.
 
 ## Pré-requisitos
 
@@ -50,5 +50,5 @@ services:
 
 ## Relação com outros guias
 
-- Para desenvolvimento local: `docs/dev.md`.
+- Para desenvolvimento local: `docs/development.md`.
 - Para fechar uma nova versão: `docs/release.md`.

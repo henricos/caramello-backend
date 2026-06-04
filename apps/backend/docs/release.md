@@ -88,4 +88,4 @@ Depois da release, confirme:
 ## Relação com outros guias
 
 - Para subir a aplicação em produção: `docs/deploy.md`.
-- Para operações de desenvolvimento local: `docs/dev.md`.
+- Para operações de desenvolvimento local: `docs/development.md`.
