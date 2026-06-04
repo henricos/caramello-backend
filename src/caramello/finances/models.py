@@ -128,6 +128,11 @@ class FinancialEntry(SQLModel, table=True):
     competencia_month: int = Field(nullable=False)
     notes: str | None = Field(max_length=500, default=None)
     is_recorrente: bool = Field(default=False, nullable=False)
+    responsible_user_id: int | None = Field(
+        default=None,
+        foreign_key="user.id",
+        nullable=True,
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
