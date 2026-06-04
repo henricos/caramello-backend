@@ -679,6 +679,7 @@ async def import_movements(
                 "amount": str(mvt.amount),
                 "description": mvt.description,
                 "created_at": mvt.created_at.isoformat(),
+                "updated_at": mvt.updated_at.isoformat(),  # WR-03: retornar updated_at para fidelidade no response
             })
 
     return {

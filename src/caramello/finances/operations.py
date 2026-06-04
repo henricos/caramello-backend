@@ -954,7 +954,7 @@ async def import_movements_endpoint(
                 description=m["description"],
                 import_hash=None,
                 created_at=m.get("created_at", datetime.now(timezone.utc)),
-                updated_at=m.get("created_at", datetime.now(timezone.utc)),
+                updated_at=m.get("updated_at", m.get("created_at", datetime.now(timezone.utc))),  # WR-03
             )
         )
 
