@@ -1,5 +1,5 @@
 # CARAMELLO-GENERATED: implemented
-"""Operações de negócio do domínio finances — Phase 7 + Phase 8.
+"""Operações de negócio do domínio finances — Phase 7 + Phase 8 + Phase 9.
 
 Cobre:
   - ACC-01/02/03: CRUD de Account scoped por família
@@ -7,6 +7,8 @@ Cobre:
   - AUTH-FIN-01/02: 401/403 via get_current_user + _require_family_access
   - MOV-01..05: registro individual, importação CSV/OFX/XLSX e confirmação
   - D-15: listagem paginada de movimentações
+  - LAN-01..05: conciliação de movimentações em lançamentos financeiros
+  - REL-01..05: relatórios de saldo e breakdown por categoria/membro
 """
 from __future__ import annotations
 
@@ -17,11 +19,12 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field as PydanticField
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from caramello.finances.models import Account, Category, Movement, Subcategory
-from caramello.families.models import Family
+from caramello.finances.models import Account, Category, FinancialEntry, Movement, Subcategory
+from caramello.families.models import Family, FamilyMember
 from caramello.shared.auth import get_current_user, _require_family_access
 from caramello.shared.database import get_session
 from caramello.finances.services import (
@@ -29,6 +32,11 @@ from caramello.finances.services import (
     _parse_date,
     import_movements,
     ParsedRow,
+    suggest_category,
+    account_balance,
+    family_balance,
+    monthly_breakdown,
+    by_member_breakdown,
 )
 from caramello.users.models import User
 
@@ -118,6 +126,7 @@ class MovementReadPublic(BaseModel):
     amount: Decimal
     description: str
     import_hash: str | None = None  # D-16: opcional, para debug
+    entry_uuid: UUID | None = None  # D-MOV-01: UUID do lançamento conciliado, null se pendente
     created_at: datetime
     updated_at: datetime
 
@@ -133,6 +142,143 @@ class ImportResultPublic(BaseModel):
 class ConfirmImportPublic(BaseModel):
     account_uuid: UUID
     movements: list[MovementCreatePublic]  # movimentações confirmadas a inserir
+
+
+# ---------------------------------------------------------------------------
+# Schemas públicos de FinancialEntry (Fase 9) — D-REC-01/02/03/04/05
+# LAN-01..05: conciliação, detalhe, atualização e listagem de lançamentos
+# ---------------------------------------------------------------------------
+
+
+class ReconcileCreatePublic(BaseModel):
+    """Payload de criação de lançamento financeiro via reconciliação (D-REC-01)."""
+
+    subcategory_uuid: UUID
+    competencia_year: int
+    competencia_month: int
+    notes: str | None = PydanticField(default=None, max_length=500)
+    is_recorrente: bool = False
+    responsible_user_uuid: UUID | None = None
+
+
+class FinancialEntryUpdatePublic(BaseModel):
+    """Payload de atualização parcial de lançamento financeiro (D-REC-04, LAN-05).
+
+    Para responsible_user_uuid: None = limpar responsável;
+    campo ausente (não em model_fields_set) = não tocar.
+    NÃO usar model_dump(exclude_none=True) para este schema — usar model_fields_set (pitfall P2).
+    """
+
+    subcategory_uuid: UUID | None = None
+    competencia_year: int | None = None
+    competencia_month: int | None = None
+    notes: str | None = None
+    is_recorrente: bool | None = None
+    responsible_user_uuid: UUID | None = None  # None = limpar; ausente = não tocar
+
+
+class MovementSummaryPublic(BaseModel):
+    """Resumo de movimentação embutido no schema rico de FinancialEntry (D-REC-02)."""
+
+    uuid: UUID
+    date: datetime
+    amount: Decimal
+    description: str
+
+
+class FinancialEntryRichPublic(BaseModel):
+    """Schema rico de resposta para todos os endpoints de FinancialEntry (D-REC-02).
+
+    Reutilizado em POST reconcile, GET detail, PATCH update e GET list.
+    Expõe movement embutido para evitar GET extra no frontend.
+    """
+
+    uuid: UUID
+    movement: MovementSummaryPublic
+    subcategory_uuid: UUID
+    subcategory_name: str
+    category_uuid: UUID
+    category_name: str
+    competencia_year: int
+    competencia_month: int
+    notes: str | None
+    is_recorrente: bool
+    responsible_user_uuid: UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Schemas de saldo e relatório (Fase 9) — REL-01..05
+# ---------------------------------------------------------------------------
+
+
+class AccountBalancePublic(BaseModel):
+    """Resposta de saldo de conta (D-BAL-01)."""
+
+    account_uuid: UUID
+    balance: Decimal
+    currency: str
+
+
+class FamilyAccountBalanceItem(BaseModel):
+    """Item de conta no saldo familiar (D-BAL-02)."""
+
+    account_uuid: UUID
+    name: str
+    currency: str
+    balance: Decimal
+
+
+class FamilyBalancePublic(BaseModel):
+    """Resposta de saldo consolidado familiar (D-BAL-02)."""
+
+    family_uuid: UUID
+    total_balance: Decimal
+    accounts: list[FamilyAccountBalanceItem]
+
+
+class MonthlyReportPeriod(BaseModel):
+    """Período de competência em relatório mensal."""
+
+    year: int
+    month: int
+
+
+class MonthlyReportRow(BaseModel):
+    """Linha de breakdown por subcategoria no relatório mensal (D-REP-01)."""
+
+    category_uuid: UUID
+    category_name: str
+    subcategory_uuid: UUID
+    subcategory_name: str
+    total: Decimal
+    count: int
+
+
+class MonthlyReportPublic(BaseModel):
+    """Resposta do relatório mensal (D-REP-01)."""
+
+    period: MonthlyReportPeriod
+    total: Decimal
+    rows: list[MonthlyReportRow]
+
+
+class ByMemberReportRow(BaseModel):
+    """Linha por membro no relatório de breakdown por responsável (D-REP-02)."""
+
+    user_uuid: UUID | None
+    name: str
+    total: Decimal
+    count: int
+
+
+class ByMemberReportPublic(BaseModel):
+    """Resposta do relatório por membro (D-REP-02)."""
+
+    period: MonthlyReportPeriod
+    total: Decimal
+    rows: list[ByMemberReportRow]
 
 
 # ---------------------------------------------------------------------------
@@ -701,14 +847,19 @@ async def list_movements(
     offset: int = Query(default=0, ge=0),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
+    reconciled: bool | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[MovementReadPublic]:
-    """D-15: Lista movimentações da conta com paginação e filtros opcionais de data.
+    """D-15, D-MOV-01/02: Lista movimentações da conta com paginação, filtros e entry_uuid.
 
+    D-MOV-01: entry_uuid via LEFT JOIN com FinancialEntry (null = pendente, UUID = conciliada).
+    D-MOV-02: filtro reconciled=false (pendentes) / reconciled=true (conciliadas) via LEFT JOIN.
     T-08-09: IDOR mitigado via _require_family_access.
     T-08-10: Depends(get_current_user) → 401 sem token.
     """
+    from sqlalchemy import outerjoin
+
     # Resolver account_uuid → Account
     result = await session.exec(select(Account).where(Account.uuid == account_uuid))
     db_account = result.first()
@@ -718,29 +869,44 @@ async def list_movements(
     # Verificar membership — T-08-09: 403 para não-membro
     await _require_family_access(db_account.family_id, current_user, session)
 
-    # Construir query com filtros opcionais
-    # Usar session.execute() (não session.exec()) para queries com limit/offset (P8)
-    stmt = select(Movement).where(Movement.account_id == db_account.id)
+    # D-MOV-01: LEFT JOIN com FinancialEntry para entry_uuid (pitfall P5: usar fetchall + posição)
+    stmt = (
+        select(Movement, FinancialEntry.uuid.label("entry_uuid"))
+        .select_from(
+            outerjoin(Movement, FinancialEntry, FinancialEntry.movement_id == Movement.id)
+        )
+        .where(Movement.account_id == db_account.id)
+    )
+
     if date_from:
         stmt = stmt.where(Movement.date >= _parse_date(date_from, line=0))
     if date_to:
         stmt = stmt.where(Movement.date <= _parse_date(date_to, line=0))
+
+    # D-MOV-02: filtro de conciliação via IS NULL / IS NOT NULL
+    if reconciled is False:
+        stmt = stmt.where(FinancialEntry.id.is_(None))
+    elif reconciled is True:
+        stmt = stmt.where(FinancialEntry.id.is_not(None))
+
     stmt = stmt.order_by(Movement.date.desc()).offset(offset).limit(limit)
 
+    # session.execute() com fetchall() para multi-entity select (pitfall P5)
     movements_execute_result = await session.execute(stmt)
-    movements = [row[0] for row in movements_execute_result.fetchall()]
+    rows = movements_execute_result.fetchall()
 
     return [
         MovementReadPublic(
-            uuid=m.uuid,
-            date=m.date,
-            amount=m.amount,
-            description=m.description,
-            import_hash=m.import_hash,
-            created_at=m.created_at,
-            updated_at=m.updated_at,
+            uuid=row[0].uuid,
+            date=row[0].date,
+            amount=row[0].amount,
+            description=row[0].description,
+            import_hash=row[0].import_hash,
+            entry_uuid=row[1],
+            created_at=row[0].created_at,
+            updated_at=row[0].updated_at,
         )
-        for m in movements
+        for row in rows
     ]
 
 
@@ -865,4 +1031,615 @@ async def confirm_import(
         potential_duplicates=[],
         error_lines=[],
         movements=inserted_movements,
+    )
+
+
+# ---------------------------------------------------------------------------
+# FinancialEntry — LAN-01..05, D-REC-01..05, T-09-04..08
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/movements/{movement_uuid}/suggest-category",
+    response_model=list[dict],
+)
+async def get_suggest_category(
+    movement_uuid: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """LAN-03, D-CAT-01/02/03: Retorna top-5 sugestões de subcategoria por fuzzy match.
+
+    T-09-04: IDOR mitigado — resolve movement → account → family + _require_family_access.
+    T-09-07: AUTH-FIN-01 via get_current_user.
+    D-CAT-03: retorna [] se movimento não encontrado ou sem histórico (não 404).
+    """
+    # Resolver movement_uuid → Movement (404 se não existe)
+    result = await session.exec(select(Movement).where(Movement.uuid == movement_uuid))
+    db_movement = result.first()
+    if db_movement is None:
+        raise HTTPException(status_code=404, detail="Movimentação não encontrada")
+
+    # Resolver Account para obter family_id e verificar membership
+    account_result = await session.exec(
+        select(Account).where(Account.id == db_movement.account_id)
+    )
+    db_account = account_result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    # T-09-04: verificar membership — 403 para não-membro (IDOR mitigado)
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    # Delegar ao service (D-CAT-04)
+    suggestions = await suggest_category(movement_uuid, db_account.family_id, session)
+    return suggestions
+
+
+@router.post(
+    "/movements/{movement_uuid}/reconcile",
+    response_model=FinancialEntryRichPublic,
+    status_code=201,
+)
+async def reconcile_movement(
+    movement_uuid: UUID,
+    entry_in: ReconcileCreatePublic,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> FinancialEntryRichPublic:
+    """LAN-01, LAN-02, LAN-04, D-REC-01/02: Cria lançamento financeiro 1:1 a partir de movimentação.
+
+    T-09-04: IDOR mitigado via _require_family_access.
+    T-09-05: responsible_user_uuid validado por membership (D-ATTR-02).
+    T-09-06: constraint UNIQUE(movement_id) + IntegrityError → 409 (race-safe, LAN-02).
+    T-09-07: AUTH-FIN-01 via get_current_user.
+    T-09-08: UUID/competencia validados pelo Pydantic BaseModel (422 automático).
+    """
+    # 1. Resolver movement_uuid → Movement (404 se não existe)
+    mov_result = await session.exec(select(Movement).where(Movement.uuid == movement_uuid))
+    db_movement = mov_result.first()
+    if db_movement is None:
+        raise HTTPException(status_code=404, detail="Movimentação não encontrada")
+
+    # 2. Resolver Account para family_id + verificar membership
+    acc_result = await session.exec(select(Account).where(Account.id == db_movement.account_id))
+    db_account = acc_result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    # 3. Resolver subcategory_uuid → subcategory_id (404 se inválido)
+    sub_result = await session.exec(
+        select(Subcategory).where(Subcategory.uuid == entry_in.subcategory_uuid)
+    )
+    db_subcategory = sub_result.first()
+    if db_subcategory is None:
+        raise HTTPException(status_code=404, detail="Subcategoria não encontrada")
+
+    # Resolver Category a partir da subcategoria
+    cat_result = await session.exec(
+        select(Category).where(Category.id == db_subcategory.category_id)
+    )
+    db_category = cat_result.first()
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+
+    # 4. Resolver responsible_user_uuid → responsible_user_id (opcional, D-ATTR-01/02)
+    responsible_user_id: int | None = None
+    responsible_user_uuid: UUID | None = None
+    if entry_in.responsible_user_uuid is not None:
+        user_result = await session.exec(
+            select(User).where(User.uuid == entry_in.responsible_user_uuid)
+        )
+        responsible_user = user_result.first()
+        if responsible_user is None:
+            raise HTTPException(status_code=422, detail="Usuário responsável não encontrado")
+        # D-ATTR-02: validar membership
+        member_result = await session.exec(
+            select(FamilyMember).where(
+                FamilyMember.family_id == db_account.family_id,
+                FamilyMember.user_id == responsible_user.id,
+            )
+        )
+        if member_result.first() is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Responsável não é membro desta família",
+            )
+        responsible_user_id = responsible_user.id
+        responsible_user_uuid = responsible_user.uuid
+
+    # 5. Criar FinancialEntry + capturar IntegrityError → 409 (T-09-06, LAN-02)
+    db_entry = FinancialEntry(
+        movement_id=db_movement.id,
+        subcategory_id=db_subcategory.id,
+        competencia_year=entry_in.competencia_year,
+        competencia_month=entry_in.competencia_month,
+        notes=entry_in.notes,
+        is_recorrente=entry_in.is_recorrente,
+        responsible_user_id=responsible_user_id,
+    )
+    try:
+        session.add(db_entry)
+        await session.commit()
+        await session.refresh(db_entry)
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Movimentação já possui lançamento financeiro",
+        )
+
+    # 6. Construir schema rico sem lazy load (evitar pitfall selectinload)
+    return FinancialEntryRichPublic(
+        uuid=db_entry.uuid,
+        movement=MovementSummaryPublic(
+            uuid=db_movement.uuid,
+            date=db_movement.date,
+            amount=db_movement.amount,
+            description=db_movement.description,
+        ),
+        subcategory_uuid=db_subcategory.uuid,
+        subcategory_name=db_subcategory.name,
+        category_uuid=db_category.uuid,
+        category_name=db_category.name,
+        competencia_year=db_entry.competencia_year,
+        competencia_month=db_entry.competencia_month,
+        notes=db_entry.notes,
+        is_recorrente=db_entry.is_recorrente,
+        responsible_user_uuid=responsible_user_uuid,
+        created_at=db_entry.created_at,
+        updated_at=db_entry.updated_at,
+    )
+
+
+@router.get("/entries/{entry_uuid}", response_model=FinancialEntryRichPublic)
+async def get_entry(
+    entry_uuid: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> FinancialEntryRichPublic:
+    """D-REC-03: Detalhe de lançamento financeiro pelo UUID público.
+
+    T-09-04: IDOR mitigado — resolve entry → movement → account → family + _require_family_access.
+    T-09-07: AUTH-FIN-01 via get_current_user.
+    """
+    # Resolver entry_uuid → FinancialEntry (404 se não existe)
+    entry_result = await session.exec(
+        select(FinancialEntry).where(FinancialEntry.uuid == entry_uuid)
+    )
+    db_entry = entry_result.first()
+    if db_entry is None:
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+
+    # Resolver Movement → Account → Family para auth
+    mov_result = await session.exec(select(Movement).where(Movement.id == db_entry.movement_id))
+    db_movement = mov_result.first()
+    if db_movement is None:
+        raise HTTPException(status_code=404, detail="Movimentação não encontrada")
+
+    acc_result = await session.exec(select(Account).where(Account.id == db_movement.account_id))
+    db_account = acc_result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    # Resolver Subcategory e Category para schema rico
+    sub_result = await session.exec(
+        select(Subcategory).where(Subcategory.id == db_entry.subcategory_id)
+    )
+    db_subcategory = sub_result.first()
+    if db_subcategory is None:
+        raise HTTPException(status_code=404, detail="Subcategoria não encontrada")
+
+    cat_result = await session.exec(
+        select(Category).where(Category.id == db_subcategory.category_id)
+    )
+    db_category = cat_result.first()
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+
+    # Resolver responsável (opcional)
+    responsible_user_uuid: UUID | None = None
+    if db_entry.responsible_user_id is not None:
+        user_result = await session.exec(
+            select(User).where(User.id == db_entry.responsible_user_id)
+        )
+        responsible_user = user_result.first()
+        if responsible_user is not None:
+            responsible_user_uuid = responsible_user.uuid
+
+    return FinancialEntryRichPublic(
+        uuid=db_entry.uuid,
+        movement=MovementSummaryPublic(
+            uuid=db_movement.uuid,
+            date=db_movement.date,
+            amount=db_movement.amount,
+            description=db_movement.description,
+        ),
+        subcategory_uuid=db_subcategory.uuid,
+        subcategory_name=db_subcategory.name,
+        category_uuid=db_category.uuid,
+        category_name=db_category.name,
+        competencia_year=db_entry.competencia_year,
+        competencia_month=db_entry.competencia_month,
+        notes=db_entry.notes,
+        is_recorrente=db_entry.is_recorrente,
+        responsible_user_uuid=responsible_user_uuid,
+        created_at=db_entry.created_at,
+        updated_at=db_entry.updated_at,
+    )
+
+
+@router.patch("/entries/{entry_uuid}", response_model=FinancialEntryRichPublic)
+async def update_entry(
+    entry_uuid: UUID,
+    entry_in: FinancialEntryUpdatePublic,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> FinancialEntryRichPublic:
+    """D-REC-04, LAN-05: Atualiza subcategoria, competência, notas, responsável de lançamento.
+
+    T-09-04: IDOR mitigado via _require_family_access.
+    T-09-05: responsible_user_uuid validado por membership.
+    Pitfall P2: usa model_fields_set para responsible_user_uuid (não exclude_none=True).
+    Pitfall P3: updated_at definido manualmente (sem onupdate automático).
+    """
+    # Resolver entry_uuid → FinancialEntry (404 se não existe)
+    entry_result = await session.exec(
+        select(FinancialEntry).where(FinancialEntry.uuid == entry_uuid)
+    )
+    db_entry = entry_result.first()
+    if db_entry is None:
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+
+    # Resolver Movement → Account → Family para auth
+    mov_result = await session.exec(select(Movement).where(Movement.id == db_entry.movement_id))
+    db_movement = mov_result.first()
+    if db_movement is None:
+        raise HTTPException(status_code=404, detail="Movimentação não encontrada")
+
+    acc_result = await session.exec(select(Account).where(Account.id == db_movement.account_id))
+    db_account = acc_result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    # Atualizar subcategory_uuid → subcategory_id (se enviado)
+    if entry_in.subcategory_uuid is not None:
+        sub_result = await session.exec(
+            select(Subcategory).where(Subcategory.uuid == entry_in.subcategory_uuid)
+        )
+        new_sub = sub_result.first()
+        if new_sub is None:
+            raise HTTPException(status_code=404, detail="Subcategoria não encontrada")
+        db_entry.subcategory_id = new_sub.id
+
+    # Atualizar campos simples (se enviados)
+    if entry_in.competencia_year is not None:
+        db_entry.competencia_year = entry_in.competencia_year
+    if entry_in.competencia_month is not None:
+        db_entry.competencia_month = entry_in.competencia_month
+    if entry_in.notes is not None:
+        db_entry.notes = entry_in.notes
+    if entry_in.is_recorrente is not None:
+        db_entry.is_recorrente = entry_in.is_recorrente
+
+    # Pitfall P2: usar model_fields_set para responsible_user_uuid
+    # Distinguir "campo ausente" (não tocar) de "campo = null" (limpar responsável)
+    if "responsible_user_uuid" in entry_in.model_fields_set:
+        if entry_in.responsible_user_uuid is None:
+            # Limpar responsável explicitamente
+            db_entry.responsible_user_id = None
+        else:
+            # Resolver UUID → ID + membership check (D-ATTR-01/02)
+            user_result = await session.exec(
+                select(User).where(User.uuid == entry_in.responsible_user_uuid)
+            )
+            responsible_user = user_result.first()
+            if responsible_user is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Usuário responsável não encontrado",
+                )
+            member_result = await session.exec(
+                select(FamilyMember).where(
+                    FamilyMember.family_id == db_account.family_id,
+                    FamilyMember.user_id == responsible_user.id,
+                )
+            )
+            if member_result.first() is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Responsável não é membro desta família",
+                )
+            db_entry.responsible_user_id = responsible_user.id
+
+    # Pitfall P3: updated_at definido manualmente (sem onupdate automático)
+    db_entry.updated_at = datetime.now(timezone.utc)
+
+    session.add(db_entry)
+    await session.commit()
+    await session.refresh(db_entry)
+
+    # Recarregar objetos relacionados para schema rico
+    sub_result = await session.exec(
+        select(Subcategory).where(Subcategory.id == db_entry.subcategory_id)
+    )
+    db_subcategory = sub_result.first()
+    cat_result = await session.exec(
+        select(Category).where(Category.id == db_subcategory.category_id)
+    )
+    db_category = cat_result.first()
+
+    responsible_user_uuid: UUID | None = None
+    if db_entry.responsible_user_id is not None:
+        user_result = await session.exec(
+            select(User).where(User.id == db_entry.responsible_user_id)
+        )
+        responsible_user = user_result.first()
+        if responsible_user is not None:
+            responsible_user_uuid = responsible_user.uuid
+
+    return FinancialEntryRichPublic(
+        uuid=db_entry.uuid,
+        movement=MovementSummaryPublic(
+            uuid=db_movement.uuid,
+            date=db_movement.date,
+            amount=db_movement.amount,
+            description=db_movement.description,
+        ),
+        subcategory_uuid=db_subcategory.uuid,
+        subcategory_name=db_subcategory.name,
+        category_uuid=db_category.uuid,
+        category_name=db_category.name,
+        competencia_year=db_entry.competencia_year,
+        competencia_month=db_entry.competencia_month,
+        notes=db_entry.notes,
+        is_recorrente=db_entry.is_recorrente,
+        responsible_user_uuid=responsible_user_uuid,
+        created_at=db_entry.created_at,
+        updated_at=db_entry.updated_at,
+    )
+
+
+@router.get("/entries", response_model=list[FinancialEntryRichPublic])
+async def list_entries(
+    family_uuid: UUID,
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[FinancialEntryRichPublic]:
+    """D-REC-05: Lista lançamentos da família por competência (year/month opcionais).
+
+    T-09-04: IDOR mitigado via _require_family_access.
+    T-09-07: AUTH-FIN-01 via get_current_user.
+    Open Question 3: limit=100 default + offset para paginação.
+    """
+    # Resolver family_uuid → Family (404 se não existe)
+    family_result = await session.exec(
+        select(Family).where(Family.uuid == family_uuid)
+    )
+    db_family = family_result.first()
+    if db_family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
+    await _require_family_access(db_family.id, current_user, session)
+
+    # Query com JOINs para trazer subcategory, category, movement, account
+    from sqlalchemy import outerjoin as sa_outerjoin
+
+    stmt = (
+        select(
+            FinancialEntry,
+            Movement,
+            Subcategory,
+            Category,
+            User,
+        )
+        .join(Movement, FinancialEntry.movement_id == Movement.id)
+        .join(Account, Movement.account_id == Account.id)
+        .join(Subcategory, FinancialEntry.subcategory_id == Subcategory.id)
+        .join(Category, Subcategory.category_id == Category.id)
+        .outerjoin(User, FinancialEntry.responsible_user_id == User.id)
+        .where(Account.family_id == db_family.id)
+    )
+
+    if year is not None:
+        stmt = stmt.where(FinancialEntry.competencia_year == year)
+    if month is not None:
+        stmt = stmt.where(FinancialEntry.competencia_month == month)
+
+    stmt = stmt.offset(offset).limit(limit)
+    rows_result = await session.execute(stmt)
+    rows = rows_result.fetchall()
+
+    return [
+        FinancialEntryRichPublic(
+            uuid=row[0].uuid,
+            movement=MovementSummaryPublic(
+                uuid=row[1].uuid,
+                date=row[1].date,
+                amount=row[1].amount,
+                description=row[1].description,
+            ),
+            subcategory_uuid=row[2].uuid,
+            subcategory_name=row[2].name,
+            category_uuid=row[3].uuid,
+            category_name=row[3].name,
+            competencia_year=row[0].competencia_year,
+            competencia_month=row[0].competencia_month,
+            notes=row[0].notes,
+            is_recorrente=row[0].is_recorrente,
+            responsible_user_uuid=row[4].uuid if row[4] is not None else None,
+            created_at=row[0].created_at,
+            updated_at=row[0].updated_at,
+        )
+        for row in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Saldo — REL-01/02, D-BAL-01/02/03
+# ---------------------------------------------------------------------------
+
+
+@router.get("/accounts/{account_uuid}/balance", response_model=AccountBalancePublic)
+async def get_account_balance(
+    account_uuid: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AccountBalancePublic:
+    """REL-01, D-BAL-01: Saldo atual da conta (SUM(movement.amount) sob demanda).
+
+    T-09-04: IDOR mitigado via _require_family_access.
+    T-09-07: AUTH-FIN-01 via get_current_user.
+    """
+    result = await session.exec(select(Account).where(Account.uuid == account_uuid))
+    db_account = result.first()
+    if db_account is None:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    await _require_family_access(db_account.family_id, current_user, session)
+
+    balance = await account_balance(db_account.id, session)
+    return AccountBalancePublic(
+        account_uuid=db_account.uuid,
+        balance=balance,
+        currency=db_account.currency,
+    )
+
+
+@router.get("/families/{family_uuid}/balance", response_model=FamilyBalancePublic)
+async def get_family_balance(
+    family_uuid: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> FamilyBalancePublic:
+    """REL-02, D-BAL-02: Saldo consolidado de todas as contas ativas da família.
+
+    T-09-04: IDOR mitigado via _require_family_access.
+    T-09-07: AUTH-FIN-01 via get_current_user.
+    """
+    family_result = await session.exec(
+        select(Family).where(Family.uuid == family_uuid)
+    )
+    db_family = family_result.first()
+    if db_family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
+    await _require_family_access(db_family.id, current_user, session)
+
+    accounts_result = await session.exec(
+        select(Account).where(Account.family_id == db_family.id, Account.is_active == True)  # noqa: E712
+    )
+    accounts = list(accounts_result.all())
+
+    account_items: list[FamilyAccountBalanceItem] = []
+    total = Decimal("0.00")
+    for acc in accounts:
+        bal = await account_balance(acc.id, session)
+        total += bal
+        account_items.append(
+            FamilyAccountBalanceItem(
+                account_uuid=acc.uuid,
+                name=acc.name,
+                currency=acc.currency,
+                balance=bal,
+            )
+        )
+
+    return FamilyBalancePublic(
+        family_uuid=db_family.uuid,
+        total_balance=total,
+        accounts=account_items,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Relatórios — REL-03/04/05, D-REP-01/02/03/04
+# ---------------------------------------------------------------------------
+
+
+@router.get("/reports/monthly", response_model=MonthlyReportPublic)
+async def get_monthly_report(
+    family_uuid: UUID,
+    year: int,
+    month: int,
+    member_uuid: UUID | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> MonthlyReportPublic:
+    """REL-03/04/05, D-REP-01/03/04: Breakdown mensal por subcategoria (competência, não data).
+
+    Parâmetro member_uuid opcional — filtra por responsible_user_uuid (D-REP-01).
+    Usa session.execute() com func.sum + group_by (D-REP-04).
+    T-09-04: IDOR mitigado via _require_family_access.
+    """
+    family_result = await session.exec(
+        select(Family).where(Family.uuid == family_uuid)
+    )
+    db_family = family_result.first()
+    if db_family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
+    await _require_family_access(db_family.id, current_user, session)
+
+    rows = await monthly_breakdown(db_family.id, year, month, session, member_uuid)
+
+    total = sum((r["total"] for r in rows), Decimal("0.00"))
+    return MonthlyReportPublic(
+        period=MonthlyReportPeriod(year=year, month=month),
+        total=total,
+        rows=[
+            MonthlyReportRow(
+                category_uuid=r["category_uuid"],
+                category_name=r["category_name"],
+                subcategory_uuid=r["subcategory_uuid"],
+                subcategory_name=r["subcategory_name"],
+                total=r["total"],
+                count=r["count"],
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.get("/reports/by-member", response_model=ByMemberReportPublic)
+async def get_by_member_report(
+    family_uuid: UUID,
+    year: int,
+    month: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ByMemberReportPublic:
+    """D-REP-02: Breakdown por membro responsável para o período de competência.
+
+    Lançamentos sem responsável agrupados em linha com user_uuid=None, name='Não atribuído'.
+    year e month são obrigatórios (D-REP-02).
+    T-09-04: IDOR mitigado via _require_family_access.
+    """
+    family_result = await session.exec(
+        select(Family).where(Family.uuid == family_uuid)
+    )
+    db_family = family_result.first()
+    if db_family is None:
+        raise HTTPException(status_code=404, detail="Família não encontrada")
+    await _require_family_access(db_family.id, current_user, session)
+
+    rows = await by_member_breakdown(db_family.id, year, month, session)
+
+    total = sum((r["total"] for r in rows), Decimal("0.00"))
+    return ByMemberReportPublic(
+        period=MonthlyReportPeriod(year=year, month=month),
+        total=total,
+        rows=[
+            ByMemberReportRow(
+                user_uuid=r["user_uuid"],
+                name=r["name"],
+                total=r["total"],
+                count=r["count"],
+            )
+            for r in rows
+        ],
     )
