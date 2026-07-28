@@ -4,7 +4,7 @@
 Covers:
   - ACC-01/02/03: Account CRUD, scoped to a family
   - CAT-01/02/04: Category and Subcategory CRUD, scoped to a family
-  - AUTH-FIN-01/02: 401/403 through get_current_user + _require_family_access
+  - AUTH-FIN-01/02: 401/403 through get_current_user + require_family_access
   - MOV-01..05: single entry, CSV/OFX/XLSX import and confirmation
   - D-15: paginated movement listing
   - LAN-01..05: reconciling movements into financial entries
@@ -49,7 +49,7 @@ from caramello_api.finances.services import (
     suggest_category,
 )
 from caramello_api.i18n import error_detail
-from caramello_api.shared.auth import _require_family_access, get_current_user
+from caramello_api.shared.auth import get_current_user, require_family_access
 from caramello_api.shared.database import get_session
 from caramello_api.users.models import User
 
@@ -321,7 +321,7 @@ async def create_account(
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
 
     # Check membership — T-07-02: 403 for a non-member (IDOR mitigated)
-    await _require_family_access(family.id, current_user, session)
+    await require_family_access(family.id, current_user, session)
 
     # Persist with the internal id (never with the UUID that came in)
     db_account = Account(
@@ -362,7 +362,7 @@ async def list_accounts(
     if family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
 
-    await _require_family_access(family.id, current_user, session)
+    await require_family_access(family.id, current_user, session)
 
     accounts_result = await session.execute(select(Account).where(Account.family_id == family.id))
     accounts = list(accounts_result.scalars().all())
@@ -398,7 +398,7 @@ async def get_account(
     family = family_result.scalars().first()
     if family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     return AccountReadPublic(
         uuid=db_account.uuid,
@@ -437,7 +437,7 @@ async def update_account(
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
 
     # Check membership
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     # Apply only the fields that were sent (exclude_none)
     update_data = account_in.model_dump(exclude_none=True)
@@ -482,7 +482,7 @@ async def create_category(
     if family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
 
-    await _require_family_access(family.id, current_user, session)
+    await require_family_access(family.id, current_user, session)
 
     db_category = Category(
         family_id=family.id,
@@ -513,7 +513,7 @@ async def list_categories(
     if family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
 
-    await _require_family_access(family.id, current_user, session)
+    await require_family_access(family.id, current_user, session)
 
     categories_result = await session.execute(
         select(Category).where(Category.family_id == family.id)
@@ -547,7 +547,7 @@ async def get_category(
     family = family_result.scalars().first()
     if family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
-    await _require_family_access(db_category.family_id, current_user, session)
+    await require_family_access(db_category.family_id, current_user, session)
 
     return CategoryReadPublic(
         uuid=db_category.uuid,
@@ -579,7 +579,7 @@ async def update_category(
     if family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
 
-    await _require_family_access(db_category.family_id, current_user, session)
+    await require_family_access(db_category.family_id, current_user, session)
 
     update_data = category_in.model_dump(exclude_none=True)
     for key, value in update_data.items():
@@ -624,7 +624,7 @@ async def create_subcategory(
         raise HTTPException(status_code=404, detail=error_detail("finances.category_not_found"))
 
     # Check membership through category.family_id
-    await _require_family_access(db_category.family_id, current_user, session)
+    await require_family_access(db_category.family_id, current_user, session)
 
     db_subcategory = Subcategory(
         category_id=db_category.id,
@@ -655,7 +655,7 @@ async def list_subcategories(
     if db_category is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.category_not_found"))
 
-    await _require_family_access(db_category.family_id, current_user, session)
+    await require_family_access(db_category.family_id, current_user, session)
 
     subcategories_result = await session.execute(
         select(Subcategory).where(Subcategory.category_id == db_category.id)
@@ -692,7 +692,7 @@ async def get_subcategory(
     if db_category is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.category_not_found"))
 
-    await _require_family_access(db_category.family_id, current_user, session)
+    await require_family_access(db_category.family_id, current_user, session)
 
     return SubcategoryReadPublic(
         uuid=db_subcategory.uuid,
@@ -726,7 +726,7 @@ async def update_subcategory(
     if db_category is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.category_not_found"))
 
-    await _require_family_access(db_category.family_id, current_user, session)
+    await require_family_access(db_category.family_id, current_user, session)
 
     update_data = subcategory_in.model_dump(exclude_none=True)
     for key, value in update_data.items():
@@ -766,7 +766,7 @@ async def create_movement(
     """MOV-01: record a single movement, scoped to an account/family.
 
     D-17: answers 409 with existing_uuid when the hash is already known.
-    T-08-09: IDOR mitigated through _require_family_access.
+    T-08-09: IDOR mitigated through require_family_access.
     T-08-10: Depends(get_current_user) -> 401 without a token.
     """
     # Resolve account_uuid to an Account (404 when unknown)
@@ -776,7 +776,7 @@ async def create_movement(
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
     # Check membership — T-08-09: 403 for a non-member (IDOR mitigated)
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     # Parse the date (D-12: ISO first, BR as the fallback)
     date_val = _parse_date(movement_in.date, line=1)
@@ -847,7 +847,7 @@ async def list_movements(
               pending, a UUID = reconciled).
     D-MOV-02: reconciled=false (pending) / reconciled=true (reconciled), through
               the same LEFT JOIN.
-    T-08-09: IDOR mitigated through _require_family_access.
+    T-08-09: IDOR mitigated through require_family_access.
     T-08-10: Depends(get_current_user) -> 401 without a token.
     """
     from sqlalchemy import outerjoin
@@ -859,7 +859,7 @@ async def list_movements(
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
     # Check membership — T-08-09: 403 for a non-member
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     # D-MOV-01: LEFT JOIN on FinancialEntry for entry_uuid
     # (pitfall P5: read the Rows with fetchall + position)
@@ -915,7 +915,7 @@ async def import_movements_endpoint(
 
     D-09: the format comes in as a query param.
     D-13: >50% invalid rows -> 422.
-    T-08-09: IDOR mitigated through _require_family_access.
+    T-08-09: IDOR mitigated through require_family_access.
     T-08-12/13: on_conflict_do_nothing + the error threshold.
     """
     # Resolve account_uuid to an Account
@@ -925,7 +925,7 @@ async def import_movements_endpoint(
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
     # Check membership
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     content: bytes = await file.read()
 
@@ -974,7 +974,7 @@ async def confirm_import(
 
     P4: the confirmed rows get import_hash=None — PostgreSQL allows several NULLs
     under a UNIQUE constraint.
-    T-08-09: IDOR mitigated through _require_family_access.
+    T-08-09: IDOR mitigated through require_family_access.
     T-08-12: import_hash=None is what keeps the UNIQUE constraint from firing.
     """
     # Resolve account_uuid to an Account
@@ -984,7 +984,7 @@ async def confirm_import(
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
     # Check membership
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     # Insert the confirmed movements with import_hash=None (P4/D-08).
     # Every object is accumulated before the commit, for atomicity — no partial
@@ -1048,7 +1048,7 @@ async def get_suggest_category(
     """LAN-03, D-CAT-01/02/03: top-5 subcategory suggestions, by fuzzy match.
 
     T-09-04: IDOR mitigated — resolves movement -> account -> family, then
-             _require_family_access.
+             require_family_access.
     T-09-07: AUTH-FIN-01 through get_current_user.
     D-CAT-03: answers [] when the movement has no history (not a 404).
     """
@@ -1067,7 +1067,7 @@ async def get_suggest_category(
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
     # T-09-04: check membership — 403 for a non-member (IDOR mitigated)
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     # Delegate to the service (D-CAT-04)
     suggestions = await suggest_category(movement_uuid, db_account.family_id, session)
@@ -1087,7 +1087,7 @@ async def reconcile_movement(
 ) -> FinancialEntryRichPublic:
     """LAN-01/02/04, D-REC-01/02: create a 1:1 financial entry from a movement.
 
-    T-09-04: IDOR mitigated through _require_family_access.
+    T-09-04: IDOR mitigated through require_family_access.
     T-09-05: responsible_user_uuid is validated against membership (D-ATTR-02).
     T-09-06: UNIQUE(movement_id) + IntegrityError -> 409 (race-safe, LAN-02).
     T-09-07: AUTH-FIN-01 through get_current_user.
@@ -1111,7 +1111,7 @@ async def reconcile_movement(
     if db_account is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
     family_id: int = db_account.family_id
-    await _require_family_access(family_id, current_user, session)
+    await require_family_access(family_id, current_user, session)
 
     # 3. Resolve subcategory_uuid to subcategory_id (404 when unknown)
     sub_exec_result = await session.execute(
@@ -1233,7 +1233,7 @@ async def get_entry(
     """D-REC-03: one financial entry's detail, by public UUID.
 
     T-09-04: IDOR mitigated — resolves entry -> movement -> account -> family,
-             then _require_family_access.
+             then require_family_access.
     T-09-07: AUTH-FIN-01 through get_current_user.
     """
     # Resolve entry_uuid to a FinancialEntry (404 when unknown)
@@ -1254,7 +1254,7 @@ async def get_entry(
     db_account = acc_result.scalars().first()
     if db_account is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     # Resolve Subcategory and Category for the rich schema
     sub_result = await session.execute(
@@ -1312,7 +1312,7 @@ async def update_entry(
 ) -> FinancialEntryRichPublic:
     """D-REC-04, LAN-05: update an entry's subcategory, period, notes or owner.
 
-    T-09-04: IDOR mitigated through _require_family_access.
+    T-09-04: IDOR mitigated through require_family_access.
     T-09-05: responsible_user_uuid is validated against membership.
     Pitfall P2: responsible_user_uuid is read from model_fields_set, NOT from
                 model_dump(exclude_none=True).
@@ -1343,7 +1343,7 @@ async def update_entry(
     if db_account is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
     family_id: int = db_account.family_id
-    await _require_family_access(family_id, current_user, session)
+    await require_family_access(family_id, current_user, session)
 
     # The rich schema reuses the movement already loaded for the auth check
     db_movement = db_movement_for_auth
@@ -1477,7 +1477,7 @@ async def list_entries(
 ) -> list[FinancialEntryRichPublic]:
     """D-REC-05: list the family's entries by accrual period (year/month optional).
 
-    T-09-04: IDOR mitigated through _require_family_access.
+    T-09-04: IDOR mitigated through require_family_access.
     T-09-07: AUTH-FIN-01 through get_current_user.
     Open Question 3: limit defaults to 100, with offset for pagination.
     """
@@ -1486,7 +1486,7 @@ async def list_entries(
     db_family = family_result.scalars().first()
     if db_family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
-    await _require_family_access(db_family.id, current_user, session)
+    await require_family_access(db_family.id, current_user, session)
 
     # One query, JOINing subcategory, category, movement and account
 
@@ -1553,7 +1553,7 @@ async def get_account_balance(
 ) -> AccountBalancePublic:
     """REL-01, D-BAL-01: the account's current balance, SUM(movement.amount) on demand.
 
-    T-09-04: IDOR mitigated through _require_family_access.
+    T-09-04: IDOR mitigated through require_family_access.
     T-09-07: AUTH-FIN-01 through get_current_user.
     """
     result = await session.execute(select(Account).where(Account.uuid == account_uuid))
@@ -1561,7 +1561,7 @@ async def get_account_balance(
     if db_account is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
-    await _require_family_access(db_account.family_id, current_user, session)
+    await require_family_access(db_account.family_id, current_user, session)
 
     balance = await account_balance(db_account.id, session)
     return AccountBalancePublic(
@@ -1579,14 +1579,14 @@ async def get_family_balance(
 ) -> FamilyBalancePublic:
     """REL-02, D-BAL-02: consolidated balance of every active family account.
 
-    T-09-04: IDOR mitigated through _require_family_access.
+    T-09-04: IDOR mitigated through require_family_access.
     T-09-07: AUTH-FIN-01 through get_current_user.
     """
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     db_family = family_result.scalars().first()
     if db_family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
-    await _require_family_access(db_family.id, current_user, session)
+    await require_family_access(db_family.id, current_user, session)
 
     accounts_result = await session.execute(
         select(Account).where(Account.family_id == db_family.id, Account.is_active)  # noqa: E712
@@ -1633,13 +1633,13 @@ async def get_monthly_report(
     Grouped by accrual period (competencia), NOT by the movement date.
     The optional member_uuid filters by responsible_user_uuid (D-REP-01).
     Uses session.execute() with func.sum + group_by (D-REP-04).
-    T-09-04: IDOR mitigated through _require_family_access.
+    T-09-04: IDOR mitigated through require_family_access.
     """
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     db_family = family_result.scalars().first()
     if db_family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
-    await _require_family_access(db_family.id, current_user, session)
+    await require_family_access(db_family.id, current_user, session)
 
     rows = await monthly_breakdown(db_family.id, year, month, session, member_uuid)
 
@@ -1674,13 +1674,13 @@ async def get_by_member_report(
     Entries with no responsible member are grouped into a row with user_uuid=None
     and the catalog's "unassigned" label.
     year and month are both required (D-REP-02).
-    T-09-04: IDOR mitigated through _require_family_access.
+    T-09-04: IDOR mitigated through require_family_access.
     """
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     db_family = family_result.scalars().first()
     if db_family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
-    await _require_family_access(db_family.id, current_user, session)
+    await require_family_access(db_family.id, current_user, session)
 
     rows = await by_member_breakdown(db_family.id, year, month, session)
 

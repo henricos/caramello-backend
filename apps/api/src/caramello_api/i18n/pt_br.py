@@ -32,7 +32,7 @@ MESSAGES: dict[str, str] = {
     "auth.not_allowlisted": "Sua conta não tem permissão para acessar este sistema.",
     "auth.provisioning_failed": "Falha ao provisionar usuário",
     # Both membership messages are raised from two places — `shared/auth.py`
-    # (`_require_family_access`) and the `families` role guards — and are
+    # (`require_family_access`) and the `families` role guards — and are
     # deliberately catalogued once: same text, same meaning, one entry.
     "auth.not_family_member": "Você não é membro desta família",
     "auth.not_owner": "Apenas owner pode realizar esta operação",

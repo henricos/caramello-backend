@@ -1,87 +1,89 @@
-# Contexto e Diretrizes — Backend
+# Context and Guidelines — caramello-api
 
-## DSL First
+Repository-wide rules (language, commits, configuration and environment variables, monorepo scope) live in the root `AGENTS.md` and must never be duplicated here. Stack, commands and setup belong to `docs/dev-setup.md`; decisions and their rationale to `docs/architecture.md`. What follows are the code standards and invariants of this module.
 
-O DSL em `dsl/` é **sempre a origem do código**. Nunca escreva código gerado diretamente.
+## DSL first
 
-### Entidades (`dsl/entities/*.yaml`)
+The DSL under `dsl/` is **always the origin of the code**. Never hand-write generated code.
 
-Os arquivos abaixo são **gerados automaticamente** — nunca edite:
+### Entities (`dsl/entities/*.yaml`)
+
+These files are **generated** — never edit them:
+
 - `src/caramello_api/{domain}/models.py`
 - `src/caramello_api/{domain}/schemas.py`
 - `src/caramello_api/{domain}/router.py`
 
-Fluxo obrigatório: editar YAML → `bin/generate_code` → validar com `bin/validate_generation`.
+Mandatory flow: edit the YAML, run `bin/generate_code`, then validate with `bin/validate_generation`.
 
-### CRUD gerado é opt-out por entidade
+Detailed authoring rules: [`docs/dsl-rules.md`](docs/dsl-rules.md).
 
-Uma entidade pode declarar `generate_router: false` para **não** receber o router CRUD genérico. Quando todas as entidades de um domínio recusam, o generator não escreve `router.py` — e apaga o arquivo se ele existir de uma geração anterior. O generator é a fonte da verdade sobre o que existe; não apague nem crie esses arquivos à mão.
+### Generated CRUD is opt-out per entity
 
-Recuse o router quando o CRUD genérico não puder ser publicado como está:
+An entity may declare `generate_router: false` to **not** receive the generic CRUD router. When every entity of a domain declines, the generator writes no `router.py` — and deletes the file if a previous generation left one behind. The generator is the source of truth about what exists; never create or delete those files by hand.
 
-- **`finances` (todas as entidades)** — o contrato público do domínio é escrito à mão em `finances/operations.py`, com schemas `*Public` que resolvem UUID → id interno e checam pertencimento à família. O CRUD gerado publicaria `AccountRead`, `MovementRead` etc., que carregam as FKs inteiras internas.
-- **`FamilyInvitation`** — o ciclo de vida do convite pertence à operação `POST /families/families/{family_uuid}/pre-register`, que é onde mora a checagem de owner.
+Decline the router when the generic CRUD cannot be published as-is:
 
-Limitação conhecida do CRUD gerado: ele não sabe lidar com `expose_as_uuid`. O `Read` gerado passa a ter um campo `x_uuid` que não existe como atributo na tabela, e o `Create` gerado passaria `x_uuid` para o construtor do modelo. Ou seja: **entidade com `expose_as_uuid` precisa de `generate_router: false`** e de uma operação de negócio que monte o schema campo a campo (ver `pre_register_member`).
+- **`finances` (every entity)** — the domain's public contract is hand-written in `finances/operations.py`, with `*Public` schemas that resolve UUID to internal id and check family membership. The generated CRUD would publish `AccountRead`, `MovementRead` and friends, which carry the internal integer foreign keys.
+- **`FamilyInvitation`** — the invitation's lifecycle belongs to `POST /api/v1/families/families/{family_uuid}/pre-register`, which is where the owner check lives.
 
-### Rotas de negócio são versionadas
+Known limitation: the generated CRUD cannot handle `expose_as_uuid`. The generated `Read` gains an `x_uuid` field that is not an attribute of the table, and the generated `Create` would pass `x_uuid` to the model constructor. Therefore **an entity using `expose_as_uuid` requires `generate_router: false`** plus a business operation that assembles the schema field by field (see `pre_register_member`).
 
-O prefixo de versão (`/api/v1`) é aplicado **no registro**, em `main.py`; cada router declara apenas seu prefixo de recurso (`/users`, `/families`, `/finances`). Nunca coloque `/api/v1` dentro de um router nem em um path do DSL. `GET /health`, `POST /auth/verify`, os documentos `.well-known/*` e `GET /` ficam **sem versão** de propósito: URL de monitoração e URL definida por especificação não podem mudar quando a api sobe de versão.
+### Business routes are versioned
 
-### Operações de negócio (`dsl/operations/{domain}.yaml`)
+The version prefix (`/api/v1`) is applied **at registration**, in `main.py`; each router declares only its resource prefix (`/users`, `/families`, `/finances`). Never put `/api/v1` inside a router or in a DSL path. `GET /health`, `POST /auth/verify`, the `.well-known/*` documents and `GET /` are deliberately **unversioned**: a monitoring URL and a spec-defined URL must not move when the api's version changes.
 
-Endpoints de negócio em `{domain}/operations.py` também seguem DSL First — **sem exceções**.
+### Business operations (`dsl/operations/{domain}.yaml`)
 
-Fluxo obrigatório para qualquer novo endpoint:
-1. Declarar a operação em `dsl/operations/{domain}.yaml`
-2. Rodar `bin/generate_code` → cria stub com `raise NotImplementedError`
-3. Implementar o stub
+Business endpoints in `{domain}/operations.py` follow DSL-first too — **no exceptions**.
 
-Nunca adicione endpoints diretamente em `operations.py` sem passar pelo DSL. Se `operations.py` estiver marcado `# CARAMELLO-GENERATED: implemented`, isso não é licença para adicionar rotas sem DSL — apenas autoriza editar implementações já declaradas.
+Mandatory flow for any new endpoint:
 
-Regras detalhadas: `docs/dsl-rules.md`.
+1. Declare the operation in `dsl/operations/{domain}.yaml`
+2. Run `bin/generate_code`, which creates a stub raising `NotImplementedError`
+3. Implement the stub
 
----
+Never add an endpoint straight into `operations.py` without going through the DSL. A file marked `# CARAMELLO-GENERATED: implemented` is not a licence to add routes without the DSL — it only authorizes editing implementations that the DSL already declares.
 
-## Identificadores públicos
+## Public identifiers
 
-- Toda entidade expõe `id` (int, PK interna) e `uuid` (UUID, identificador público).
-- URLs e respostas de API usam **sempre `uuid`**, nunca `id`.
-- A flag `expose_as_uuid` no DSL controla esse comportamento nas referências de entidade: a tabela mantém a coluna inteira e os três schemas (`Read`/`Create`/`Update`) passam a expor `x_uuid: UUID`. É uma troca de campo entre schemas — **não** é mudança de banco, e portanto não gera migração.
-- Toda FK que apareça em um schema público precisa da flag. Isso inclui `FamilyInvitation.family_id` e `FamilyInvitation.inviter_id`, porque `FamilyInvitationRead` é a resposta de `POST /families/families/{family_uuid}/pre-register`.
-- As FKs inteiras que **sobram** nos schemas gerados de `finances` (`AccountRead.family_id`, `MovementRead.account_id`, `FinancialEntryRead.movement_id`/`subcategory_id`, `CategoryRead.family_id`, `SubcategoryRead.category_id`) não vazam porque nenhuma rota as serve: o domínio recusa o CRUD gerado e responde apenas com os schemas `*Public`. Se algum dia esses schemas forem publicados, cada FK precisa da flag primeiro.
-- Ao usar a flag, monte a resposta campo a campo na operação: o atributo `x_uuid` não existe na instância ORM, então `model_validate(orm_obj)` falharia.
+- Every entity exposes `id` (integer, internal primary key) and `uuid` (the public identifier).
+- URLs and API responses use **`uuid` always**, never `id`.
+- The DSL's `expose_as_uuid` flag controls this for entity references: the table keeps its integer column while the three schemas (`Read`/`Create`/`Update`) expose `x_uuid: UUID` instead. It swaps a field between schemas — it is **not** a database change and therefore generates no migration.
+- Every foreign key that appears in a public schema needs the flag. That includes `FamilyInvitation.family_id` and `FamilyInvitation.inviter_id`, because `FamilyInvitationRead` is the response of the pre-register route.
+- The integer foreign keys that **remain** in the generated `finances` schemas (`AccountRead.family_id`, `MovementRead.account_id`, `FinancialEntryRead.movement_id` and `subcategory_id`, `CategoryRead.family_id`, `SubcategoryRead.category_id`) do not leak, because no route serves them: the domain declines the generated CRUD and answers only with its `*Public` schemas. Should those schemas ever be published, each foreign key needs the flag first.
+- When using the flag, assemble the response field by field in the operation: the `x_uuid` attribute does not exist on the ORM instance, so `model_validate(orm_obj)` would fail.
 
----
+## Authentication and authorization
 
-## Autenticação e autorização
+- Authentication is OIDC/JWT against **Keycloak**. The `dev` and `prod` clients are already provisioned; do not create new ones without alignment.
+- The api is an **OAuth2 resource server**: it validates any consumer's `access_token` on its own (JWKS/RS256, `iss`, `exp`, and `aud` carrying the api's own audience). Never accept a token without validating `aud`.
+- Authorization has **two layers**, both behind `get_current_user` in `shared/auth.py`: the e-mail allowlist (`allowed_emails` — may this identity use the system at all?) and family membership (which data may it reach?).
+- The **order** of the checks is invariant: `email_verified` is checked **before any database query** (no query cost, and no timing signal about the allowlist), and no error body may ever contain the caller's e-mail address.
+- `allowed_emails` is infrastructure, not a business entity: it lives in `shared/models.py`, outside the DSL generator's reach, has no `uuid` and no route. Administration goes through `scripts/seed_allowed_email.py` and `scripts/remove_allowed_email.py`.
+- Generated CRUD endpoints are **not** public: the generator injects `Depends(get_current_user)` into all five of them. Authentication is the floor, not something to remember to add — but note that authentication alone does not scope data, so any route touching family-owned rows must also call `require_family_access`.
 
-- Auth via **Keycloak** com OIDC/JWT.
-- Clients `dev` e `prod` já configurados na infra. Não criar novos clients sem alinhamento.
-- Endpoints gerados são públicos por padrão — proteção deve ser adicionada explicitamente via dependência FastAPI.
-- A api é **resource server OAuth2**: valida o `access_token` de qualquer consumidor por conta própria (JWKS/RS256, `iss`, `exp` e `aud` com a audience da própria api). Nunca aceite token sem validar `aud`.
-- Autorização tem **duas camadas**, ambas atrás de `get_current_user` em `shared/auth.py`: allowlist de e-mail (`allowed_emails` — pode usar o sistema?) e pertencimento a família (quais dados alcança?).
-- A **ordem** das verificações é invariante: `email_verified` é checado **antes de qualquer consulta ao banco** (sem custo e sem sinal de timing do allowlist) e nenhum corpo de erro pode conter o e-mail do chamador.
-- `allowed_emails` é infraestrutura, não entidade de negócio: mora em `shared/models.py` (fora do alcance do gerador do DSL), não tem `uuid` e não tem rota — administração é via `scripts/seed_allowed_email.py` / `scripts/remove_allowed_email.py`.
+## Module structure
 
----
+Each business domain is an isolated package directly under `src/caramello_api/` (`users/`, `families/`, `finances/`). A domain must not import another domain's internals; use schemas as contracts, or shared services.
 
-## Estrutura de módulos
+Layers inside a domain:
 
-Cada domínio de negócio é um módulo isolado em `src/caramello/domains/`. Módulos não devem importar diretamente a camada interna de outros módulos — use contratos (schemas) ou serviços compartilhados.
+- `models.py` — SQLAlchemy tables (generated)
+- `schemas.py` — Pydantic DTOs (generated)
+- `router.py` — generic CRUD (generated, opt-out per entity)
+- `operations.py` — business endpoints (stub generated, implementation by hand)
+- `services.py` — pure domain logic, no FastAPI imports, taking an `AsyncSession` and plain parameters so it stays reusable from MCP, tests and scripts. Present only where a domain has logic worth separating from its handlers.
 
-Camadas dentro de cada módulo:
-- `models.py` — ORM/tabelas (gerado)
-- `router.py` — CRUD gerado (gerado)
-- `operations.py` — endpoints de negócio (stub gerado, implementação manual)
-- `services/` — lógica de negócio
-- `repositories/` — acesso a dados
+Cross-domain infrastructure lives in `shared/`, configuration and error handling in `core/`, message catalogs in `i18n/`.
 
----
+## Invariants to preserve
 
-## Invariantes a preservar
-
-- Driver de banco é `psycopg2-binary` (síncrono). Qualquer adoção de async exige migração para `asyncpg` e sessão async do SQLAlchemy — não misture os dois.
-- `DATABASE_URL` é construída em `src/caramello/core/config.py` a partir de variáveis individuais — não leia diretamente da env.
-- Migrações sempre via Alembic. Nunca altere schema diretamente no banco.
-- Escopo do repo: apenas **Grupo Família** — sem tabelas compartilhadas com outros grupos.
+- The database driver is **`asyncpg`** and every session is a SQLAlchemy `AsyncSession`. Never mix in a synchronous driver or a synchronous session.
+- Queries go through `session.execute(...)`, with `.scalars()` on single-entity selects only. `session.exec(...)` does not exist here — it was SQLModel's, and mixing the two styles is what used to produce row-wrapping type errors.
+- `DATABASE_URL` is read directly from the environment by `core/config.py`; it is never composed from individual host, port and credential variables.
+- `Settings` reads only the process environment and sets no `env_file`. Never make the application load a dotenv file on its own.
+- Schema changes always go through Alembic. Never alter the database directly, and never edit a revision that has already been applied — those files are historical records and are excluded from ruff for that reason.
+- Money is `Decimal` end to end and `NUMERIC(15, 2)` in the database. No `float` ever appears in a monetary path.
+- Every user-facing string is resolved from `i18n/pt_br.py`. The api answers a machine-readable `reason` plus a localized `message`; a literal `detail="..."` in a domain module is a policy violation.
+- Repository scope is the **Família group** only — no tables shared with other application groups.

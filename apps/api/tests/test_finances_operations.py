@@ -1707,7 +1707,7 @@ def test_reconcile_movement():
 
     # CR-05 fix: counter-based mock — answers in the order of the SINGLE-entity
     # selects (session.execute + .scalars()): 1=Movement, 2=Account,
-    # 3=FamilyMember(_require_family_access), 4=Subcategory(fallback), 5=Category
+    # 3=FamilyMember(require_family_access), 4=Subcategory(fallback), 5=Category
     exec_call_count = [0]
 
     def _exec(stmt):
@@ -2014,7 +2014,7 @@ def test_update_entry():
     )
 
     # WR-06: counter-based mock — returns the right object per entity-select order
-    # Order: 1=FinancialEntry, 2=Movement(auth), 3=Account, 4=FamilyMember(_require_family_access),
+    # Order: 1=FinancialEntry, 2=Movement(auth), 3=Account, 4=FamilyMember(require_family_access),
     #        5=Subcategory(update), 6=Subcategory(reload after commit), 7=Category(reload)
     exec_call_count = [0]
 

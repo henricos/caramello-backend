@@ -11,7 +11,7 @@ Authorization has two layers, and both live behind `get_current_user`:
 
   - the **e-mail allowlist** (`allowed_emails`) decides whether an identity may
     use the system at all;
-  - **family membership** (`_require_family_access`, plus the per-family
+  - **family membership** (`require_family_access`, plus the per-family
     filters in each domain) decides which data that identity may reach.
 
 Provides:
@@ -277,7 +277,7 @@ async def get_current_user(
          FamilyMember(role="member") and flips the invitation to "joined".
 
     Family membership is NOT checked here — it is the data-scope layer, applied
-    per operation (`_require_family_access` and the per-family filters).
+    per operation (`require_family_access` and the per-family filters).
     """
     # Lazy import of User to avoid a circular import
     # (TYPE_CHECKING resolves it statically)
@@ -449,11 +449,11 @@ async def get_current_user(
 
 
 # ----------------------------------------------------------------------
-# _require_family_access — reusable per-family access-control helper
+# require_family_access — reusable per-family access-control helper
 # ----------------------------------------------------------------------
 
 
-async def _require_family_access(
+async def require_family_access(
     family_id: int,
     current_user: User,
     session: AsyncSession,

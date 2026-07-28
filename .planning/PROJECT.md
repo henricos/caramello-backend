@@ -1,8 +1,12 @@
-# Caramello API
+# Caramello
 
 ## What This Is
 
-Backend Python/FastAPI do sistema Caramello — plataforma pessoal e familiar para centralizar agenda, finanças, listas de compras, saúde e entretenimento. Serve um grupo fechado de 1 a 5 usuários (membros da família), com autenticação via Keycloak e dados organizados por domínios de negócio. Destinado a ser consumido por um frontend React/Capacitor (mobile-first) e por agentes de IA via MCP.
+Plataforma pessoal e familiar para centralizar agenda, finanças, listas de compras, saúde e entretenimento. Serve um grupo fechado de 1 a 5 usuários (membros da família), com autenticação via Keycloak.
+
+O repositório é um monorepo com dois módulos: `apps/api` (backend Python/FastAPI, dono do modelo de dados e das regras de negócio, consumido também por agentes de IA via MCP) e `apps/web` (interface mobile-first renderizada no servidor).
+
+> Nota: versões anteriores deste documento descreviam o frontend como React/Capacitor empacotado como app nativo. Essa decisão foi revertida — ver "The frontend is a server-rendered web application; native packaging is out of scope" em `docs/architecture.md`.
 
 ## Core Value
 
