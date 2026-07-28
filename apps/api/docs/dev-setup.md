@@ -50,15 +50,19 @@ Copy the DSN it printed into the `DATABASE_URL` line of `apps/api/.env.developme
 
 The api is a pure OAuth2 resource server: it validates access tokens against a provider's JWKS and never issues tokens itself. It therefore needs a reachable issuer even locally, configured through `AUTH_OIDC_ISSUER` and `AUTH_OIDC_AUDIENCE`.
 
-**Be aware of what does not exist yet.** The intended dev provider is a local mock OIDC server belonging to the root E2E harness (`e2e/`), and that harness has not been built. The default in `.env.development` points at `http://localhost:8790`, which is where the mock *will* listen — nothing serves that port today. Until the harness lands, there are two interim paths:
+There are two options:
 
-1. **A real Keycloak realm.** Export the issuer in your own shell (never in the committed file) and let `.env.development`'s `${AUTH_OIDC_ISSUER:-...}` indirection pick it up:
+1. **The local mock provider (the default).** Start it in a dedicated terminal, from the repository root:
+   ```bash
+   node scripts/dev-oidc-server.js
+   ```
+   It listens on `http://localhost:8790` — exactly what `.env.development` already points at, so no export is needed — approves every login instantly with no screen, and signs real RS256 tokens carrying `caramello-api` in `aud`, which the api validates through the same JWKS/signature path production uses. The script reuses `e2e/lib/mock-oidc-server.js` from the root E2E harness and installs that dependency into `e2e/node_modules` on first run. `MOCK_OIDC_PORT`, `MOCK_OIDC_EMAIL`, `MOCK_OIDC_NAME`, `MOCK_OIDC_SUB` and `MOCK_OIDC_AUDIENCE` override the defaults; the default e-mail (`henricos@gmail.com`) is the one the startup seed already places on the allowlist. `Ctrl+C` stops it.
+
+2. **A real Keycloak realm.** Export the issuer in your own shell (never in the committed file) and let `.env.development`'s `${AUTH_OIDC_ISSUER:-...}` indirection pick it up:
    ```bash
    export AUTH_OIDC_ISSUER=https://keycloak.exemplo.com/realms/caramello
    ```
    The realm needs an audience mapper adding `caramello-api` to the `aud` claim of the access tokens it issues, otherwise every request fails `aud` validation.
-
-2. **An externally-run mock provider on `http://localhost:8790`** that signs RS256 tokens and injects `caramello-api` as the audience — for example `oauth2-mock-server` started by hand. This matches the committed default, so no export is needed.
 
 Everything provider-specific is discovered from the issuer URL (`/.well-known/openid-configuration`, then JWKS); swapping providers is a change to those two variables and nothing else. Note that the api boots fine without a reachable provider — the JWKS warm-up in the lifespan is deliberately best-effort — so a provider outage surfaces as a `401` on authenticated requests, never as a server that refuses to start. `GET /health` keeps answering.
 
@@ -171,7 +175,7 @@ curl -i http://localhost:8000/api/v1/users/me
 
 **Only the business surface is versioned.** `/api/v1/users/*`, `/api/v1/families/*` and `/api/v1/finances/*` carry the prefix; `GET /health`, `POST /auth/verify`, the `.well-known/*` discovery documents and `GET /` stay unversioned on purpose — a monitor's URL and a spec-defined URL must survive an api version bump untouched.
 
-The full logged-in flow is verified through `apps/web` ([`../../web/docs/dev-setup.md`](../../web/docs/dev-setup.md)) or through the root E2E scripts (see the root [`docs/testing.md`](../../../docs/testing.md)); those scripts do not exist yet.
+The full logged-in flow is verified through `apps/web` ([`../../web/docs/dev-setup.md`](../../web/docs/dev-setup.md)) or through the root E2E scripts — `node e2e/api-endpoints.js` covers this module's whole REST and MCP contract without a browser (see the root [`docs/testing.md`](../../../docs/testing.md)).
 
 ---
 

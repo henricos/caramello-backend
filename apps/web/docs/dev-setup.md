@@ -12,7 +12,13 @@ How to bring the web up locally from scratch. Everything runs at `http://localho
 
 The web never authenticates anyone itself: it delegates to an OIDC provider, and the api decides whether that identity may use the system. In development there are two options.
 
-**Local mock provider (intended default).** A minimal OIDC provider on `http://localhost:8790` that approves instantly, with no screen, and signs real RS256 tokens carrying the api's audience (`caramello-api`). It is the same issuer the api's `.env.development` points at. The mock belongs to the E2E harness (`e2e/` at the repository root); until that harness lands, use a real Keycloak as described below.
+**Local mock provider (the default).** A minimal OIDC provider on `http://localhost:8790` that approves instantly, with no screen, and signs real RS256 tokens carrying the api's audience (`caramello-api`). It is the same issuer the api's `.env.development` points at. Start it from the repository root, in a dedicated terminal:
+
+```bash
+node scripts/dev-oidc-server.js
+```
+
+The script belongs to the root E2E harness (it reuses `e2e/lib/mock-oidc-server.js` and installs that dependency into `e2e/node_modules` on first run). `MOCK_OIDC_EMAIL` chooses which identity logs in — the default, `henricos@gmail.com`, is already on the api's allowlist.
 
 **A real Keycloak realm.** Point `AUTH_OIDC_ISSUER` at the realm URL (for example `https://keycloak.exemplo.com/realms/caramello`) and use the `caramello-web` client's id and secret. The realm must carry the audience mapper that stamps `caramello-api` into access tokens, otherwise every login is refused by the api even though Keycloak accepted it. Register `http://localhost:3000/caramello/api/auth/callback/oidc` as a valid redirect URI for local work.
 
@@ -41,7 +47,7 @@ Variables the file only references as `${VAR}`, and that **you must export in yo
 
 | Variable | How to obtain it |
 |---|---|
-| `AUTH_OIDC_ISSUER` | `http://localhost:8790` for the mock, or your Keycloak realm URL |
+| `AUTH_OIDC_ISSUER` | `http://localhost:8790` for the mock (`node scripts/dev-oidc-server.js`), or your Keycloak realm URL |
 | `AUTH_OIDC_CLIENT_ID` | `caramello-web` (any value works with the mock, which requires no registration) |
 | `AUTH_OIDC_CLIENT_SECRET` | the client secret from Keycloak (any value works with the mock) |
 | `AUTH_SECRET` | `openssl rand -base64 33` — at least 32 characters, never reused between dev and production |
@@ -76,7 +82,7 @@ npm run typecheck  # TypeScript
 npm run build      # production build (needs the same variables as the dev server)
 ```
 
-The unit tests cover the pure, security-sensitive helpers: base-path normalization, the i18n accessor, the redirect guard and the env validator. Functional verification is E2E, from `e2e/` at the repository root — see the root [`docs/testing.md`](../../../docs/testing.md).
+The unit tests cover the pure, security-sensitive helpers: base-path normalization, the i18n accessor, the redirect guard and the env validator. Functional verification is E2E, from `e2e/` at the repository root — `node e2e/walking-skeleton.js` and `node e2e/auth-flows.js` drive this module in a real browser, each against its own isolated stack. See the root [`docs/testing.md`](../../../docs/testing.md).
 
 ## Troubleshooting
 
