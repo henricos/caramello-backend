@@ -29,6 +29,14 @@ Status: Between milestones
 Last milestone: v2.0 — Domínio Financeiro (SHIPPED 2026-06-04)
 Next step: `/gsd-new-milestone` para iniciar o planejamento do M3
 
+> **Em andamento (fora de milestone):** alinhamento do repositório com o template
+> `ai-ready-project-template`. O escopo atravessa os dois módulos e a raiz — por
+> isso este diretório `.planning/` foi movido de `apps/api/.planning/` para a raiz
+> do repositório. Os arquivos em `milestones/` permanecem inalterados: são as
+> únicas definições sobreviventes dos IDs de requisito (`FAMILY-01`, `ACC-01`,
+> `MOV-03`, `LAN-02`, `REL-04`, …) referenciados por comentários no código e pelo
+> roadmap.
+
 ## M1 Reference (SHIPPED 2026-05-30)
 
 - 5 phases, 25 plans

@@ -35,7 +35,7 @@ O domínio financeiro está completo. O projeto tem dois domínios de negócio f
 - **Stack**: Python 3.10+, FastAPI async, SQLModel/SQLAlchemy async, PostgreSQL obrigatório
 - **Auth**: Keycloak com OIDC/JWT — clients dev/prod configurados em infra existente
 - **DB naming**: `caramello_dev` (dev), `caramello` (prod)
-- **Código gerado**: `models.py` e `router.py` em `src/caramello/{domain}/` — editar YAML e regenerar
+- **Código gerado**: `models.py` e `router.py` em `apps/api/src/caramello_api/{domain}/` — editar YAML e regenerar
 - **Escopo do repo**: apenas Grupo Família
 
 ## Key Decisions
@@ -60,7 +60,7 @@ O domínio financeiro está completo. O projeto tem dois domínios de negócio f
 
 ## Out of Scope (permanente)
 
-- Frontend React/Capacitor — módulo `apps/frontend` neste monorepo (ainda não iniciado)
+- Frontend — módulo `apps/web` (Next.js) neste monorepo
 - Autenticação local com senha — Keycloak é o único IdP
 - Multi-tenancy entre grupos — este repo serve exclusivamente o Grupo Família
 - Token introspection remota — validação local com JWKS cacheado
