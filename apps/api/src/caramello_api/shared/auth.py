@@ -46,6 +46,7 @@ import httpx
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +60,17 @@ if TYPE_CHECKING:
     from caramello_api.users.models import User
 
 logger = logging.getLogger(__name__)
+
+# The e-mail claim is validated with the SAME validator the response schemas
+# use (`EmailStr`, i.e. `email_validator` underneath), and that identity is the
+# whole point: `UserRead.email` is an `EmailStr`, so an address this boundary
+# accepted but the schema would reject becomes a 500 on the next read of that
+# user — a stored row the api can no longer serialize. Sharing one validator
+# makes "provisioned" and "serializable" the same condition by construction.
+# `email_validator` rejects special-use domains (`user@x.test`,
+# `user@localhost`), which is exactly the class of address that used to get
+# through here and blow up later.
+_EMAIL_ADAPTER: TypeAdapter[str] = TypeAdapter(EmailStr)
 
 # ----------------------------------------------------------------------
 # Module state — analogous to the `engine` singleton in shared/database.py
@@ -381,6 +393,19 @@ async def get_current_user(
             headers=_www_authenticate_header(),
         )
     email = email_claim.strip().lower()
+
+    # Reject an address the response schemas could not serialize later. Done
+    # BEFORE the allowlist query and before provisioning, so an unusable value
+    # never reaches the database: a row whose e-mail `UserRead` rejects would
+    # answer 500 on every subsequent read, and no request could repair it.
+    try:
+        _EMAIL_ADAPTER.validate_python(email)
+    except ValidationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_error_detail("invalid_token"),
+            headers=_www_authenticate_header(),
+        ) from None
 
     idp_sub_value = payload.get("sub")
     if not idp_sub_value:

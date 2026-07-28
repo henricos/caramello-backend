@@ -13,7 +13,9 @@ happens before the token is considered trustworthy.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -229,6 +231,79 @@ def test_email_not_verified_is_rejected_before_any_db_access():
     mock_session.execute.assert_not_called()
     # A 403 never carries WWW-Authenticate (the credential was understood and denied).
     assert exc_info.value.headers is None
+
+
+def test_an_unusable_email_claim_is_rejected_before_reaching_the_database():
+    """A claim the response schemas could not serialize must be a 401, not a stored row.
+
+    `UserRead.email` is an `EmailStr`, so provisioning a user whose address
+    `email_validator` rejects would answer 500 on every later read of that user,
+    with no request able to repair it. The boundary therefore validates with the
+    same validator the schema uses, before the allowlist query and before the
+    upsert. Special-use domains are the realistic case.
+    """
+    import pytest as _pytest
+
+    for unusable in ("operador@x.test", "operador@localhost", "sem-arroba"):
+        mock_session = AsyncMock()
+        payload = {
+            "sub": "kc-sub-inutilizavel",
+            "email": unusable,
+            "email_verified": True,
+        }
+        with _pytest.raises(HTTPException) as exc_info:
+            _call_get_current_user(mock_session, payload)
+
+        assert exc_info.value.status_code == 401, unusable
+        assert exc_info.value.detail["reason"] == "invalid_token", unusable
+        # Nothing was queried and nothing was written: no row exists that the
+        # api would later fail to serialize.
+        mock_session.execute.assert_not_awaited()
+        mock_session.commit.assert_not_awaited()
+        # A 401 always advertises how to authenticate.
+        assert "WWW-Authenticate" in (exc_info.value.headers or {}), unusable
+
+
+def test_the_boundary_and_the_read_schema_agree_on_what_an_email_is():
+    """Anti-regression: the two validators must not drift apart.
+
+    If someone loosens the boundary or tightens `UserRead`, the pair stops being
+    equivalent and the 500 this guards against comes back.
+    """
+    from pydantic import ValidationError as _ValidationError
+
+    from caramello_api.shared.auth import _EMAIL_ADAPTER
+    from caramello_api.users.schemas import UserRead
+
+    def boundary_accepts(addr: str) -> bool:
+        try:
+            _EMAIL_ADAPTER.validate_python(addr)
+            return True
+        except _ValidationError:
+            return False
+
+    def schema_accepts(addr: str) -> bool:
+        try:
+            UserRead(
+                uuid=uuid4(),
+                idp_sub="s",
+                email=addr,
+                name="n",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+            return True
+        except _ValidationError:
+            return False
+
+    for addr in (
+        "operador@exemplo.com.br",
+        "operador@exemplo.com",
+        "operador@x.test",
+        "operador@localhost",
+        "sem-arroba",
+    ):
+        assert boundary_accepts(addr) == schema_accepts(addr), addr
 
 
 def test_missing_email_verified_claim_is_treated_as_false():
