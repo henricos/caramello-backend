@@ -1,0 +1,103 @@
+# Example stack for manual publishing (e.g. Portainer). Copy it to the real
+# compose.yaml (kept out of version control) and fill in the secrets.
+#
+# This file encodes only the stack topology and the publishing interview.
+# What each variable means is documented once, in the "How to run the image"
+# section of the owning module's docs/release.md; the cross-cutting
+# conventions (addressing via <SERVER_IP>:<port>, published ports, paired
+# versions) live in docs/architecture.md.
+#
+# `# publish:` end-of-line markers drive external publishing tools that
+# generate the real compose interactively:
+#   publish:ask           prompts for a value (no sane default)
+#   publish:ask-secret    prompts with hidden input
+#   publish:confirm       offers the current value as an accepted default
+#   publish:auto-uid      filled from COMPOSE_UID — never prompted
+#   publish:auto-gid      filled from COMPOSE_GID — never prompted
+#   publish:auto-network  filled from COMPOSE_NETWORK — never prompted
+#   publish:auto-volume   relative label prefixed with COMPOSE_VOLUME_BASE_PATH
+# Unmarked lines are copied as-is.
+
+services:
+  # ---------------------------------------------------------------------------
+  # web — NOT YET AVAILABLE. `apps/web` does not exist in this repository yet,
+  # so there is no `ghcr.io/henricos/caramello-web` image to run and the whole
+  # service is kept commented out. When `apps/web` lands, uncomment this block
+  # TOGETHER WITH adding the `publish-web` job (and the paired
+  # `package.json`-vs-tag assertion) to .github/workflows/release-ghcr.yml —
+  # versions are paired, so a stack with a web service requires a release that
+  # publishes both images. The `# publish:` markers below only become active
+  # once the lines are uncommented.
+  #
+  # web:
+  #   image: ghcr.io/henricos/caramello-web:latest # publish:confirm
+  #   container_name: caramello-web # publish:confirm
+  #   restart: unless-stopped
+  #   depends_on:
+  #     api:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     # The base path is baked into the image (APP_BASE_PATH) — keep this
+  #     # URL in sync with it.
+  #     test: ["CMD", "node", "-e", "fetch('http://localhost:3000/caramello/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 15s
+  #   ports:
+  #     - "3000:3000/tcp" # publish:confirm
+  #   environment:
+  #     PUID: "1000" # publish:auto-uid
+  #     PGID: "1000" # publish:auto-gid
+  #     AUTH_SECRET: change-this-value # publish:ask-secret
+  #     AUTH_OIDC_ISSUER: https://keycloak.exemplo.com/realms/caramello # publish:ask
+  #     AUTH_OIDC_CLIENT_ID: caramello-web # publish:confirm
+  #     AUTH_OIDC_CLIENT_SECRET: change-this-value # publish:ask-secret
+  #     API_URL: https://exemplo.com/caramello-api # publish:ask
+  #     AUTH_TRUST_HOST: "true"
+  #     AUTH_URL: https://exemplo.com/caramello/api/auth # publish:ask
+  #   volumes:
+  #     # Shared with the api, which mounts the same label read-write.
+  #     - caramello/data:/data:ro # publish:auto-volume
+  #   networks:
+  #     - rede_containers # publish:auto-network
+
+  api:
+    image: ghcr.io/henricos/caramello-api:latest # publish:confirm
+    container_name: caramello-api # publish:confirm
+    restart: unless-stopped
+    # Keep a SINGLE replica: the entrypoint migrates at boot (see
+    # docs/architecture.md).
+    healthcheck:
+      # python-slim ships neither curl nor wget; urllib comes with the
+      # interpreter. urlopen raises on any non-2xx status.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    ports:
+      - "8000:8000/tcp" # publish:confirm
+    environment:
+      PUID: "1000" # publish:auto-uid
+      PGID: "1000" # publish:auto-gid
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://user:password@host:5432/caramello # publish:ask-secret
+      AUTH_OIDC_ISSUER: https://keycloak.exemplo.com/realms/caramello # publish:ask
+      AUTH_OIDC_AUDIENCE: caramello-api # publish:confirm
+      # Optional — only uncomment to change the defaults.
+      # CARAMELLO_API_HOST: 0.0.0.0
+      # CARAMELLO_API_PORT: "8000"
+      # CARAMELLO_API_LOG_LEVEL: info
+      # APP_BASE_PATH: /caramello-api
+    volumes:
+      # Read-write: the api is the writer of the shared data folder.
+      - caramello/data:/data # publish:auto-volume
+    networks:
+      - rede_containers # publish:auto-network
+
+networks:
+  # Keep this name in sync with COMPOSE_NETWORK (the auto-network markers
+  # above only rewrite the service entries).
+  rede_containers:
+    external: true

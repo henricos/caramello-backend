@@ -1,10 +1,26 @@
-.env
-.git
+# Build context exclusions. Anything the runtime does not need stays out, so
+# the context stays small and changing it never invalidates a build layer.
+#
+# `dsl/`, `bin/` and `scripts/` are development tooling (the YAML DSL and its
+# code generator) and are deliberately absent from the image — nothing at
+# runtime reads them. `alembic.ini` and `src/caramello_api/migrations/` ARE
+# included, because entrypoint.sh runs `alembic upgrade head` at boot.
 .venv
-__pycache__/
+.pgembed-data
+.pytest_cache
+.ruff_cache
+.mypy_cache
+__pycache__
 *.pyc
-.planning/
-tests/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.git
+.env
+.env.*
+data
+tests
+.planning
+docs
+dsl
+bin
+scripts
+compose.yaml
+compose.override.yaml
