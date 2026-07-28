@@ -116,10 +116,7 @@ def get_field_definition(field: dict[str, Any], force_optional: bool = False) ->
     # Não combinar unique=True com sa_column (Pitfall 3 do RESEARCH.md).
     if ftype == "Decimal":
         nullable_kw = "nullable=False" if not is_nullable else "nullable=True"
-        return (
-            f"    {fname}: {type_str} = "
-            f"Field(sa_column=Column(Numeric(15, 2), {nullable_kw}))"
-        )
+        return f"    {fname}: {type_str} = Field(sa_column=Column(Numeric(15, 2), {nullable_kw}))"
     if not is_nullable:
         field_args.append("nullable=False")
     return f"    {fname}: {type_str} = Field({', '.join(field_args)})"
@@ -242,8 +239,7 @@ def generate_models(
         for f in fields
     )
     needs_datetime = any(
-        f.get("type", "").lower() == "datetime"
-        or f.get("default_factory") in ("now_utc",)
+        f.get("type", "").lower() == "datetime" or f.get("default_factory") in ("now_utc",)
         for f in fields
     )
     needs_emailstr = any(f.get("type", "").lower() == "emailstr" for f in fields)
@@ -257,9 +253,7 @@ def generate_models(
             lm = rel["link_model"]
             lm_domain = entity_domain.get(lm, "")
             if lm_domain and lm_domain != domain:
-                cross_imports.append(
-                    f"from caramello_api.{lm_domain}.models import {lm}"
-                )
+                cross_imports.append(f"from caramello_api.{lm_domain}.models import {lm}")
 
     # Imports cross-domain em relacionamentos (ex: User em family/models.py)
     for rel in relationships:
@@ -335,7 +329,11 @@ def generate_models(
         code += get_field_definition(f) + "\n"
 
     rel_lines = generate_relationships(
-        relationships, name, entity_domain, skip_link_models, late_bound_types,
+        relationships,
+        name,
+        entity_domain,
+        skip_link_models,
+        late_bound_types,
         sa_secondary_map,
     )
     if rel_lines:
@@ -382,13 +380,13 @@ def generate_models(
         if f.get("expose_as_uuid"):
             base = f["name"].removesuffix("_id")
             nullable = f.get("nullable", True) or "default" in f or f.get("default_factory")
-            code += f"    {base}_uuid: UUID | None = None\n" if nullable else f"    {base}_uuid: UUID\n"
+            code += (
+                f"    {base}_uuid: UUID | None = None\n" if nullable else f"    {base}_uuid: UUID\n"
+            )
             continue
         fname = f["name"]
         ftype = map_type_to_python(f["type"])
-        is_optional = (
-            f.get("nullable", False) or "default" in f or f.get("default_factory")
-        )
+        is_optional = f.get("nullable", False) or "default" in f or f.get("default_factory")
         if is_optional:
             ftype = f"{ftype} | None"
         line = f"    {fname}: {ftype}"
@@ -437,8 +435,7 @@ def generate_router(entity_data: dict[str, Any]) -> str:
         user_import_line = "from caramello_api.users.models import User\n"
 
     domain_import = (
-        f"from caramello_api.{domain}.models"
-        f" import {name}, {name}Read, {name}Create, {name}Update"
+        f"from caramello_api.{domain}.models import {name}, {name}Read, {name}Create, {name}Update"
     )
 
     return f"""from __future__ import annotations
@@ -565,7 +562,7 @@ router = APIRouter(prefix="/{domain}", tags=["{domain_class}"])
         # Remove prefix do path para o decorator (prefix já está no APIRouter)
         decorator_path = path
         if decorator_path.startswith(f"/{domain}"):
-            decorator_path = decorator_path[len(f"/{domain}"):]
+            decorator_path = decorator_path[len(f"/{domain}") :]
         if not decorator_path:
             decorator_path = "/"
         description = op.get("description", "")
@@ -635,7 +632,7 @@ def _consolidate_models(
 
     # Reordenar entidades: link_models primeiro, depois as demais.
     # Garante que FamilyMember seja definido antes de Family.
-    entities = sorted(entities, key=lambda e: (0 if e.get("is_link_model") else 1))
+    entities = sorted(entities, key=lambda e: 0 if e.get("is_link_model") else 1)
 
     # Calcular grafo de dependências entre domínios para detectar ciclos
     fk_graph: dict[str, set[str]] = {}
@@ -651,7 +648,7 @@ def _consolidate_models(
 
     # Mapear entity_name → table_name para resolver sa_secondary_map
     entity_table: dict[str, str] = {}
-    for e in (all_entities or entities):
+    for e in all_entities or entities:
         entity_table[e["name"]] = e["table_name"]
 
     # Coletar imports únicos de cada entidade
@@ -691,11 +688,7 @@ def _consolidate_models(
             special3 = {"UUID", "datetime", "EmailStr"}
             if inner and inner not in STANDARD_TYPES and inner not in special3:
                 rel_domain = entity_domain.get(inner, "")
-                if (
-                    rel_domain
-                    and rel_domain != domain
-                    and _would_create_cycle(rel_domain)
-                ):
+                if rel_domain and rel_domain != domain and _would_create_cycle(rel_domain):
                     entity_late_bound.add(inner)
 
         block = generate_models(
@@ -716,15 +709,12 @@ def _consolidate_models(
             if line.startswith("from __future__"):
                 continue
             if (
-                line.startswith("from ")
-                or line.startswith("import ")
-                or line == ""
+                line.startswith("from ") or line.startswith("import ") or line == ""
             ) and not in_classes:
                 circular = f"from caramello_api.{domain}.models import"
                 if (
-                    (line.startswith("from ") or line.startswith("import "))
-                    and circular not in line
-                ):
+                    line.startswith("from ") or line.startswith("import ")
+                ) and circular not in line:
                     import_lines.append(line)
             elif line.startswith("class "):
                 in_classes = True
@@ -763,9 +753,7 @@ def _consolidate_models(
 
     # Ordenar imports: stdlib depois terceiros depois locais
     stdlib = sorted(
-        i
-        for i in all_imports
-        if i.startswith("from datetime") or i.startswith("from uuid")
+        i for i in all_imports if i.startswith("from datetime") or i.startswith("from uuid")
     )
     third_party = sorted(
         i
@@ -836,9 +824,7 @@ def _consolidate_routers(
                 var = f"{name.lower()}_router"
                 router_var = var
                 router_def_lines.append(line.replace("router = ", f"{var} = "))
-            elif in_endpoints or (
-                line.startswith("@") and not line.startswith("@router")
-            ):
+            elif in_endpoints or (line.startswith("@") and not line.startswith("@router")):
                 in_endpoints = True
                 # Substituir @router. pelo nome específico
                 if line.startswith("@router."):
@@ -939,9 +925,7 @@ def main() -> None:
         domain_dir.mkdir(parents=True, exist_ok=True)
         (domain_dir / "__init__.py").touch()
 
-        models_code = _consolidate_models(
-            entities, entity_domain, all_entities_flat
-        )
+        models_code = _consolidate_models(entities, entity_domain, all_entities_flat)
         (domain_dir / "models.py").write_text(models_code)
         print(f"  wrote {domain_dir}/models.py")
 
@@ -979,7 +963,9 @@ def _run_ruff_fix(src_dir: Path) -> None:
     """Executa ruff --fix e ruff format nos arquivos gerados.
 
     Descobre dinamicamente os diretórios de domínio em src_dir,
-    excluindo diretórios internos (_*), shared e core.
+    excluindo diretórios internos (_*) e os que não contêm código gerado:
+    shared, core, i18n e migrations (as revisions do Alembic são histórico
+    imutável e não devem ser reformatadas).
     """
     import subprocess
 
@@ -988,7 +974,7 @@ def _run_ruff_fix(src_dir: Path) -> None:
         for d in sorted(src_dir.iterdir())
         if d.is_dir()
         and not d.name.startswith("_")
-        and d.name not in ("shared", "core")
+        and d.name not in ("shared", "core", "i18n", "migrations")
     ]
     if not dirs:
         return

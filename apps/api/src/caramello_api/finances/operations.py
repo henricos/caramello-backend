@@ -13,7 +13,7 @@ Cobre:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -133,9 +133,7 @@ class MovementReadPublic(BaseModel):
     amount: Decimal
     description: str
     import_hash: str | None = None  # D-16: opcional, para debug
-    entry_uuid: UUID | None = (
-        None  # D-MOV-01: UUID do lançamento conciliado, null se pendente
-    )
+    entry_uuid: UUID | None = None  # D-MOV-01: UUID do lançamento conciliado, null se pendente
     created_at: datetime
     updated_at: datetime
 
@@ -307,9 +305,7 @@ async def create_account(
     é resolvido no backend. T-07-04: Depends(get_current_user) obrigatório.
     """
     # Resolver UUID público → objeto ORM (404 se não encontrado)
-    family_result = await session.exec(
-        select(Family).where(Family.uuid == account_in.family_uuid)
-    )
+    family_result = await session.exec(select(Family).where(Family.uuid == account_in.family_uuid))
     family = family_result.first()
     if family is None:
         raise HTTPException(status_code=404, detail="Família não encontrada")
@@ -358,9 +354,7 @@ async def list_accounts(
 
     await _require_family_access(family.id, current_user, session)
 
-    accounts_result = await session.exec(
-        select(Account).where(Account.family_id == family.id)
-    )
+    accounts_result = await session.exec(select(Account).where(Account.family_id == family.id))
     accounts = list(accounts_result.all())
     return [
         AccountReadPublic(
@@ -390,9 +384,7 @@ async def get_account(
         raise HTTPException(status_code=404, detail="Conta não encontrada")
 
     # Resolver Family para obter UUID público e verificar acesso
-    family_result = await session.exec(
-        select(Family).where(Family.id == db_account.family_id)
-    )
+    family_result = await session.exec(select(Family).where(Family.id == db_account.family_id))
     family = family_result.first()
     if family is None:
         raise HTTPException(status_code=404, detail="Família não encontrada")
@@ -429,9 +421,7 @@ async def update_account(
         raise HTTPException(status_code=404, detail="Conta não encontrada")
 
     # Resolver Family para obter UUID público
-    family_result = await session.exec(
-        select(Family).where(Family.id == db_account.family_id)
-    )
+    family_result = await session.exec(select(Family).where(Family.id == db_account.family_id))
     family = family_result.first()
     if family is None:
         raise HTTPException(status_code=404, detail="Família não encontrada")
@@ -445,7 +435,7 @@ async def update_account(
         setattr(db_account, key, value)
 
     # Pitfall #4: updated_at não tem onupdate automático — definir manualmente
-    db_account.updated_at = datetime.now(timezone.utc)
+    db_account.updated_at = datetime.now(UTC)
 
     session.add(db_account)
     await session.commit()
@@ -475,9 +465,7 @@ async def create_category(
     current_user: User = Depends(get_current_user),
 ) -> CategoryReadPublic:
     """CAT-01: Cria categoria de nível 1 scoped por família."""
-    family_result = await session.exec(
-        select(Family).where(Family.uuid == category_in.family_uuid)
-    )
+    family_result = await session.exec(select(Family).where(Family.uuid == category_in.family_uuid))
     family = family_result.first()
     if family is None:
         raise HTTPException(status_code=404, detail="Família não encontrada")
@@ -515,9 +503,7 @@ async def list_categories(
 
     await _require_family_access(family.id, current_user, session)
 
-    categories_result = await session.exec(
-        select(Category).where(Category.family_id == family.id)
-    )
+    categories_result = await session.exec(select(Category).where(Category.family_id == family.id))
     categories = list(categories_result.all())
     return [
         CategoryReadPublic(
@@ -543,9 +529,7 @@ async def get_category(
     if db_category is None:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
 
-    family_result = await session.exec(
-        select(Family).where(Family.id == db_category.family_id)
-    )
+    family_result = await session.exec(select(Family).where(Family.id == db_category.family_id))
     family = family_result.first()
     if family is None:
         raise HTTPException(status_code=404, detail="Família não encontrada")
@@ -576,9 +560,7 @@ async def update_category(
     if db_category is None:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
 
-    family_result = await session.exec(
-        select(Family).where(Family.id == db_category.family_id)
-    )
+    family_result = await session.exec(select(Family).where(Family.id == db_category.family_id))
     family = family_result.first()
     if family is None:
         raise HTTPException(status_code=404, detail="Família não encontrada")
@@ -588,7 +570,7 @@ async def update_category(
     update_data = category_in.model_dump(exclude_none=True)
     for key, value in update_data.items():
         setattr(db_category, key, value)
-    db_category.updated_at = datetime.now(timezone.utc)
+    db_category.updated_at = datetime.now(UTC)
 
     session.add(db_category)
     await session.commit()
@@ -628,9 +610,7 @@ async def create_subcategory(
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
 
     # Resolver Family pelo category.family_id (para obter UUID público)
-    family_result = await session.exec(
-        select(Family).where(Family.id == db_category.family_id)
-    )
+    family_result = await session.exec(select(Family).where(Family.id == db_category.family_id))
     family_result.first()
 
     # Verificar membership via category.family_id
@@ -660,9 +640,7 @@ async def list_subcategories(
     current_user: User = Depends(get_current_user),
 ) -> list[SubcategoryReadPublic]:
     """CAT-04: Lista subcategorias; category_uuid obrigatório (D-12)."""
-    category_result = await session.exec(
-        select(Category).where(Category.uuid == category_uuid)
-    )
+    category_result = await session.exec(select(Category).where(Category.uuid == category_uuid))
     db_category = category_result.first()
     if db_category is None:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
@@ -692,9 +670,7 @@ async def get_subcategory(
     current_user: User = Depends(get_current_user),
 ) -> SubcategoryReadPublic:
     """CAT-04: Detalhe de subcategoria pelo UUID público."""
-    result = await session.exec(
-        select(Subcategory).where(Subcategory.uuid == subcategory_uuid)
-    )
+    result = await session.exec(select(Subcategory).where(Subcategory.uuid == subcategory_uuid))
     db_subcategory = result.first()
     if db_subcategory is None:
         raise HTTPException(status_code=404, detail="Subcategoria não encontrada")
@@ -728,9 +704,7 @@ async def update_subcategory(
 
     Pitfall #4: updated_at definido manualmente.
     """
-    result = await session.exec(
-        select(Subcategory).where(Subcategory.uuid == subcategory_uuid)
-    )
+    result = await session.exec(select(Subcategory).where(Subcategory.uuid == subcategory_uuid))
     db_subcategory = result.first()
     if db_subcategory is None:
         raise HTTPException(status_code=404, detail="Subcategoria não encontrada")
@@ -747,7 +721,7 @@ async def update_subcategory(
     update_data = subcategory_in.model_dump(exclude_none=True)
     for key, value in update_data.items():
         setattr(db_subcategory, key, value)
-    db_subcategory.updated_at = datetime.now(timezone.utc)
+    db_subcategory.updated_at = datetime.now(UTC)
 
     session.add(db_subcategory)
     await session.commit()
@@ -807,9 +781,7 @@ async def create_movement(
     computed_hash = _compute_hash(db_account.id, row)
 
     # D-17: verificar se hash já existe → 409 com existing_uuid
-    dup_result = await session.exec(
-        select(Movement).where(Movement.import_hash == computed_hash)
-    )
+    dup_result = await session.exec(select(Movement).where(Movement.import_hash == computed_hash))
     dup = dup_result.first()
     if dup is not None:
         raise HTTPException(
@@ -843,9 +815,7 @@ async def create_movement(
     )
 
 
-@router.get(
-    "/accounts/{account_uuid}/movements", response_model=list[MovementReadPublic]
-)
+@router.get("/accounts/{account_uuid}/movements", response_model=list[MovementReadPublic])
 async def list_movements(
     account_uuid: UUID,
     limit: int = Query(default=50, ge=1, le=500),
@@ -877,11 +847,7 @@ async def list_movements(
     # D-MOV-01: LEFT JOIN com FinancialEntry para entry_uuid (pitfall P5: usar fetchall + posição)
     stmt = (
         select(Movement, FinancialEntry.uuid.label("entry_uuid"))
-        .select_from(
-            outerjoin(
-                Movement, FinancialEntry, FinancialEntry.movement_id == Movement.id
-            )
-        )
+        .select_from(outerjoin(Movement, FinancialEntry, FinancialEntry.movement_id == Movement.id))
         .where(Movement.account_id == db_account.id)
     )
 
@@ -918,9 +884,7 @@ async def list_movements(
     ]
 
 
-@router.post(
-    "/accounts/{account_uuid}/movements/import", response_model=ImportResultPublic
-)
+@router.post("/accounts/{account_uuid}/movements/import", response_model=ImportResultPublic)
 async def import_movements_endpoint(
     account_uuid: UUID,
     file: UploadFile = File(...),
@@ -950,7 +914,7 @@ async def import_movements_endpoint(
         service_result = await import_movements(content, format, db_account.id, session)
     except ValueError as e:
         # D-13: abortar lote com >50% inválidas → 422
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     # Converter movements[] para MovementReadPublic
     movements_public = []
@@ -962,10 +926,8 @@ async def import_movements_endpoint(
                 amount=m["amount"],
                 description=m["description"],
                 import_hash=None,
-                created_at=m.get("created_at", datetime.now(timezone.utc)),
-                updated_at=m.get(
-                    "updated_at", m.get("created_at", datetime.now(timezone.utc))
-                ),  # WR-03
+                created_at=m.get("created_at", datetime.now(UTC)),
+                updated_at=m.get("updated_at", m.get("created_at", datetime.now(UTC))),  # WR-03
             )
         )
 
@@ -991,9 +953,7 @@ async def confirm_import(
     T-08-12: import_hash=None evita colisão de UNIQUE constraint.
     """
     # Resolver account_uuid → Account
-    result = await session.exec(
-        select(Account).where(Account.uuid == confirm_in.account_uuid)
-    )
+    result = await session.exec(select(Account).where(Account.uuid == confirm_in.account_uuid))
     db_account = result.first()
     if db_account is None:
         raise HTTPException(status_code=404, detail="Conta não encontrada")
@@ -1073,9 +1033,7 @@ async def get_suggest_category(
         raise HTTPException(status_code=404, detail="Movimentação não encontrada")
 
     # Resolver Account para obter family_id e verificar membership
-    account_result = await session.exec(
-        select(Account).where(Account.id == db_movement.account_id)
-    )
+    account_result = await session.exec(select(Account).where(Account.id == db_movement.account_id))
     db_account = account_result.first()
     if db_account is None:
         raise HTTPException(status_code=404, detail="Conta não encontrada")
@@ -1108,9 +1066,7 @@ async def reconcile_movement(
     T-09-08: UUID/competencia validados pelo Pydantic BaseModel (422 automático).
     """
     # 1. Resolver movement_uuid → Movement (404 se não existe)
-    mov_result = await session.exec(
-        select(Movement).where(Movement.uuid == movement_uuid)
-    )
+    mov_result = await session.exec(select(Movement).where(Movement.uuid == movement_uuid))
     db_movement = mov_result.first()
     if db_movement is None:
         raise HTTPException(status_code=404, detail="Movimentação não encontrada")
@@ -1128,8 +1084,8 @@ async def reconcile_movement(
         # Em Row SQLAlchemy, o objeto está em posição 0
         try:
             db_account = db_account[0]
-        except (TypeError, KeyError, IndexError):
-            raise HTTPException(status_code=404, detail="Conta não encontrada")
+        except (TypeError, KeyError, IndexError) as e:
+            raise HTTPException(status_code=404, detail="Conta não encontrada") from e
     family_id: int = db_account.family_id
     await _require_family_access(family_id, current_user, session)
 
@@ -1156,9 +1112,7 @@ async def reconcile_movement(
         sub_cat_id = getattr(db_subcategory, "category_id", None)
         db_category = None
         if sub_cat_id is not None:
-            cat_result = await session.exec(
-                select(Category).where(Category.id == sub_cat_id)
-            )
+            cat_result = await session.exec(select(Category).where(Category.id == sub_cat_id))
             db_category = cat_result.first()
 
     # 4. Resolver responsible_user_uuid → responsible_user_id (opcional, D-ATTR-01/02)
@@ -1170,9 +1124,7 @@ async def reconcile_movement(
         )
         responsible_user = user_result.first()
         if responsible_user is None:
-            raise HTTPException(
-                status_code=422, detail="Usuário responsável não encontrado"
-            )
+            raise HTTPException(status_code=422, detail="Usuário responsável não encontrado")
         # D-ATTR-02: validar membership
         member_result = await session.exec(
             select(FamilyMember).where(
@@ -1204,12 +1156,12 @@ async def reconcile_movement(
         session.add(db_entry)
         await session.commit()
         await session.refresh(db_entry)
-    except IntegrityError:
+    except IntegrityError as e:
         await session.rollback()
         raise HTTPException(
             status_code=409,
             detail="Movimentação já possui lançamento financeiro",
-        )
+        ) from e
 
     # 6. Construir schema rico sem lazy load (evitar pitfall selectinload)
     # CR-05: se db_category for None após ambos os caminhos, retornar 404 em vez de uuid4() fabricado
@@ -1261,16 +1213,12 @@ async def get_entry(
         raise HTTPException(status_code=404, detail="Lançamento não encontrado")
 
     # Resolver Movement → Account → Family para auth
-    mov_result = await session.exec(
-        select(Movement).where(Movement.id == db_entry.movement_id)
-    )
+    mov_result = await session.exec(select(Movement).where(Movement.id == db_entry.movement_id))
     db_movement = mov_result.first()
     if db_movement is None:
         raise HTTPException(status_code=404, detail="Movimentação não encontrada")
 
-    acc_result = await session.exec(
-        select(Account).where(Account.id == db_movement.account_id)
-    )
+    acc_result = await session.exec(select(Account).where(Account.id == db_movement.account_id))
     db_account = acc_result.first()
     if db_account is None:
         raise HTTPException(status_code=404, detail="Conta não encontrada")
@@ -1347,9 +1295,7 @@ async def update_entry(
 
     # Resolver Movement e Account via cadeia correta para auth (IDOR fix: CR-01)
     entry_movement_id = getattr(db_entry, "movement_id", None)
-    mov_auth_result = await session.exec(
-        select(Movement).where(Movement.id == entry_movement_id)
-    )
+    mov_auth_result = await session.exec(select(Movement).where(Movement.id == entry_movement_id))
     db_movement_for_auth = mov_auth_result.first()
     if db_movement_for_auth is None:
         raise HTTPException(status_code=404, detail="Movimentação não encontrada")
@@ -1418,7 +1364,7 @@ async def update_entry(
             db_entry.responsible_user_id = responsible_user.id
 
     # Pitfall P3: updated_at definido manualmente (sem onupdate automático)
-    db_entry.updated_at = datetime.now(timezone.utc)
+    db_entry.updated_at = datetime.now(UTC)
 
     session.add(db_entry)
     await session.commit()
@@ -1429,15 +1375,11 @@ async def update_entry(
     db_category = None
     sub_id = getattr(db_entry, "subcategory_id", None)
     if sub_id is not None:
-        sub_result_r = await session.exec(
-            select(Subcategory).where(Subcategory.id == sub_id)
-        )
+        sub_result_r = await session.exec(select(Subcategory).where(Subcategory.id == sub_id))
         db_subcategory = sub_result_r.first()
         cat_id = getattr(db_subcategory, "category_id", None)
         if cat_id is not None:
-            cat_result_r = await session.exec(
-                select(Category).where(Category.id == cat_id)
-            )
+            cat_result_r = await session.exec(select(Category).where(Category.id == cat_id))
             db_category = cat_result_r.first()
 
     responsible_user_uuid: UUID | None = None
@@ -1453,20 +1395,10 @@ async def update_entry(
     if db_category is None:
         raise HTTPException(status_code=404, detail="Categoria não encontrada")
     mov_uuid = (
-        getattr(db_movement, "uuid", uuid4())
-        if db_movement
-        else getattr(db_entry, "uuid", uuid4())
+        getattr(db_movement, "uuid", uuid4()) if db_movement else getattr(db_entry, "uuid", uuid4())
     )
-    mov_date = (
-        getattr(db_movement, "date", datetime.now(timezone.utc))
-        if db_movement
-        else datetime.now(timezone.utc)
-    )
-    mov_amount = (
-        getattr(db_movement, "amount", Decimal("0.00"))
-        if db_movement
-        else Decimal("0.00")
-    )
+    mov_date = getattr(db_movement, "date", datetime.now(UTC)) if db_movement else datetime.now(UTC)
+    mov_amount = getattr(db_movement, "amount", Decimal("0.00")) if db_movement else Decimal("0.00")
     mov_desc = getattr(db_movement, "description", "") if db_movement else ""
     sub_uuid_r = getattr(db_subcategory, "uuid", entry_in.subcategory_uuid or uuid4())
     sub_name_r = getattr(db_subcategory, "name", "")

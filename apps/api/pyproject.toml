@@ -31,6 +31,9 @@ dependencies = [
 # never the application at runtime — which is why the image builds --no-dev.
 dev = [
     "mypy~=2.1.0",
+    # Embedded Postgres for local development: `shared/db_dev_server.py` boots
+    # it, so no PostgreSQL installation is required on the developer's machine.
+    "pgembed~=0.2.0",
     "pytest~=9.0.1",
     "pytest-asyncio~=1.4.0",
     "pyyaml~=6.0.3",
@@ -48,6 +51,12 @@ markers = [
 target-version = "py312"
 line-length = 100
 src = ["src"]
+# Applied migrations are immutable historical records: they describe a schema
+# change that already ran against a real database, so reformatting them buys
+# nothing and destroys the guarantee that the file on disk is the file that
+# ran. Only the revision scripts are excluded — migrations/env.py is live code
+# and stays formatted with the rest of the module.
+exclude = ["src/caramello_api/migrations/versions"]
 
 [tool.ruff.lint]
 # A deliberate superset of ruff's defaults: the template does not select rules

@@ -188,9 +188,7 @@ async def delete_movement(
     return {"ok": True}
 
 
-financialentry_router = APIRouter(
-    prefix="/finances/financial-entry", tags=["FinancialEntry"]
-)
+financialentry_router = APIRouter(prefix="/finances/financial-entry", tags=["FinancialEntry"])
 
 
 @financialentry_router.post("/", response_model=FinancialEntryRead)

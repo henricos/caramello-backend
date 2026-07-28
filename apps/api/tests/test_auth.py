@@ -4,6 +4,7 @@ Estratégia: para AUTH-01 (401 sem token) usamos TestClient diretamente.
 Para AUTH-02/03 que dependem de banco real, usamos `@pytest.mark.integration`
 e mocking via app.dependency_overrides (Phase 5 implementa banco isolado).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -139,9 +140,7 @@ def test_auto_join_on_login():
     ):
         from fastapi.security import HTTPAuthorizationCredentials
 
-        credentials = HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="fake.token.value"
-        )
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="fake.token.value")
 
         import asyncio
 
@@ -157,14 +156,11 @@ def test_auto_join_on_login():
     assert result_user.idp_sub == "kc-sub-recem"
     # - Um FamilyMember com role="member" foi adicionado para a família 99
     members = [o for o in added if isinstance(o, FamilyMember)]
-    assert len(members) == 1, (
-        f"Esperado 1 FamilyMember; foi {len(members)}: {added!r}"
-    )
+    assert len(members) == 1, f"Esperado 1 FamilyMember; foi {len(members)}: {added!r}"
     assert members[0].role == "member"
     assert members[0].family_id == 99
     assert members[0].user_id == 50
     # - A invitation foi marcada como joined (mutação direta + add para persistir)
     assert pending_inv.status == "joined", (
-        "FamilyInvitation.status deve ser 'joined' após auto-join; "
-        f"foi {pending_inv.status!r}"
+        f"FamilyInvitation.status deve ser 'joined' após auto-join; foi {pending_inv.status!r}"
     )

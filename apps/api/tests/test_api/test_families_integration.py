@@ -3,6 +3,7 @@
 Usa transaction rollback por teste (fixtures db_session + async_client de conftest.py).
 Requer: banco caramello_dev acessível e migrado previamente.
 """
+
 from __future__ import annotations
 
 import pytest

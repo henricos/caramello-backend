@@ -57,12 +57,7 @@ def check_authenticated_get_me() -> tuple[bool, dict[str, Any]]:
     body: dict[str, Any] = {}
     with contextlib.suppress(Exception):
         body = r.json()
-    has_fields = (
-        r.status_code == 200
-        and "uuid" in body
-        and "email" in body
-        and "name" in body
-    )
+    has_fields = r.status_code == 200 and "uuid" in body and "email" in body and "name" in body
     _print_result(
         "USER-01 (com token -> 200 + uuid/email/name)",
         has_fields,
@@ -97,10 +92,7 @@ def check_idempotent_jit() -> bool:
     _print_result(
         "AUTH-02 (idempotência: duas chamadas retornam mesmo uuid)",
         ok,
-        (
-            f"r1.status={r1.status_code} r2.status={r2.status_code} "
-            f"uuids_equal={uuids_match}"
-        ),
+        (f"r1.status={r1.status_code} r2.status={r2.status_code} uuids_equal={uuids_match}"),
     )
     return ok
 
@@ -137,15 +129,9 @@ def inspect_token_audience() -> None:
         client_id = os.environ.get("KEYCLOAK_CLIENT_ID", "")
         if client_id:
             if isinstance(aud, str) and aud == client_id:
-                print(
-                    "       RECOMENDAÇÃO: ativar verify_aud=True"
-                    " (aud == KEYCLOAK_CLIENT_ID)"
-                )
+                print("       RECOMENDAÇÃO: ativar verify_aud=True (aud == KEYCLOAK_CLIENT_ID)")
             elif isinstance(aud, list) and client_id in aud:
-                print(
-                    "       RECOMENDAÇÃO: ativar verify_aud=True"
-                    " (KEYCLOAK_CLIENT_ID in aud)"
-                )
+                print("       RECOMENDAÇÃO: ativar verify_aud=True (KEYCLOAK_CLIENT_ID in aud)")
             else:
                 print(
                     "       RECOMENDAÇÃO: manter verify_aud=False"

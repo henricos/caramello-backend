@@ -123,9 +123,7 @@ async def _require_member(
 # ---------------------------------------------------------------------------
 
 
-@router.post(
-    "/registry", response_model=FamilyRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/registry", response_model=FamilyRead, status_code=status.HTTP_201_CREATED)
 async def registry_family(
     family_in: FamilyCreate,
     session: AsyncSession = Depends(get_session),
@@ -285,9 +283,7 @@ async def remove_member(
     )
     target_member = member_result.first()
     if target_member is None:
-        raise HTTPException(
-            status_code=404, detail="Usuário não é membro desta família"
-        )
+        raise HTTPException(status_code=404, detail="Usuário não é membro desta família")
 
     await session.delete(target_member)
     await session.commit()

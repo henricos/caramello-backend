@@ -7,9 +7,11 @@ antes de services.py existir — ImportError aparece como falha no corpo do test
 
 Stubs Nyquist — red até plano 08-03 entregar services.py implementado.
 """
+
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -126,11 +128,13 @@ def test_compute_hash():
     _compute_hash = getattr(services, "_compute_hash", None)
     ParsedRow = getattr(services, "ParsedRow", None)
     if _compute_hash is None or ParsedRow is None:
-        pytest.skip("_compute_hash ou ParsedRow ainda não implementados em caramello.finances.services")
+        pytest.skip(
+            "_compute_hash ou ParsedRow ainda não implementados em caramello.finances.services"
+        )
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    date = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    date = datetime(2026, 1, 15, tzinfo=UTC)
     amount = Decimal("-150.00")
 
     # D-07: hash CSV/XLSX — baseado em (account_id|date|amount|desc_norm)
@@ -176,14 +180,10 @@ def test_normalize_description():
 
     # Tabs e quebras de linha colapsados
     result = _normalize_description("PIX\t\tPAGAMENTO")
-    assert result == "pix pagamento", (
-        f"Tabs devem ser colapsados; obtido: {result!r}"
-    )
+    assert result == "pix pagamento", f"Tabs devem ser colapsados; obtido: {result!r}"
 
     # Apenas espaços residuais removidos
-    assert _normalize_description("   ") == "", (
-        "Apenas espaços devem resultar em string vazia"
-    )
+    assert _normalize_description("   ") == "", "Apenas espaços devem resultar em string vazia"
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +216,6 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-
 # ---------------------------------------------------------------------------
 # Stubs Nyquist — Fase 9 (conciliação, saldos, relatórios)
 # ---------------------------------------------------------------------------
@@ -240,7 +239,9 @@ def test_suggest_category_service():
 
     # Simula linha de Movement alvo
     mock_target_row = MagicMock()
-    mock_target_row.__getitem__ = lambda self, i: MagicMock(description="Supermercado Pão de Açúcar")
+    mock_target_row.__getitem__ = lambda self, i: MagicMock(
+        description="Supermercado Pão de Açúcar"
+    )
 
     # Simula linha de histórico:
     # entry[0] = description, entry[1] = subcategory_id,
@@ -249,14 +250,16 @@ def test_suggest_category_service():
     sub_uuid = uuid4()
     cat_uuid = uuid4()
     history_row = MagicMock()
-    history_row.__getitem__ = MagicMock(side_effect=lambda i: [
-        "Supermercado Carrefour",  # description
-        10,                         # subcategory_id
-        sub_uuid,                   # subcategory_uuid
-        "Supermercado",             # subcategory_name
-        cat_uuid,                   # category_uuid
-        "Alimentação",              # category_name
-    ][i])
+    history_row.__getitem__ = MagicMock(
+        side_effect=lambda i: [
+            "Supermercado Carrefour",  # description
+            10,  # subcategory_id
+            sub_uuid,  # subcategory_uuid
+            "Supermercado",  # subcategory_name
+            cat_uuid,  # category_uuid
+            "Alimentação",  # category_name
+        ][i]
+    )
 
     # Primeira chamada: busca Movement alvo; segunda: busca histórico
     mock_result_target = MagicMock()
@@ -276,19 +279,25 @@ def test_suggest_category_service():
     mock_session = AsyncMock()
     mock_session.execute = AsyncMock(side_effect=_execute)
 
-    result = _run(suggest_category(
-        movement_uuid=movement_uuid,
-        family_id=family_id,
-        session=mock_session,
-    ))
+    result = _run(
+        suggest_category(
+            movement_uuid=movement_uuid,
+            family_id=family_id,
+            session=mock_session,
+        )
+    )
 
     assert isinstance(result, list), f"Esperado list; foi {type(result)}"
     assert len(result) >= 1, "Deve retornar ao menos 1 sugestão quando há histórico"
     item = result[0]
-    expected_keys = {"subcategory_uuid", "subcategory_name", "category_uuid", "category_name", "score"}
-    assert expected_keys.issubset(item.keys()), (
-        f"Chaves faltando: {expected_keys - item.keys()}"
-    )
+    expected_keys = {
+        "subcategory_uuid",
+        "subcategory_name",
+        "category_uuid",
+        "category_name",
+        "score",
+    }
+    assert expected_keys.issubset(item.keys()), f"Chaves faltando: {expected_keys - item.keys()}"
     assert isinstance(item["score"], int), (
         f"score deve ser int (A1 — rapidfuzz retorna float, converter); foi {type(item['score'])}"
     )
@@ -326,15 +335,15 @@ def test_suggest_category_empty_history():
     mock_session = AsyncMock()
     mock_session.execute = AsyncMock(side_effect=_execute)
 
-    result = _run(suggest_category(
-        movement_uuid=movement_uuid,
-        family_id=family_id,
-        session=mock_session,
-    ))
-
-    assert result == [], (
-        f"D-CAT-03: sem histórico deve retornar []; retornou {result!r}"
+    result = _run(
+        suggest_category(
+            movement_uuid=movement_uuid,
+            family_id=family_id,
+            session=mock_session,
+        )
     )
+
+    assert result == [], f"D-CAT-03: sem histórico deve retornar []; retornou {result!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -358,9 +367,7 @@ def test_account_balance_empty():
 
     balance = _run(account_balance(account_id=1, session=mock_session))
 
-    assert balance == Decimal("0.00"), (
-        f"Saldo vazio deve ser Decimal('0.00'); foi: {balance!r}"
-    )
+    assert balance == Decimal("0.00"), f"Saldo vazio deve ser Decimal('0.00'); foi: {balance!r}"
     assert isinstance(balance, Decimal), (
         f"Saldo deve ser Decimal, não float ou str; foi {type(balance)}"
     )
@@ -383,7 +390,7 @@ def test_family_balance():
     # Simula contas da família retornadas via session.exec ou session.execute
     mock_accounts_result = MagicMock()
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
 
@@ -394,8 +401,8 @@ def test_family_balance():
         name="Conta Corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     mock_accounts_result.all.return_value = [fake_account]
 
@@ -419,9 +426,7 @@ def test_family_balance():
 
     result = _run(family_balance(family_id=5, session=mock_session))
 
-    assert isinstance(result, Decimal), (
-        f"family_balance deve retornar Decimal; foi {type(result)}"
-    )
+    assert isinstance(result, Decimal), f"family_balance deve retornar Decimal; foi {type(result)}"
     assert result >= Decimal("0.00"), "Saldo familiar não deve ser negativo neste mock"
 
 
@@ -453,12 +458,14 @@ def test_monthly_breakdown():
     mock_session = AsyncMock()
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    result = _run(monthly_breakdown(
-        family_id=1,
-        year=2026,
-        month=5,
-        session=mock_session,
-    ))
+    result = _run(
+        monthly_breakdown(
+            family_id=1,
+            year=2026,
+            month=5,
+            session=mock_session,
+        )
+    )
 
     assert isinstance(result, list), f"Esperado list; foi {type(result)}"
     assert len(result) == 1, f"Esperado 1 row; foi {len(result)}"
@@ -497,12 +504,14 @@ def test_by_member_breakdown():
     mock_session = AsyncMock()
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    result = _run(by_member_breakdown(
-        family_id=1,
-        year=2026,
-        month=5,
-        session=mock_session,
-    ))
+    result = _run(
+        by_member_breakdown(
+            family_id=1,
+            year=2026,
+            month=5,
+            session=mock_session,
+        )
+    )
 
     assert isinstance(result, list), f"Esperado list; foi {type(result)}"
     # Deve incluir grupo de não-atribuídos

@@ -11,7 +11,7 @@ import hashlib
 import io
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -63,7 +63,7 @@ def _parse_date(value: str, line: int) -> datetime:
     """
     for fmt in ("%Y-%m-%d", "%d/%m/%Y"):  # D-12: ISO primeiro, BR fallback
         try:
-            return datetime.strptime(value.strip(), fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(value.strip(), fmt).replace(tzinfo=UTC)
         except ValueError:
             continue
     raise ValueError(f"Linha {line}: data inválida {value!r}")
@@ -197,10 +197,10 @@ def _parse_ofx_with_errors(
                     date_val.year,
                     date_val.month,
                     date_val.day,
-                    tzinfo=timezone.utc,
+                    tzinfo=UTC,
                 )
             elif date_val.tzinfo is None:
-                date_val = date_val.replace(tzinfo=timezone.utc)
+                date_val = date_val.replace(tzinfo=UTC)
 
             amount_val = Decimal(str(txn.amount))  # P1: nunca float
             description = str(txn.memo or txn.payee or "").strip()
@@ -282,11 +282,7 @@ def _parse_xlsx_with_errors(
             # Parsear date
             try:
                 if isinstance(date_raw, datetime):
-                    date_val = (
-                        date_raw
-                        if date_raw.tzinfo
-                        else date_raw.replace(tzinfo=timezone.utc)
-                    )
+                    date_val = date_raw if date_raw.tzinfo else date_raw.replace(tzinfo=UTC)
                 elif date_raw is not None:
                     date_val = _parse_date(str(date_raw), line=i)
                 else:
@@ -346,9 +342,7 @@ async def suggest_category(
     )
 
     # 1. Buscar Movement alvo pelo UUID (session.execute — não session.exec, pitfall P3)
-    result = await session.execute(
-        select(Movement).where(Movement.uuid == movement_uuid)
-    )
+    result = await session.execute(select(Movement).where(Movement.uuid == movement_uuid))
     row = result.fetchone()
     if row is None:
         return []
@@ -411,9 +405,7 @@ async def account_balance(account_id: int, session: AsyncSession) -> Decimal:
     total = result.scalar_one_or_none()
     if total is None:
         return Decimal("0.00")
-    return Decimal(
-        str(total)
-    )  # CR-04: garante Decimal independente do tipo retornado pelo driver
+    return Decimal(str(total))  # CR-04: garante Decimal independente do tipo retornado pelo driver
 
 
 async def family_balance(family_id: int, session: AsyncSession) -> Decimal:
@@ -535,9 +527,7 @@ async def by_member_breakdown(
             func.sum(Movement.amount).label("total"),
             func.count(FinancialEntry.id).label("count"),
         )
-        .select_from(
-            FinancialEntry
-        )  # CR-02: FROM clause explícito para evitar ProgrammingError
+        .select_from(FinancialEntry)  # CR-02: FROM clause explícito para evitar ProgrammingError
         .outerjoin(User, FinancialEntry.responsible_user_id == User.id)
         .join(Movement, FinancialEntry.movement_id == Movement.id)
         .join(Account, Movement.account_id == Account.id)
@@ -662,7 +652,7 @@ async def import_movements(
 
         values = []
         for h, row in to_insert:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             values.append(
                 {
                     "uuid": uuid4(),

@@ -11,10 +11,11 @@ Estratégia (igual a tests/test_family_operations.py):
 - AsyncMock para get_session
 - TestClient(app) sem context manager (evita disparar lifespan/fetch_jwks)
 """
+
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -31,10 +32,7 @@ def _skip_if_stub() -> None:
     verificação passa e os testes executam normalmente.
     """
     pytest.importorskip("caramello_api.finances.operations")
-    ops_path = (
-        Path(__file__).resolve().parents[1]
-        / "src/caramello_api/finances/operations.py"
-    )
+    ops_path = Path(__file__).resolve().parents[1] / "src/caramello_api/finances/operations.py"
     if ops_path.exists():
         first_line = ops_path.read_text().splitlines()[0].strip()
         if "stub" in first_line:
@@ -65,8 +63,8 @@ def _make_fake_user(user_id: int = 42):
         idp_sub=f"fake-sub-{user_id}",
         email=f"user{user_id}@example.com",
         name=f"Usuario {user_id}",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -78,10 +76,7 @@ def test_finances_module_exists():
 def test_finances_operations_annotation_is_implemented():
     """Plano 07-02: primeira linha == # CARAMELLO-GENERATED: implemented."""
     _skip_if_stub()
-    ops_path = (
-        Path(__file__).resolve().parents[1]
-        / "src/caramello_api/finances/operations.py"
-    )
+    ops_path = Path(__file__).resolve().parents[1] / "src/caramello_api/finances/operations.py"
     if not ops_path.exists():
         pytest.skip("finances/operations.py ainda não foi gerado/implementado")
     first_line = ops_path.read_text().splitlines()[0].strip()
@@ -140,8 +135,7 @@ def test_finances_router_paths_phase9():
     }
     missing = phase9_expected - paths
     assert not missing, (
-        f"Fase 9 paths ausentes em finances.operations.router: {missing}. "
-        f"Encontrados: {paths}"
+        f"Fase 9 paths ausentes em finances.operations.router: {missing}. Encontrados: {paths}"
     )
 
 
@@ -153,8 +147,8 @@ def test_create_account_returns_uuid():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -167,8 +161,8 @@ def test_create_account_returns_uuid():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -178,8 +172,8 @@ def test_create_account_returns_uuid():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -242,8 +236,8 @@ def test_list_accounts_scoped_to_family():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -256,8 +250,8 @@ def test_list_accounts_scoped_to_family():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -267,8 +261,8 @@ def test_list_accounts_scoped_to_family():
         type="poupanca",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -367,8 +361,8 @@ def test_accounts_403_non_member():
         name="Familia Alheia",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -398,8 +392,7 @@ def test_accounts_403_non_member():
         client = TestClient(app)
         response = client.get(f"/finances/accounts?family_uuid={family_uuid}")
         assert response.status_code == 403, (
-            f"Esperado 403 para não-membro; recebido: {response.status_code}. "
-            f"Body: {response.text}"
+            f"Esperado 403 para não-membro; recebido: {response.status_code}. Body: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()
@@ -413,8 +406,8 @@ def test_archive_account():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -428,8 +421,8 @@ def test_archive_account():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -439,8 +432,8 @@ def test_archive_account():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -480,9 +473,7 @@ def test_archive_account():
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body.get("is_active") is False, (
-            f"Resposta deve ter is_active=False; body: {body}"
-        )
+        assert body.get("is_active") is False, f"Resposta deve ter is_active=False; body: {body}"
         # ACC-03: arquivamento nunca deleta — session.delete não deve ter sido chamado
         mock_session.delete.assert_not_called()
     finally:
@@ -494,8 +485,8 @@ def test_create_category():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Category  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Category  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -508,16 +499,16 @@ def test_create_category():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_category = Category(
         id=5,
         uuid=uuid4(),
         family_id=1,
         name="Transporte",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -574,8 +565,8 @@ def test_list_update_categories():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Category  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Category  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -589,16 +580,16 @@ def test_list_update_categories():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_category = Category(
         id=5,
         uuid=category_uuid,
         family_id=1,
         name="Transporte",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     # --- Teste GET ---
@@ -680,8 +671,11 @@ def test_create_subcategory():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Category, Subcategory  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import (  # type: ignore[import-not-found]
+        Category,
+        Subcategory,
+    )
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -695,24 +689,24 @@ def test_create_subcategory():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_category = Category(
         id=5,
         uuid=category_uuid,
         family_id=1,
         name="Transporte",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_subcategory = Subcategory(
         id=20,
         uuid=uuid4(),
         category_id=5,
         name="Gasolina",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -767,7 +761,6 @@ def test_create_subcategory():
         app.dependency_overrides.clear()
 
 
-
 # =============================================================================
 # Phase 8: Movement endpoints — MOV-01..05, D-15, AUTH-FIN-01/02
 # Stubs Nyquist — red/skipados até planos 08-02/08-03/08-04 entregarem implementação
@@ -782,8 +775,8 @@ def test_create_movement():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -798,8 +791,8 @@ def test_create_movement():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -809,8 +802,8 @@ def test_create_movement():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -875,8 +868,8 @@ def test_create_movement_409_duplicate():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account, Movement  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account, Movement  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -891,8 +884,8 @@ def test_create_movement_409_duplicate():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -902,19 +895,19 @@ def test_create_movement_409_duplicate():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     existing_movement = Movement(
         id=1,
         uuid=existing_movement_uuid,
         account_id=10,
-        date=datetime(2026, 1, 15, tzinfo=timezone.utc),
+        date=datetime(2026, 1, 15, tzinfo=UTC),
         amount="-150.00",
         description="PIX FULANO",
         import_hash="abc123hash",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -961,9 +954,7 @@ def test_create_movement_409_duplicate():
         )
         body = response.json()
         detail = body.get("detail", {})
-        assert "existing_uuid" in detail, (
-            f"409 deve conter 'existing_uuid' no detail; body: {body}"
-        )
+        assert "existing_uuid" in detail, f"409 deve conter 'existing_uuid' no detail; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
@@ -976,8 +967,8 @@ def test_import_csv():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -991,8 +982,8 @@ def test_import_csv():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -1002,11 +993,13 @@ def test_import_csv():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
-    csv_content = b"date,amount,description\n2026-01-15,-150.00,PIX FULANO\n2026-01-16,200.00,SALARIO\n"
+    csv_content = (
+        b"date,amount,description\n2026-01-15,-150.00,PIX FULANO\n2026-01-16,200.00,SALARIO\n"
+    )
 
     call_count = [0]
 
@@ -1060,8 +1053,8 @@ def test_import_ofx():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1075,8 +1068,8 @@ def test_import_ofx():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -1086,8 +1079,8 @@ def test_import_ofx():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     # Sample OFX mínimo válido
@@ -1178,11 +1171,10 @@ def test_import_xlsx():
     """
     _skip_if_stub()
     import openpyxl
-
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1196,8 +1188,8 @@ def test_import_xlsx():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -1207,8 +1199,8 @@ def test_import_xlsx():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     # Gera um XLSX mínimo em memória para o teste
@@ -1278,8 +1270,8 @@ def test_import_deduplication():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1293,8 +1285,8 @@ def test_import_deduplication():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -1304,8 +1296,8 @@ def test_import_deduplication():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     csv_content = b"date,amount,description\n2026-01-15,-150.00,PIX FULANO\n"
@@ -1313,10 +1305,13 @@ def test_import_deduplication():
     # WR-05: calcular o hash real para que o pre-check mock rejeite a linha corretamente
     from decimal import Decimal
 
-    from caramello_api.finances.services import ParsedRow, _compute_hash  # type: ignore[import-not-found]
+    from caramello_api.finances.services import (  # type: ignore[import-not-found]
+        ParsedRow,
+        _compute_hash,
+    )
 
     real_row = ParsedRow(
-        date=datetime(2026, 1, 15, tzinfo=timezone.utc),
+        date=datetime(2026, 1, 15, tzinfo=UTC),
         amount=Decimal("-150.00"),
         description="PIX FULANO",
         fitid=None,
@@ -1392,8 +1387,8 @@ def test_import_potential_duplicates():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1407,8 +1402,8 @@ def test_import_potential_duplicates():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -1418,8 +1413,8 @@ def test_import_potential_duplicates():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     csv_content = b"date,amount,description\n2026-01-15,-150.00,PIX FULANO\n"
@@ -1481,8 +1476,8 @@ def test_import_confirm():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1496,8 +1491,8 @@ def test_import_confirm():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -1507,8 +1502,8 @@ def test_import_confirm():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -1576,8 +1571,8 @@ def test_list_movements():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account, Movement  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account, Movement  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1591,8 +1586,8 @@ def test_list_movements():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=10,
@@ -1602,19 +1597,19 @@ def test_list_movements():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_movement = Movement(
         id=1,
         uuid=uuid4(),
         account_id=10,
-        date=datetime(2026, 1, 15, tzinfo=timezone.utc),
+        date=datetime(2026, 1, 15, tzinfo=UTC),
         amount="-150.00",
         description="PIX FULANO",
         import_hash=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count = [0]
@@ -1645,9 +1640,7 @@ def test_list_movements():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(
-            f"/finances/accounts/{account_uuid}/movements?limit=50&offset=0"
-        )
+        response = client.get(f"/finances/accounts/{account_uuid}/movements?limit=50&offset=0")
         assert response.status_code == 200, response.text
         body = response.json()
         assert isinstance(body, list), f"Resposta deve ser lista paginada; body: {body}"
@@ -1664,8 +1657,8 @@ def test_movements_require_auth():
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1708,8 +1701,8 @@ def test_movements_require_auth():
         type="corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_family_other = Family(
         id=1,
@@ -1717,8 +1710,8 @@ def test_movements_require_auth():
         name="Familia Alheia",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     call_count_403 = [0]
@@ -1747,8 +1740,7 @@ def test_movements_require_auth():
         client = TestClient(app)
         response = client.get(f"/finances/accounts/{account_uuid}/movements")
         assert response.status_code == 403, (
-            f"Esperado 403 para não-membro; recebido: {response.status_code}. "
-            f"Body: {response.text}"
+            f"Esperado 403 para não-membro; recebido: {response.status_code}. Body: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()
@@ -1770,6 +1762,7 @@ def test_reconcile_movement():
 
     from fastapi.testclient import TestClient
 
+    from caramello_api.families.models import FamilyMember  # type: ignore[import-not-found]
     from caramello_api.finances.models import (  # type: ignore[import-not-found]
         Account,
         Category,
@@ -1777,7 +1770,6 @@ def test_reconcile_movement():
         Movement,
         Subcategory,
     )
-    from caramello_api.families.models import FamilyMember  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -1792,12 +1784,12 @@ def test_reconcile_movement():
         id=1,
         uuid=movement_uuid,
         account_id=1,
-        date=datetime.now(timezone.utc),
+        date=datetime.now(UTC),
         amount=Decimal("150.00"),
         description="Supermercado",
         import_hash="hash123",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=1,
@@ -1806,30 +1798,30 @@ def test_reconcile_movement():
         name="Conta Corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_subcategory = Subcategory(
         id=1,
         uuid=sub_uuid,
         category_id=1,
         name="Supermercado",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_category = Category(
         id=1,
         uuid=cat_uuid,
         family_id=1,
         name="Alimentação",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_member = FamilyMember(
         family_id=1,
         user_id=fake_user.id,
         role="member",
-        joined_at=datetime.now(timezone.utc),
+        joined_at=datetime.now(UTC),
     )
     fake_entry = FinancialEntry(
         id=1,
@@ -1840,8 +1832,8 @@ def test_reconcile_movement():
         competencia_month=5,
         notes=None,
         is_recorrente=False,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     added = []
@@ -1917,13 +1909,12 @@ def test_reconcile_409_duplicate():
     """
     from decimal import Decimal
 
-    from sqlalchemy.exc import IntegrityError
     from fastapi.testclient import TestClient
+    from sqlalchemy.exc import IntegrityError
 
     from caramello_api.finances.models import (  # type: ignore[import-not-found]
         Account,
         Movement,
-        Subcategory,
     )
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -1937,12 +1928,12 @@ def test_reconcile_409_duplicate():
         id=1,
         uuid=movement_uuid,
         account_id=1,
-        date=datetime.now(timezone.utc),
+        date=datetime.now(UTC),
         amount=Decimal("150.00"),
         description="Supermercado",
         import_hash="hash123",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=1,
@@ -1951,8 +1942,8 @@ def test_reconcile_409_duplicate():
         name="Conta Corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(stmt):
@@ -2014,10 +2005,12 @@ def test_suggest_category():
 
     mock_session = AsyncMock()
     mock_session.exec.side_effect = lambda s: MagicMock(first=lambda: None, all=lambda: [])
-    mock_session.execute = AsyncMock(return_value=MagicMock(
-        fetchone=lambda: None,
-        fetchall=lambda: [],
-    ))
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(
+            fetchone=lambda: None,
+            fetchall=lambda: [],
+        )
+    )
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2027,9 +2020,7 @@ def test_suggest_category():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(
-            f"/finances/movements/{movement_uuid}/suggest-category"
-        )
+        response = client.get(f"/finances/movements/{movement_uuid}/suggest-category")
         # 200 (lista vazia OK — D-CAT-03) ou 404 se movimento não existe
         assert response.status_code in (200, 404), (
             f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
@@ -2056,6 +2047,7 @@ def test_update_entry():
 
     from fastapi.testclient import TestClient
 
+    from caramello_api.families.models import FamilyMember  # type: ignore[import-not-found]
     from caramello_api.finances.models import (  # type: ignore[import-not-found]
         Account,
         Category,
@@ -2063,7 +2055,6 @@ def test_update_entry():
         Movement,
         Subcategory,
     )
-    from caramello_api.families.models import FamilyMember  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -2082,19 +2073,19 @@ def test_update_entry():
         competencia_month=5,
         notes=None,
         is_recorrente=False,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_movement = Movement(
         id=1,
         uuid=uuid4(),
         account_id=1,
-        date=datetime.now(timezone.utc),
+        date=datetime.now(UTC),
         amount=Decimal("100.00"),
         description="Teste",
         import_hash="h1",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_account = Account(
         id=1,
@@ -2103,8 +2094,8 @@ def test_update_entry():
         name="Conta",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_subcategory = Subcategory(
         id=1,
@@ -2112,22 +2103,22 @@ def test_update_entry():
         category_id=1,
         family_id=1,
         name="Sub Teste",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_category = Category(
         id=1,
         uuid=cat_uuid,
         family_id=1,
         name="Cat Teste",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     fake_member = FamilyMember(
         family_id=1,
         user_id=fake_user.id,
         role="member",
-        joined_at=datetime.now(timezone.utc),
+        joined_at=datetime.now(UTC),
     )
 
     # WR-06: mock com contador de chamadas — retorna objeto correto por ordem de exec
@@ -2147,9 +2138,7 @@ def test_update_entry():
             r.first.return_value = fake_account
         elif n == 4:
             r.first.return_value = fake_member
-        elif n == 5:
-            r.first.return_value = fake_subcategory
-        elif n == 6:
+        elif n == 5 or n == 6:
             r.first.return_value = fake_subcategory
         elif n == 7:
             r.first.return_value = fake_category
@@ -2275,8 +2264,8 @@ def test_account_balance():
         name="Conta Corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(stmt):
@@ -2323,7 +2312,6 @@ def test_family_balance():
 
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -2338,8 +2326,8 @@ def test_family_balance():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(stmt):
@@ -2350,10 +2338,12 @@ def test_family_balance():
 
     mock_session = AsyncMock()
     mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=MagicMock(
-        scalar_one_or_none=lambda: Decimal("0.00"),
-        fetchall=lambda: [],
-    ))
+    mock_session.execute = AsyncMock(
+        return_value=MagicMock(
+            scalar_one_or_none=lambda: Decimal("0.00"),
+            fetchall=lambda: [],
+        )
+    )
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2388,7 +2378,6 @@ def test_monthly_report():
     subcategory_uuid e total.
     Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
     """
-    from decimal import Decimal
 
     from fastapi.testclient import TestClient
 
@@ -2406,8 +2395,8 @@ def test_monthly_report():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(stmt):
@@ -2466,8 +2455,8 @@ def test_report_uses_competencia():
         name="Familia Teste",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(stmt):
@@ -2534,8 +2523,8 @@ def test_movement_entry_uuid_field():
         name="Conta Corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(stmt):
@@ -2548,12 +2537,12 @@ def test_movement_entry_uuid_field():
     mock_movement_row = (
         MagicMock(
             uuid=uuid4(),
-            date=datetime.now(timezone.utc),
+            date=datetime.now(UTC),
             amount=Decimal("100.00"),
             description="Pagamento",
             import_hash=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         ),
         None,  # entry_uuid = None (pendente)
     )
@@ -2595,7 +2584,6 @@ def test_movement_reconciled_filter():
     reconciled=true retorna apenas conciliados. Implementado via LEFT JOIN + IS NULL.
     Plano 09-04 Task 3: guard removido — filtro implementado em 09-04.
     """
-    from decimal import Decimal
 
     from fastapi.testclient import TestClient
 
@@ -2614,8 +2602,8 @@ def test_movement_reconciled_filter():
         name="Conta Corrente",
         currency="BRL",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(stmt):

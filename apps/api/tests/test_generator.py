@@ -3,6 +3,7 @@
 Cobre: campo `domain` nos YAMLs, output path dinâmico, anotação CARAMELLO-GENERATED,
 geração de operations.py a partir de dsl/operations/*.yaml.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -61,17 +62,13 @@ def test_schema_yaml_has_domain_property():
     assert "domain" in schema.get("properties", {}), (
         "schema.yaml deve listar 'domain' em properties"
     )
-    assert "domain" in schema.get("required", []), (
-        "schema.yaml deve listar 'domain' em required"
-    )
+    assert "domain" in schema.get("required", []), "schema.yaml deve listar 'domain' em required"
 
 
 def test_user_models_in_user_domain():
     """Plano 04-03: src/caramello_api/users/models.py contém class User (mapper fix)."""
     models_path = REPO_ROOT / "src/caramello_api/users/models.py"
-    assert models_path.exists(), (
-        "users/models.py deve existir após regeneração (plano 04-03)"
-    )
+    assert models_path.exists(), "users/models.py deve existir após regeneração (plano 04-03)"
     content = models_path.read_text()
     assert "class User(SQLModel, table=True):" in content
     # Intencionalmente sem from __future__ import annotations: com from __future__,
@@ -137,9 +134,7 @@ def test_user_yaml_domain_is_users():
     domain = data.get("domain")
     if domain == "user":
         pytest.xfail("Plano 04-02 ainda não rodou — user.yaml mantém domain: user")
-    assert domain == "users", (
-        f"user.yaml deve declarar domain: users; encontrado: {domain!r}"
-    )
+    assert domain == "users", f"user.yaml deve declarar domain: users; encontrado: {domain!r}"
 
 
 def test_family_yamls_domain_is_families():
@@ -148,9 +143,7 @@ def test_family_yamls_domain_is_families():
         data = yaml.safe_load((DSL_ENTITIES_DIR / fname).read_text())
         domain = data.get("domain")
         if domain == "family":
-            pytest.xfail(
-                f"Plano 04-02 ainda não rodou — {fname} mantém domain: family"
-            )
+            pytest.xfail(f"Plano 04-02 ainda não rodou — {fname} mantém domain: family")
         assert domain == "families", (
             f"{fname} deve declarar domain: families; encontrado: {domain!r}"
         )
@@ -158,23 +151,16 @@ def test_family_yamls_domain_is_families():
 
 def test_family_invitation_yaml_uses_pending_login_status():
     """Plano 04-02 (D-01): family_invitation.yaml redesenhado — sem invitee_email."""
-    data = yaml.safe_load(
-        (DSL_ENTITIES_DIR / "family_invitation.yaml").read_text()
-    )
+    data = yaml.safe_load((DSL_ENTITIES_DIR / "family_invitation.yaml").read_text())
     field_names = {f["name"] for f in data.get("fields", [])}
     # Campos antigos REMOVIDOS:
     forbidden = {"invitee_email", "expires_at"}
     present_forbidden = forbidden & field_names
     if present_forbidden:
-        pytest.xfail(
-            "Plano 04-02 ainda não rodou — campos antigos presentes: "
-            f"{present_forbidden}"
-        )
+        pytest.xfail(f"Plano 04-02 ainda não rodou — campos antigos presentes: {present_forbidden}")
     # Campos novos PRESENTES:
     assert "email" in field_names, f"Campo 'email' obrigatório; campos: {field_names}"
-    assert "status" in field_names, (
-        f"Campo 'status' obrigatório; campos: {field_names}"
-    )
+    assert "status" in field_names, f"Campo 'status' obrigatório; campos: {field_names}"
     # status default == 'pending_login'
     status_field = next(f for f in data["fields"] if f["name"] == "status")
     assert status_field.get("default") == "pending_login", (
@@ -219,9 +205,7 @@ def test_router_url_has_domain_prefix_and_hyphens():
     except Exception as exc:  # noqa: BLE001
         pytest.xfail(f"Plano 04-02 ainda não rodou — generate_router falhou: {exc}")
     if 'prefix="/family_invitation"' in code:
-        pytest.xfail(
-            "Plano 04-02 ainda não rodou — prefix antigo ainda emitido"
-        )
+        pytest.xfail("Plano 04-02 ainda não rodou — prefix antigo ainda emitido")
     prefix_lines = [line for line in code.splitlines() if "prefix=" in line]
     assert 'prefix="/families/family-invitation"' in code, (
         f"Esperado prefix='/families/family-invitation' em código gerado; "
@@ -243,9 +227,7 @@ def test_operations_family_yaml_exists_with_six_operations():
     """Plano 04-02 (D-05, D-07): dsl/operations/family.yaml existe com 6 operações."""
     family_ops_path = DSL_OPERATIONS_DIR / "family.yaml"
     if not family_ops_path.exists():
-        pytest.xfail(
-            "Plano 04-02 ainda não rodou — dsl/operations/family.yaml não existe"
-        )
+        pytest.xfail("Plano 04-02 ainda não rodou — dsl/operations/family.yaml não existe")
     data = yaml.safe_load(family_ops_path.read_text())
     assert data.get("domain") == "families", (
         f"domain deve ser 'families'; foi {data.get('domain')!r}"
@@ -260,9 +242,7 @@ def test_operations_family_yaml_exists_with_six_operations():
     }
     actual_ops = {op["name"] for op in data.get("operations", [])}
     missing = expected_ops - actual_ops
-    assert not missing, (
-        f"Operações faltando em dsl/operations/family.yaml: {missing}"
-    )
+    assert not missing, f"Operações faltando em dsl/operations/family.yaml: {missing}"
 
 
 # ---------------------------------------------------------------------------
@@ -307,16 +287,13 @@ def test_generator_decimal_emits_numeric():
     code = generate_models(entity_data, entity_domain={})
 
     assert "from decimal import Decimal" in code, (
-        "O cabeçalho gerado deve importar `from decimal import Decimal`; "
-        f"código gerado:\n{code}"
+        f"O cabeçalho gerado deve importar `from decimal import Decimal`; código gerado:\n{code}"
     )
     assert "Numeric(15, 2)" in code, (
-        "O campo Decimal deve gerar `Column(Numeric(15, 2)` no código; "
-        f"código gerado:\n{code}"
+        f"O campo Decimal deve gerar `Column(Numeric(15, 2)` no código; código gerado:\n{code}"
     )
     assert "nullable=False" in code, (
-        "O campo Decimal não-nullable deve emitir `nullable=False`; "
-        f"código gerado:\n{code}"
+        f"O campo Decimal não-nullable deve emitir `nullable=False`; código gerado:\n{code}"
     )
 
 
@@ -364,12 +341,10 @@ def test_generator_filters_emits_table_args():
     code = generate_models(entity_data, entity_domain={})
 
     assert "__table_args__ = (" in code, (
-        "Entidade com filters: deve gerar `__table_args__ = (`; "
-        f"código gerado:\n{code}"
+        f"Entidade com filters: deve gerar `__table_args__ = (`; código gerado:\n{code}"
     )
     assert 'Index("ix_movement_account_id", "account_id")' in code, (
-        "Deve gerar Index para filtro simples `account_id`; "
-        f"código gerado:\n{code}"
+        f"Deve gerar Index para filtro simples `account_id`; código gerado:\n{code}"
     )
     assert (
         'Index("ix_movement_competencia_year_competencia_month", '
@@ -400,8 +375,7 @@ def test_finances_yamls_have_domain_finances():
     for fname in yaml_files:
         data = yaml.safe_load((DSL_ENTITIES_DIR / fname).read_text())
         assert data.get("domain") == "finances", (
-            f"{fname} deve declarar domain: finances; "
-            f"encontrado: {data.get('domain')!r}"
+            f"{fname} deve declarar domain: finances; encontrado: {data.get('domain')!r}"
         )
 
 

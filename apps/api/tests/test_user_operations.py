@@ -3,12 +3,15 @@
 GET /users/me requer auth válida + banco real (JIT provisioning).
 Estratégia para CI: usar app.dependency_overrides para mockar get_current_user.
 """
+
 from __future__ import annotations
+
+from datetime import UTC
 
 
 def test_get_me_returns_user_fields():
     """USER-01: GET /users/me retorna id, email, name (via mock de get_current_user)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from uuid import uuid4
 
     from fastapi.testclient import TestClient
@@ -23,8 +26,8 @@ def test_get_me_returns_user_fields():
         idp_sub="fake-keycloak-sub",
         email="user@example.com",
         name="Usuario Teste",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     def _override():

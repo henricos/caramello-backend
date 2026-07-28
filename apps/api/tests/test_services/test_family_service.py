@@ -2,9 +2,10 @@
 
 Usa AsyncMock para simular session — não requer banco real.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -22,8 +23,8 @@ def _make_fake_user(user_id: int = 42) -> User:
         idp_sub=f"fake-sub-{user_id}",
         email=f"user{user_id}@example.com",
         name=f"Usuario {user_id}",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -35,8 +36,8 @@ def _make_fake_family(family_id: int = 10, name: str = "Familia Teste") -> Famil
         name=name,
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 

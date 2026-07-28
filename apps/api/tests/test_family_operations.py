@@ -10,9 +10,10 @@ Estratégia (igual a tests/test_user_operations.py):
 - AsyncMock para get_session
 - TestClient(app) sem context manager (evita disparar lifespan/fetch_jwks)
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -31,8 +32,8 @@ def _make_fake_user(user_id: int = 42):
         idp_sub=f"fake-sub-{user_id}",
         email=f"user{user_id}@example.com",
         name=f"Usuario {user_id}",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -46,10 +47,7 @@ def test_operations_annotation_is_implemented():
     pytest.importorskip("caramello_api.families.operations")
     from pathlib import Path
 
-    ops_path = (
-        Path(__file__).resolve().parents[1]
-        / "src/caramello_api/families/operations.py"
-    )
+    ops_path = Path(__file__).resolve().parents[1] / "src/caramello_api/families/operations.py"
     if not ops_path.exists():
         pytest.skip("families/operations.py ainda não foi gerado/implementado")
     first_line = ops_path.read_text().splitlines()[0].strip()
@@ -141,9 +139,7 @@ def test_registry_creates_family_and_owner():
         # Deve ter sido adicionada uma Family e um FamilyMember(role="owner")
         family_added = [o for o in added if isinstance(o, Family)]
         members_added = [o for o in added if isinstance(o, FamilyMember)]
-        assert len(family_added) == 1, (
-            f"Esperado 1 Family adicionada; foi {len(family_added)}"
-        )
+        assert len(family_added) == 1, f"Esperado 1 Family adicionada; foi {len(family_added)}"
         assert len(members_added) == 1, (
             f"Esperado 1 FamilyMember adicionado; foi {len(members_added)}"
         )
@@ -172,8 +168,8 @@ def test_list_families_only_mine():
         name="Minha familia",
         description=None,
         status="active",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     async def _exec(_stmt):
@@ -303,9 +299,7 @@ def test_remove_member_non_owner_returns_403():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.delete(
-            f"/families/families/{uuid4()}/members/{uuid4()}"
-        )
+        response = client.delete(f"/families/families/{uuid4()}/members/{uuid4()}")
         assert response.status_code == 403, response.text
     finally:
         app.dependency_overrides.clear()

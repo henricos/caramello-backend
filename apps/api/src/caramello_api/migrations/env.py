@@ -18,8 +18,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 from sqlmodel import SQLModel  # noqa: E402
 
-# naming_convention DEVE ser definida antes de qualquer import de modelo (Pitfall 6)
-# Garante nomes determinísticos para constraints no PostgreSQL — sem nomes automáticos
+# naming_convention MUST be set before any model import: it guarantees
+# deterministic constraint names in PostgreSQL instead of auto-generated ones.
 SQLModel.metadata.naming_convention = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -28,13 +28,12 @@ SQLModel.metadata.naming_convention = {
     "pk": "pk_%(table_name)s",
 }
 
-from caramello_api.core.config import settings  # noqa: E402
+from caramello_api.core.config import get_settings  # noqa: E402
 from caramello_api.families.models import (  # noqa: E402, F401
     Family,
     FamilyInvitation,
     FamilyMember,
 )
-from caramello_api.users.models import User  # noqa: E402, F401
 from caramello_api.finances.models import (  # noqa: E402, F401
     Account,
     Category,
@@ -42,6 +41,7 @@ from caramello_api.finances.models import (  # noqa: E402, F401
     Movement,
     Subcategory,
 )
+from caramello_api.users.models import User  # noqa: E402, F401
 
 target_metadata = SQLModel.metadata
 
@@ -63,7 +63,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = settings.DATABASE_URL  # Load DB URL from settings
+    url = get_settings().database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -84,7 +84,7 @@ def do_run_migrations(connection) -> None:  # noqa: ANN001
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode against an async engine."""
     configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    configuration["sqlalchemy.url"] = get_settings().database_url
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",

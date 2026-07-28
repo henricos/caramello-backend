@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -20,12 +20,8 @@ class Account(SQLModel, table=True):
     type: str = Field(max_length=20, nullable=False)
     currency: str = Field(max_length=3, default="BRL", nullable=False)
     is_active: bool = Field(default=True, nullable=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
 
 class AccountRead(SQLModel):
@@ -69,12 +65,8 @@ class Movement(SQLModel, table=True):
     amount: Decimal = Field(sa_column=Column(Numeric(15, 2), nullable=False))
     description: str = Field(max_length=255, nullable=False)
     import_hash: str | None = Field(unique=True, default=None)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
 
 class MovementRead(SQLModel):
@@ -129,12 +121,8 @@ class FinancialEntry(SQLModel, table=True):
     notes: str | None = Field(max_length=500, default=None)
     is_recorrente: bool = Field(default=False, nullable=False)
     responsible_user_id: int | None = Field(foreign_key="user.id", default=None)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
 
 class FinancialEntryRead(SQLModel):
@@ -183,12 +171,8 @@ class Category(SQLModel, table=True):
     uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
     family_id: int = Field(foreign_key="family.id", nullable=False)
     name: str = Field(max_length=100, nullable=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
 
 class CategoryRead(SQLModel):
@@ -222,12 +206,8 @@ class Subcategory(SQLModel, table=True):
     uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
     category_id: int = Field(foreign_key="category.id", nullable=False)
     name: str = Field(max_length=100, nullable=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
 
 class SubcategoryRead(SQLModel):

@@ -3,9 +3,10 @@
 Estes testes NÃO são marcados como integration — não precisam de caramello_dev.
 Verificam apenas que /mcp existe, exige auth, e retorna estrutura MCP válida.
 """
+
 from __future__ import annotations
 
-import pytest
+from datetime import UTC
 
 
 def test_mcp_requires_auth(client):
@@ -13,14 +14,17 @@ def test_mcp_requires_auth(client):
     response = client.post(
         "/mcp",
         json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
-        headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
     )
     assert response.status_code in (401, 403)
 
 
 def test_mcp_with_valid_token_returns_tools(client):
     """MCP-01: POST /mcp com token Bearer retorna estrutura MCP válida com ferramentas."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from uuid import uuid4
 
     from caramello_api.main import app
@@ -33,8 +37,8 @@ def test_mcp_with_valid_token_returns_tools(client):
         idp_sub="test-sub",
         email="test@example.com",
         name="Test User",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     app.dependency_overrides[get_current_user] = lambda: fake_user
     try:

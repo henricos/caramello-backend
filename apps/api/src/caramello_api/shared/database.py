@@ -1,12 +1,19 @@
+"""Async SQLAlchemy engine, session factory and the FastAPI session dependency.
+
+The engine is a module-level singleton: creating it at import time is what
+makes `DATABASE_URL` a hard requirement for importing anything that reaches
+this module.
+"""
+
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from caramello_api.core.config import settings
+from caramello_api.core.config import get_settings
 
 engine = create_async_engine(
-    str(settings.DATABASE_URL),
+    get_settings().database_url,
     echo=False,
     future=True,
 )

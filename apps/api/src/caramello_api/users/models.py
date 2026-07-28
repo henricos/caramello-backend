@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
@@ -19,19 +19,12 @@ class User(SQLModel, table=True):
     idp_sub: str = Field(unique=True, nullable=False)
     email: EmailStr = Field(unique=True, nullable=False)
     name: str = Field(max_length=100, nullable=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
     families: list["Family"] = Relationship(
         back_populates="members",
-        sa_relationship_kwargs={
-            "secondary": "family_member",
-            "overlaps": "user,family",
-        },
+        sa_relationship_kwargs={"secondary": "family_member", "overlaps": "user,family"},
     )  # noqa: UP037
     sent_invitations: list["FamilyInvitation"] = Relationship(back_populates="inviter")  # noqa: UP037
 

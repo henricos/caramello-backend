@@ -1,9 +1,14 @@
 #!/bin/bash
 set -e
 
-# Caramello Backend - Database Management Script
+# Caramello api — database management script.
+#
+# Expects DATABASE_URL to be present in the environment already: this script
+# loads no dotenv file, exactly like the application itself. In development:
+#
+#   set -a && source .env.development && set +a
+#   ./bin/manage_db upgrade
 
-# Function to display usage
 usage() {
     echo "Usage: $0 {init|migrate|upgrade|reset} [args]"
     echo ""
@@ -11,13 +16,24 @@ usage() {
     echo "  init              Initialize the database (apply all migrations)"
     echo "  migrate \"msg\"     Create a new migration with the given message"
     echo "  upgrade           Apply pending migrations (same as init)"
-    echo "  reset             Destroy and recreate the database (DATA LOSS WARNING)"
+    echo "  reset             Destroy and recreate the schema (DATA LOSS WARNING)"
+    echo ""
+    echo "Environment:"
+    echo "  DATABASE_URL      Required. Async DSN, e.g."
+    echo "                    postgresql+asyncpg://user:pass@host:5432/caramello_dev"
+    echo "                    Source .env.development to get the dev value:"
+    echo "                      set -a && source .env.development && set +a"
     echo ""
 }
 
-# Check if command is provided
 if [ -z "$1" ]; then
     usage
+    exit 1
+fi
+
+if [ -z "$DATABASE_URL" ]; then
+    echo "Error: DATABASE_URL is not set in the environment."
+    echo "Run: set -a && source .env.development && set +a"
     exit 1
 fi
 
@@ -31,15 +47,17 @@ case "$COMMAND" in
         ;;
     migrate)
         if [ -z "$1" ]; then
-            echo "Error: Migration message required."
+            echo "Error: migration message required."
             echo "Usage: $0 migrate \"message\""
             exit 1
         fi
         echo "Creating migration: $1"
+        # Revision ids are zero-padded sequential (see alembic.ini); alembic
+        # never invents one, so pass --rev-id explicitly when generating.
         uv run alembic revision --autogenerate -m "$1"
         ;;
     reset)
-        echo "WARNING: This will destroy all data in the database."
+        echo "WARNING: this will destroy all data in the database."
         read -p "Are you sure you want to continue? (y/N) " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -47,14 +65,6 @@ case "$COMMAND" in
             exit 1
         fi
 
-        # Always assume PostgreSQL environment
-        
-        # Load .env if exists to check variables (simple grep, not full parsing)
-        if [ -f .env ]; then
-            export $(grep -v '^#' .env | xargs)
-        fi
-
-        echo "Detected PostgreSQL environment."
         echo "Downgrading to base (dropping all tables)..."
         uv run alembic downgrade base
 

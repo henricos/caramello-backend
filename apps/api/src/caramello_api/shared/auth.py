@@ -1,21 +1,19 @@
-"""Camada de autenticação Keycloak para o Caramello.
+"""OIDC authentication layer for Caramello.
 
-Provê:
-  - fetch_jwks(): chamada no FastAPI lifespan para popular o cache JWKS
-  - get_current_user(): dependency FastAPI que valida JWT + JIT provisioning
-  - http_bearer: instância HTTPBearer usada como extrator do header Authorization
+Provides:
+  - fetch_jwks(): called from the FastAPI lifespan to populate the JWKS cache
+  - get_current_user(): FastAPI dependency validating the JWT + JIT provisioning
+  - http_bearer: HTTPBearer instance used to extract the Authorization header
 
-Padrão de uso em routers:
+Usage pattern in routers:
     from caramello_api.shared.auth import get_current_user
     @router.get("/me")
     async def me(user: User = Depends(get_current_user)) -> User:
         return user
 
-Ver:
-  - .planning/phases/03-estrutura-por-dom-nios-e-autentica-o/03-RESEARCH.md
-    (Pattern 1, 2, 3 e Common Pitfalls 1, 2, 5)
-  - .planning/phases/03-estrutura-por-dom-nios-e-autentica-o/03-CONTEXT.md
-    (D-01 a D-05, D-12)
+Every human-readable message returned from here comes from the i18n catalog
+via `_error_detail()`: the response carries a machine-readable `reason` code as
+the contract plus a localized `message` for display.
 """
 
 from __future__ import annotations
@@ -30,57 +28,67 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from caramello_api.core.config import settings
+from caramello_api.core.config import get_settings
+from caramello_api.i18n import translate
 from caramello_api.shared.database import get_session
 
 if TYPE_CHECKING:
     from caramello_api.users.models import User
 
 # ----------------------------------------------------------------------
-# Estado de módulo — análogo ao `engine` singleton em shared/database.py
+# Module state — analogous to the `engine` singleton in shared/database.py
 # ----------------------------------------------------------------------
 
-# Cache JWKS em memória: kid -> chave pública RSA (objeto opaco do pyjwt).
-# Populado em fetch_jwks() no startup; re-populado em get_current_user
-# quando um kid desconhecido aparece (key rotation).
+# In-memory JWKS cache: kid -> RSA public key (an opaque pyjwt object).
+# Populated by fetch_jwks() at startup; re-populated by get_current_user when
+# an unknown kid shows up (key rotation).
 _jwks_cache: dict[str, Any] = {}
 
-# Extrator de Bearer token com auto_error=False para permitir levantar 401
-# em vez do 403 padrão. RFC 7235 §3.1: 401 para ausência de credenciais.
+# Bearer token extractor with auto_error=False so we can raise 401 instead of
+# the default 403. RFC 7235 §3.1: 401 for a missing credential.
 _http_bearer_extractor = HTTPBearer(auto_error=False)
 
 
+def _error_detail(reason: str) -> dict[str, str]:
+    """Build an error detail pairing a stable code with its localized text.
+
+    `reason` is the contract consumers branch on; `message` is display text
+    resolved from the i18n catalog and may change without breaking anyone.
+    """
+    return {"reason": reason, "message": translate(f"auth.{reason}")}
+
+
 async def http_bearer(request: Request) -> HTTPAuthorizationCredentials:
-    """Extrai o Bearer token e levanta 401 (não 403) quando ausente."""
+    """Extract the Bearer token, raising 401 (not 403) when it is absent."""
     credentials = await _http_bearer_extractor(request)
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail=_error_detail("not_authenticated"),
             headers={"WWW-Authenticate": "Bearer"},
         )
     return credentials
 
 
 # ----------------------------------------------------------------------
-# fetch_jwks — chamada no lifespan da FastAPI
+# fetch_jwks — called from the FastAPI lifespan
 # ----------------------------------------------------------------------
 
 
 async def fetch_jwks() -> None:
-    """Busca as chaves JWKS do Keycloak e popula _jwks_cache.
+    """Fetch the provider's JWKS keys and populate _jwks_cache.
 
-    Chamada no startup (lifespan) e re-chamada por get_current_user quando
-    um kid desconhecido aparece (rotação de chaves).
+    Called at startup (lifespan) and again by get_current_user when an unknown
+    kid shows up (key rotation).
 
-    Pitfall #1 (research): o client nativo do PyJWT usa urllib síncrono e
-    bloquearia o event loop. Por isso usamos httpx.AsyncClient.
+    PyJWT's own JWKS client uses synchronous urllib and would block the event
+    loop, hence httpx.AsyncClient here.
     """
-    jwks_url = (
-        f"{settings.KEYCLOAK_URL.rstrip('/')}"
-        f"/realms/{settings.KEYCLOAK_REALM}"
-        "/protocol/openid-connect/certs"
-    )
+    # `auth_oidc_issuer` is the full realm URL, so the JWKS path hangs
+    # directly off it. Resolving it from the discovery document
+    # (`/.well-known/openid-configuration`) instead of this fixed suffix is a
+    # later phase; the suffix is what the current provider serves.
+    jwks_url = f"{get_settings().auth_oidc_issuer}/protocol/openid-connect/certs"
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(jwks_url)
         response.raise_for_status()
@@ -91,16 +99,16 @@ async def fetch_jwks() -> None:
         kid = key_data.get("kid")
         if not kid:
             continue
-        # RSAAlgorithm.from_jwk aceita dict ou JSON string
+        # RSAAlgorithm.from_jwk accepts either a dict or a JSON string
         new_cache[kid] = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
 
-    # Atualização atômica do cache (evita estado intermediário sob concorrência)
+    # Atomic cache swap (avoids an intermediate state under concurrency)
     _jwks_cache.clear()
     _jwks_cache.update(new_cache)
 
 
 # ----------------------------------------------------------------------
-# get_current_user — dependency injetada em todos os endpoints protegidos
+# get_current_user — dependency injected into every protected endpoint
 # ----------------------------------------------------------------------
 
 
@@ -108,45 +116,44 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
     session: AsyncSession = Depends(get_session),
 ) -> User:
-    """Valida o Bearer token e retorna o User (JIT provisioning incluído).
+    """Validate the Bearer token and return the User (JIT provisioning included).
 
-    Fluxo (D-12):
-      1. Extrair kid do JWT header (sem verificar assinatura).
-      2. Lookup no _jwks_cache; re-busca JWKS uma vez se kid desconhecido.
-      3. jwt.decode com algorithms=['RS256'] (bloqueia downgrade explicitamente).
-      4. Extrair claims (sub, email, name | preferred_username) — D-03.
-      5. INSERT ON CONFLICT DO NOTHING — operação atômica (D-12, AUTH-02).
-      6. SELECT do User para retornar (ON CONFLICT DO NOTHING não retorna
-         a linha — pitfall #5).
-      7. AUTO-JOIN (Phase 4 D-02): busca FamilyInvitation pendente por email;
-         se existe, cria FamilyMember(role="member") + atualiza invitation.status.
+    Flow:
+      1. Extract the kid from the JWT header (without verifying the signature).
+      2. Look it up in _jwks_cache; re-fetch the JWKS once if the kid is unknown.
+      3. jwt.decode with algorithms=['RS256'] (explicitly blocks downgrade).
+      4. Extract claims (sub, email, name | preferred_username).
+      5. INSERT ON CONFLICT DO NOTHING — a single atomic operation.
+      6. SELECT the User to return it (ON CONFLICT DO NOTHING returns no row).
+      7. AUTO-JOIN: look for a pending FamilyInvitation for this e-mail; if one
+         exists, create FamilyMember(role="member") and update invitation.status.
 
-    Aud claim: D-02 manda iniciar com verify_aud=False; uma task de
-    inspeção de token real (Plan 05) decide quando ativar.
+    Audience claim: validation starts disabled (verify_aud=False); enabling it
+    against `auth_oidc_audience` is a later phase.
     """
-    # Import lazy do User para evitar import circular
-    # (TYPE_CHECKING resolve estaticamente)
+    # Lazy import of User to avoid a circular import
+    # (TYPE_CHECKING resolves it statically)
     from caramello_api.users.models import User
 
     token = credentials.credentials
 
-    # 1. Extrair kid do header sem validar (necessário para lookup no cache)
+    # 1. Read the kid from the header without validating (needed for the lookup)
     try:
         unverified_header = jwt.get_unverified_header(token)
     except jwt.DecodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido",
+            detail=_error_detail("invalid_token"),
         ) from exc
 
     kid = unverified_header.get("kid")
     if not kid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token sem 'kid' no header",
+            detail=_error_detail("missing_kid"),
         )
 
-    # 2. Buscar chave do cache; re-buscar JWKS se kid desconhecido (rotação)
+    # 2. Look the key up in the cache; re-fetch the JWKS on an unknown kid
     public_key = _jwks_cache.get(kid)
     if public_key is None:
         await fetch_jwks()
@@ -154,42 +161,41 @@ async def get_current_user(
         if public_key is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="kid não reconhecido",
+                detail=_error_detail("unknown_kid"),
             )
 
-    # 3. Validar JWT — algorithms explícito para bloquear downgrade (T-3-03)
+    # 3. Validate the JWT — explicit algorithms to block a downgrade attack
     try:
         payload = jwt.decode(
             token,
             public_key,
             algorithms=["RS256"],
-            # D-02: começar com verify_aud=False; ativar após inspecionar token real
             options={"verify_aud": False},
         )
     except jwt.ExpiredSignatureError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token expirado",
+            detail=_error_detail("expired_token"),
         ) from exc
     except jwt.InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido",
+            detail=_error_detail("invalid_token"),
         ) from exc
 
-    # 4. Extrair claims (D-03)
+    # 4. Extract the claims
     idp_sub_value = payload.get("sub")
     if not idp_sub_value:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token sem claim 'sub'",
+            detail=_error_detail("missing_sub"),
         )
     idp_sub: str = str(idp_sub_value)
     email: str = str(payload.get("email") or "")
     name: str = str(payload.get("name") or payload.get("preferred_username") or "")
 
-    # 5. JIT provisioning com ON CONFLICT DO NOTHING (D-12, AUTH-02)
-    # Race-condition-safe: requests concorrentes do mesmo usuário não criam duplicatas.
+    # 5. JIT provisioning with ON CONFLICT DO NOTHING.
+    # Race-condition-safe: concurrent requests for the same user never duplicate.
     insert_stmt = (
         pg_insert(User.__table__)  # type: ignore[attr-defined]
         .values(idp_sub=idp_sub, email=email, name=name)
@@ -198,19 +204,19 @@ async def get_current_user(
     await session.execute(insert_stmt)
     await session.commit()
 
-    # 6. SELECT — ON CONFLICT DO NOTHING não retorna a linha (pitfall #5)
+    # 6. SELECT — ON CONFLICT DO NOTHING does not return the row
     result = await session.exec(select(User).where(User.idp_sub == idp_sub))
     user = result.first()
     if user is None:
-        # Estado inesperado: insert aconteceu mas select falhou — caso raro de race
+        # Unexpected state: the insert happened but the select found nothing
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Falha ao provisionar usuário",
+            detail=_error_detail("provisioning_failed"),
         )
 
-    # 7. AUTO-JOIN (Phase 4 D-02): se existe FamilyInvitation pendente com este email,
-    # adicionar o usuário automaticamente como FamilyMember(role="member").
-    # Import lazy para evitar ciclo entre shared/ e families/ (pitfall #3 RESEARCH.md).
+    # 7. AUTO-JOIN: if a pending FamilyInvitation exists for this e-mail, add the
+    # user automatically as FamilyMember(role="member").
+    # Lazy import to avoid a cycle between shared/ and families/.
     from caramello_api.families.models import (  # noqa: PLC0415
         FamilyInvitation,
         FamilyMember,
@@ -238,23 +244,20 @@ async def get_current_user(
 
 
 # ----------------------------------------------------------------------
-# _require_family_access — helper reutilizável para controle de acesso por família
+# _require_family_access — reusable per-family access-control helper
 # ----------------------------------------------------------------------
 
 
 async def _require_family_access(
     family_id: int,
-    current_user: "User",
+    current_user: User,
     session: AsyncSession,
 ) -> None:
-    """Verifica que current_user é membro de family_id. Levanta 403 se não for.
+    """Assert that current_user is a member of family_id; raise 403 otherwise.
 
-    Import lazy de FamilyMember para evitar ciclo shared/ ↔ families/
-    (mesmo padrão de get_current_user, linhas 202-205).
-
-    Reutilizável nas Phases 7, 8 e 9.
+    FamilyMember is imported lazily to avoid a shared/ <-> families/ cycle
+    (same pattern as get_current_user above).
     """
-    # Import lazy para evitar ciclo entre shared/ e families/ (pitfall #6 RESEARCH.md)
     from caramello_api.families.models import FamilyMember  # noqa: PLC0415
 
     result = await session.exec(
@@ -266,5 +269,5 @@ async def _require_family_access(
     if result.first() is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Você não é membro desta família",
+            detail=_error_detail("not_family_member"),
         )

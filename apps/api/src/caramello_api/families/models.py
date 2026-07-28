@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -14,18 +14,12 @@ class FamilyMember(SQLModel, table=True):
     __tablename__ = "family_member"
 
     user_id: int | None = Field(primary_key=True, foreign_key="user.id", default=None)
-    family_id: int | None = Field(
-        primary_key=True, foreign_key="family.id", default=None
-    )
+    family_id: int | None = Field(primary_key=True, foreign_key="family.id", default=None)
     role: str = Field(max_length=20, default="member", nullable=False)
-    joined_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    joined_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
     user: "User" = Relationship(sa_relationship_kwargs={"overlaps": "families,members"})
-    family: "Family" = Relationship(
-        sa_relationship_kwargs={"overlaps": "families,members"}
-    )
+    family: "Family" = Relationship(sa_relationship_kwargs={"overlaps": "families,members"})
 
 
 class Family(SQLModel, table=True):
@@ -38,12 +32,8 @@ class Family(SQLModel, table=True):
     name: str = Field(max_length=100, nullable=False)
     description: str | None = Field(max_length=255, default=None)
     status: str = Field(max_length=20, default="active", nullable=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
     members: list["User"] = Relationship(
         back_populates="families",
@@ -85,9 +75,7 @@ class FamilyInvitation(SQLModel, table=True):
     inviter_id: int = Field(foreign_key="user.id", nullable=False)
     email: str = Field(nullable=False)
     status: str = Field(max_length=20, default="pending_login", nullable=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
 
     family: "Family" = Relationship(back_populates="invitations")
     inviter: "User" = Relationship(back_populates="sent_invitations")

@@ -98,9 +98,7 @@ async def delete_family(
     return {"ok": True}
 
 
-familyinvitation_router = APIRouter(
-    prefix="/families/family-invitation", tags=["FamilyInvitation"]
-)
+familyinvitation_router = APIRouter(prefix="/families/family-invitation", tags=["FamilyInvitation"])
 
 
 @familyinvitation_router.post("/", response_model=FamilyInvitationRead)

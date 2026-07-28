@@ -1,22 +1,20 @@
-"""Verifica que APP_VERSION aparece no campo version da OpenAPI spec (DEPLOY-03)."""
+"""Checks that the OpenAPI spec advertises the installed package version (DEPLOY-03)."""
+
 from __future__ import annotations
 
-import os
-
-import pytest
+from importlib.metadata import version as package_version
 
 
-@pytest.mark.xfail(
-    reason="Requer 05-04: APP_VERSION não dinâmico ainda",
-    strict=False,
-)
 def test_openapi_version_field(client):
-    """DEPLOY-03: /openapi.json contém campo version com APP_VERSION ou fallback."""
+    """DEPLOY-03: /openapi.json exposes the version from the package metadata.
+
+    `main.py` reads it via `importlib.metadata`, so `pyproject.toml`'s
+    `version` is the single source of truth — no APP_VERSION build argument
+    can drift away from what is actually installed.
+    """
     response = client.get("/openapi.json")
     assert response.status_code == 200
     spec = response.json()
     assert "info" in spec
     assert "version" in spec["info"]
-    # Sem APP_VERSION setado, fallback deve ser "0.0.0"
-    expected = os.getenv("APP_VERSION", "0.0.0")
-    assert spec["info"]["version"] == expected
+    assert spec["info"]["version"] == package_version("caramello-api")
