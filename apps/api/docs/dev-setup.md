@@ -167,11 +167,12 @@ A business route requires one, and says so in a machine-readable way:
 
 ```bash
 curl -i http://localhost:8000/api/v1/users/me
-# expected: HTTP/1.1 403 Forbidden
+# expected: HTTP/1.1 401 Unauthorized
+# WWW-Authenticate: Bearer resource_metadata="http://localhost:8000/.well-known/oauth-protected-resource"
 # {"detail":{"reason":"missing_token","message":"..."}}
 ```
 
-`reason` is the stable contract consumers branch on; `message` is display text resolved from the pt-BR catalog in `i18n/`. The status is `403` rather than `401` because FastAPI's `HTTPBearer` rejects a missing `Authorization` header before the handler runs.
+`reason` is the stable contract consumers branch on; `message` is display text resolved from the pt-BR catalog in `i18n/`. The status is `401`, not `403`: a missing credential is "unauthenticated", and `shared/auth.py` wraps FastAPI's `HTTPBearer` specifically to return `401` with a `WWW-Authenticate` header rather than the `403` the bare dependency would produce (RFC 7235 §3.1). `403` is reserved for a caller who *is* authenticated but is not allowed — `email_not_verified`, `not_allowlisted`, `not_family_member`. The E2E suite asserts this distinction.
 
 **Only the business surface is versioned.** `/api/v1/users/*`, `/api/v1/families/*` and `/api/v1/finances/*` carry the prefix; `GET /health`, `POST /auth/verify`, the `.well-known/*` discovery documents and `GET /` stay unversioned on purpose — a monitor's URL and a spec-defined URL must survive an api version bump untouched.
 
