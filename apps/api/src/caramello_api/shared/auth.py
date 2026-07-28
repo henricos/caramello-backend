@@ -427,7 +427,10 @@ async def get_current_user(
     # 7. JIT provisioning with ON CONFLICT DO NOTHING.
     # Race-condition-safe: concurrent requests for the same user never duplicate.
     insert_stmt = (
-        pg_insert(User.__table__)  # type: ignore[attr-defined]
+        # SQLAlchemy types `__table__` as the broad `FromClause`, which pg_insert's
+        # signature does not accept, though a mapped class's `__table__` is always
+        # a real Table at runtime.
+        pg_insert(User.__table__)  # type: ignore[arg-type]
         .values(idp_sub=idp_sub, email=email, name=name)
         .on_conflict_do_nothing(index_elements=["idp_sub"])
     )

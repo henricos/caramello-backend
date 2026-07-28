@@ -1,14 +1,14 @@
 # CARAMELLO-GENERATED: implemented
-"""Business operations of the finances domain — Phase 7 + Phase 8 + Phase 9.
+"""Business operations of the finances domain.
 
 Covers:
-  - ACC-01/02/03: Account CRUD, scoped to a family
-  - CAT-01/02/04: Category and Subcategory CRUD, scoped to a family
-  - AUTH-FIN-01/02: 401/403 through get_current_user + require_family_access
-  - MOV-01..05: single entry, CSV/OFX/XLSX import and confirmation
-  - D-15: paginated movement listing
-  - LAN-01..05: reconciling movements into financial entries
-  - REL-01..05: balance reports and category/member breakdowns
+  - Account CRUD, scoped to a family
+  - Category and Subcategory CRUD, scoped to a family
+  - 401/403 through get_current_user + require_family_access
+  - Movements: single entry, CSV/OFX/XLSX import and confirmation
+  - Paginated movement listing
+  - Reconciling movements into financial entries
+  - Balance reports and category/member breakdowns
 
 Every route in this module is hand-written on purpose: the generated CRUD is
 opted out for the whole domain (`generate_router: false` in the entity YAMLs)
@@ -122,8 +122,8 @@ class SubcategoryUpdatePublic(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Public Movement schemas — D-16 (no account_uuid, no internal id)
-# T-08-11: they leak neither id nor family_id
+# Public Movement schemas (no account_uuid, no internal id)
+# They leak neither id nor family_id
 # ---------------------------------------------------------------------------
 
 
@@ -138,8 +138,8 @@ class MovementReadPublic(BaseModel):
     date: datetime
     amount: Decimal
     description: str
-    import_hash: str | None = None  # D-16: optional, for debugging
-    # D-MOV-01: UUID of the reconciled entry; null while the movement is pending
+    import_hash: str | None = None  # optional, for debugging
+    # UUID of the reconciled entry; null while the movement is pending
     entry_uuid: UUID | None = None
     created_at: datetime
     updated_at: datetime
@@ -159,13 +159,13 @@ class ConfirmImportPublic(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Public FinancialEntry schemas (Phase 9) — D-REC-01/02/03/04/05
-# LAN-01..05: reconciling, detail, update and listing of entries
+# Public FinancialEntry schemas
+# Reconciling, detail, update and listing of entries
 # ---------------------------------------------------------------------------
 
 
 class ReconcileCreatePublic(BaseModel):
-    """Payload creating a financial entry through reconciliation (D-REC-01)."""
+    """Payload creating a financial entry through reconciliation."""
 
     subcategory_uuid: UUID
     competencia_year: int
@@ -176,12 +176,12 @@ class ReconcileCreatePublic(BaseModel):
 
 
 class FinancialEntryUpdatePublic(BaseModel):
-    """Payload partially updating a financial entry (D-REC-04, LAN-05).
+    """Payload partially updating a financial entry.
 
     For responsible_user_uuid: None means clear the responsible member; the
     field being absent (not in model_fields_set) means leave it alone.
     Do NOT use model_dump(exclude_none=True) on this schema — read
-    model_fields_set instead (pitfall P2).
+    model_fields_set instead.
     """
 
     subcategory_uuid: UUID | None = None
@@ -193,7 +193,7 @@ class FinancialEntryUpdatePublic(BaseModel):
 
 
 class MovementSummaryPublic(BaseModel):
-    """Movement summary embedded in the rich FinancialEntry schema (D-REC-02)."""
+    """Movement summary embedded in the rich FinancialEntry schema."""
 
     uuid: UUID
     date: datetime
@@ -202,7 +202,7 @@ class MovementSummaryPublic(BaseModel):
 
 
 class FinancialEntryRichPublic(BaseModel):
-    """Rich response schema shared by every FinancialEntry endpoint (D-REC-02).
+    """Rich response schema shared by every FinancialEntry endpoint.
 
     Reused by POST reconcile, GET detail, PATCH update and GET list. The movement
     is embedded so a consumer needs no second GET.
@@ -224,12 +224,12 @@ class FinancialEntryRichPublic(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Balance and report schemas (Phase 9) — REL-01..05
+# Balance and report schemas
 # ---------------------------------------------------------------------------
 
 
 class AccountBalancePublic(BaseModel):
-    """Account balance response (D-BAL-01)."""
+    """Account balance response."""
 
     account_uuid: UUID
     balance: Decimal
@@ -237,7 +237,7 @@ class AccountBalancePublic(BaseModel):
 
 
 class FamilyAccountBalanceItem(BaseModel):
-    """One account inside the family balance (D-BAL-02)."""
+    """One account inside the family balance."""
 
     account_uuid: UUID
     name: str
@@ -246,7 +246,7 @@ class FamilyAccountBalanceItem(BaseModel):
 
 
 class FamilyBalancePublic(BaseModel):
-    """Consolidated family balance response (D-BAL-02)."""
+    """Consolidated family balance response."""
 
     family_uuid: UUID
     total_balance: Decimal
@@ -261,7 +261,7 @@ class MonthlyReportPeriod(BaseModel):
 
 
 class MonthlyReportRow(BaseModel):
-    """One subcategory breakdown row of the monthly report (D-REP-01)."""
+    """One subcategory breakdown row of the monthly report."""
 
     category_uuid: UUID
     category_name: str
@@ -272,7 +272,7 @@ class MonthlyReportRow(BaseModel):
 
 
 class MonthlyReportPublic(BaseModel):
-    """Monthly report response (D-REP-01)."""
+    """Monthly report response."""
 
     period: MonthlyReportPeriod
     total: Decimal
@@ -280,7 +280,7 @@ class MonthlyReportPublic(BaseModel):
 
 
 class ByMemberReportRow(BaseModel):
-    """One member row of the by-responsible breakdown report (D-REP-02)."""
+    """One member row of the by-responsible breakdown report."""
 
     user_uuid: UUID | None
     name: str
@@ -289,7 +289,7 @@ class ByMemberReportRow(BaseModel):
 
 
 class ByMemberReportPublic(BaseModel):
-    """By-member report response (D-REP-02)."""
+    """By-member report response."""
 
     period: MonthlyReportPeriod
     total: Decimal
@@ -297,7 +297,8 @@ class ByMemberReportPublic(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Account — ACC-01/02/03, T-07-01/02/03/04
+# Account — create, list, detail and update/archive of a family's bank
+# accounts. Every route is family-scoped and authenticated.
 # ---------------------------------------------------------------------------
 
 
@@ -307,10 +308,10 @@ async def create_account(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> AccountReadPublic:
-    """ACC-01: create a bank account scoped to a family.
+    """Create a bank account scoped to a family.
 
-    T-07-03: the payload only accepts family_uuid (the public UUID); family_id is
-    resolved server-side. T-07-04: Depends(get_current_user) is mandatory.
+    The payload only accepts family_uuid (the public UUID); family_id is
+    resolved server-side. Depends(get_current_user) is mandatory.
     """
     # Resolve the public UUID to the ORM object (404 when unknown)
     family_result = await session.execute(
@@ -320,7 +321,7 @@ async def create_account(
     if family is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.family_not_found"))
 
-    # Check membership — T-07-02: 403 for a non-member (IDOR mitigated)
+    # Check membership — 403 for a non-member (IDOR mitigated)
     await require_family_access(family.id, current_user, session)
 
     # Persist with the internal id (never with the UUID that came in)
@@ -334,7 +335,7 @@ async def create_account(
     await session.commit()
     await session.refresh(db_account)
 
-    # T-07-01: answer with the public schema (no id, no family_id)
+    # Answer with the public schema (no id, no family_id)
     return AccountReadPublic(
         uuid=db_account.uuid,
         family_uuid=account_in.family_uuid,
@@ -353,9 +354,9 @@ async def list_accounts(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[AccountReadPublic]:
-    """ACC-02: list the family's accounts — family_uuid is a required query param.
+    """List the family's accounts — family_uuid is a required query param.
 
-    AUTH-FIN-02: membership is checked before anything is filtered.
+    Membership is checked before anything is filtered.
     """
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     family = family_result.scalars().first()
@@ -387,7 +388,7 @@ async def get_account(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> AccountReadPublic:
-    """ACC-02: one account's detail, by public UUID."""
+    """One account's detail, by public UUID."""
     result = await session.execute(select(Account).where(Account.uuid == account_uuid))
     db_account = result.scalars().first()
     if db_account is None:
@@ -419,10 +420,10 @@ async def update_account(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> AccountReadPublic:
-    """ACC-02/03: update an account, or archive it (is_active=false).
+    """Update an account, or archive it (is_active=false).
 
-    ACC-03: archiving is is_active=false — session.delete is NOT used.
-    Pitfall #4: updated_at is set by hand (there is no automatic onupdate).
+    Archiving is is_active=false — session.delete is NOT used.
+    updated_at is set by hand (there is no automatic onupdate).
     """
     # Look the Account up by public UUID
     result = await session.execute(select(Account).where(Account.uuid == account_uuid))
@@ -444,7 +445,7 @@ async def update_account(
     for key, value in update_data.items():
         setattr(db_account, key, value)
 
-    # Pitfall #4: updated_at has no automatic onupdate — set it by hand
+    # updated_at has no automatic onupdate — set it by hand
     db_account.updated_at = datetime.now(UTC)
 
     session.add(db_account)
@@ -464,7 +465,8 @@ async def update_account(
 
 
 # ---------------------------------------------------------------------------
-# Category — CAT-01/02/04
+# Category — create, list, detail and update of the level-1 classification
+# categories of a family. Every route is family-scoped and authenticated.
 # ---------------------------------------------------------------------------
 
 
@@ -474,7 +476,7 @@ async def create_category(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> CategoryReadPublic:
-    """CAT-01: create a level-1 category scoped to a family."""
+    """Create a level-1 category scoped to a family."""
     family_result = await session.execute(
         select(Family).where(Family.uuid == category_in.family_uuid)
     )
@@ -507,7 +509,7 @@ async def list_categories(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[CategoryReadPublic]:
-    """CAT-04: list the family's categories — family_uuid is required."""
+    """List the family's categories — family_uuid is required."""
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     family = family_result.scalars().first()
     if family is None:
@@ -537,7 +539,7 @@ async def get_category(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> CategoryReadPublic:
-    """CAT-04: one category's detail, by public UUID."""
+    """One category's detail, by public UUID."""
     result = await session.execute(select(Category).where(Category.uuid == category_uuid))
     db_category = result.scalars().first()
     if db_category is None:
@@ -565,9 +567,9 @@ async def update_category(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> CategoryReadPublic:
-    """CAT-04: update a category.
+    """Update a category.
 
-    Pitfall #4: updated_at is set by hand.
+    updated_at is set by hand.
     """
     result = await session.execute(select(Category).where(Category.uuid == category_uuid))
     db_category = result.scalars().first()
@@ -600,7 +602,8 @@ async def update_category(
 
 
 # ---------------------------------------------------------------------------
-# Subcategory — CAT-02/04, D-12/D-13
+# Subcategory — create, list, detail and update of the level-2 classification
+# categories, always hanging off a parent category taken by its public UUID.
 # ---------------------------------------------------------------------------
 
 
@@ -610,9 +613,9 @@ async def create_subcategory(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> SubcategoryReadPublic:
-    """CAT-02: create a level-2 subcategory from a category_uuid.
+    """Create a level-2 subcategory from a category_uuid.
 
-    D-13: category_uuid is the public parameter; the server resolves it to
+    category_uuid is the public parameter; the server resolves it to
     category_id. Access is checked through category.family_id.
     """
     # Resolve category_uuid to a Category (404 when unknown)
@@ -649,7 +652,7 @@ async def list_subcategories(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[SubcategoryReadPublic]:
-    """CAT-04: list subcategories; category_uuid is required (D-12)."""
+    """List subcategories; category_uuid is required."""
     category_result = await session.execute(select(Category).where(Category.uuid == category_uuid))
     db_category = category_result.scalars().first()
     if db_category is None:
@@ -679,7 +682,7 @@ async def get_subcategory(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> SubcategoryReadPublic:
-    """CAT-04: one subcategory's detail, by public UUID."""
+    """One subcategory's detail, by public UUID."""
     result = await session.execute(select(Subcategory).where(Subcategory.uuid == subcategory_uuid))
     db_subcategory = result.scalars().first()
     if db_subcategory is None:
@@ -710,9 +713,9 @@ async def update_subcategory(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> SubcategoryReadPublic:
-    """CAT-04: update a subcategory.
+    """Update a subcategory.
 
-    Pitfall #4: updated_at is set by hand.
+    updated_at is set by hand.
     """
     result = await session.execute(select(Subcategory).where(Subcategory.uuid == subcategory_uuid))
     db_subcategory = result.scalars().first()
@@ -747,8 +750,9 @@ async def update_subcategory(
 
 
 # ---------------------------------------------------------------------------
-# Movement — MOV-01..05, D-15, D-16, D-17, AUTH-FIN-01/02
-# T-08-09/10/11/12/13
+# Movement — recording one movement, importing a statement (CSV/OFX/XLSX)
+# with deduplication, confirming the rows only suspected of being duplicates,
+# and the paginated listing. Every route is family-scoped and authenticated.
 # ---------------------------------------------------------------------------
 
 
@@ -763,11 +767,11 @@ async def create_movement(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> MovementReadPublic:
-    """MOV-01: record a single movement, scoped to an account/family.
+    """Record a single movement, scoped to an account/family.
 
-    D-17: answers 409 with existing_uuid when the hash is already known.
-    T-08-09: IDOR mitigated through require_family_access.
-    T-08-10: Depends(get_current_user) -> 401 without a token.
+    Answers 409 with existing_uuid when the hash is already known.
+    IDOR mitigated through require_family_access.
+    Depends(get_current_user) -> 401 without a token.
     """
     # Resolve account_uuid to an Account (404 when unknown)
     result = await session.execute(select(Account).where(Account.uuid == account_uuid))
@@ -775,13 +779,13 @@ async def create_movement(
     if db_account is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
-    # Check membership — T-08-09: 403 for a non-member (IDOR mitigated)
+    # Check membership — 403 for a non-member (IDOR mitigated)
     await require_family_access(db_account.family_id, current_user, session)
 
-    # Parse the date (D-12: ISO first, BR as the fallback)
+    # Parse the date (ISO first, BR as the fallback)
     date_val = _parse_date(movement_in.date, line=1)
 
-    # Compute the deduplication hash (D-07)
+    # Compute the deduplication hash
     row = ParsedRow(
         date=date_val,
         amount=movement_in.amount,
@@ -790,7 +794,7 @@ async def create_movement(
     )
     computed_hash = _compute_hash(db_account.id, row)
 
-    # D-17: a known hash answers 409 carrying existing_uuid
+    # A known hash answers 409 carrying existing_uuid
     dup_result = await session.execute(
         select(Movement).where(Movement.import_hash == computed_hash)
     )
@@ -841,14 +845,14 @@ async def list_movements(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[MovementReadPublic]:
-    """D-15, D-MOV-01/02: list an account's movements, paginated and filtered.
+    """List an account's movements, paginated and filtered.
 
-    D-MOV-01: entry_uuid comes from a LEFT JOIN on FinancialEntry (null =
+    entry_uuid comes from a LEFT JOIN on FinancialEntry (null =
               pending, a UUID = reconciled).
-    D-MOV-02: reconciled=false (pending) / reconciled=true (reconciled), through
+    reconciled=false (pending) / reconciled=true (reconciled), through
               the same LEFT JOIN.
-    T-08-09: IDOR mitigated through require_family_access.
-    T-08-10: Depends(get_current_user) -> 401 without a token.
+    IDOR mitigated through require_family_access.
+    Depends(get_current_user) -> 401 without a token.
     """
     from sqlalchemy import outerjoin
 
@@ -858,11 +862,11 @@ async def list_movements(
     if db_account is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
-    # Check membership — T-08-09: 403 for a non-member
+    # Check membership — 403 for a non-member
     await require_family_access(db_account.family_id, current_user, session)
 
-    # D-MOV-01: LEFT JOIN on FinancialEntry for entry_uuid
-    # (pitfall P5: read the Rows with fetchall + position)
+    # LEFT JOIN on FinancialEntry for entry_uuid
+    # (read the Rows with fetchall + position)
     stmt = (
         select(Movement, FinancialEntry.uuid.label("entry_uuid"))
         .select_from(outerjoin(Movement, FinancialEntry, FinancialEntry.movement_id == Movement.id))
@@ -874,7 +878,7 @@ async def list_movements(
     if date_to:
         stmt = stmt.where(Movement.date <= _parse_date(date_to, line=0))
 
-    # D-MOV-02: the reconciliation filter is IS NULL / IS NOT NULL
+    # The reconciliation filter is IS NULL / IS NOT NULL
     if reconciled is False:
         stmt = stmt.where(FinancialEntry.id.is_(None))
     elif reconciled is True:
@@ -882,7 +886,7 @@ async def list_movements(
 
     stmt = stmt.order_by(Movement.date.desc()).offset(offset).limit(limit)
 
-    # session.execute() + fetchall() for a multi-entity select (pitfall P5)
+    # session.execute() + fetchall() for a multi-entity select
     movements_execute_result = await session.execute(stmt)
     rows = movements_execute_result.fetchall()
 
@@ -893,7 +897,7 @@ async def list_movements(
             amount=row[0].amount,
             description=row[0].description,
             import_hash=row[0].import_hash,
-            # D-MOV-01: entry_uuid from the LEFT JOIN — None when the Row has no
+            # entry_uuid from the LEFT JOIN — None when the Row has no
             # second element (keeps the unit tests' mocks working)
             entry_uuid=row[1] if len(row) > 1 else None,
             created_at=row[0].created_at,
@@ -911,12 +915,12 @@ async def import_movements_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ImportResultPublic:
-    """MOV-02/03/04/05: import a bank statement file (CSV, OFX or XLSX).
+    """Import a bank statement file (CSV, OFX or XLSX).
 
-    D-09: the format comes in as a query param.
-    D-13: >50% invalid rows -> 422.
-    T-08-09: IDOR mitigated through require_family_access.
-    T-08-12/13: on_conflict_do_nothing + the error threshold.
+    The format comes in as a query param.
+    >50% invalid rows -> 422.
+    IDOR mitigated through require_family_access.
+    on_conflict_do_nothing + the error threshold.
     """
     # Resolve account_uuid to an Account
     result = await session.execute(select(Account).where(Account.uuid == account_uuid))
@@ -932,7 +936,7 @@ async def import_movements_endpoint(
     try:
         service_result = await import_movements(content, format, db_account.id, session)
     except ValueError as e:
-        # D-13: a batch with >50% invalid rows aborts with 422. The service
+        # A batch with >50% invalid rows aborts with 422. The service
         # already raises catalog-resolved text, so it becomes `message` as it is;
         # `reason` is the stable code a consumer branches on.
         raise HTTPException(
@@ -951,7 +955,11 @@ async def import_movements_endpoint(
                 description=m["description"],
                 import_hash=None,
                 created_at=m.get("created_at", datetime.now(UTC)),
-                updated_at=m.get("updated_at", m.get("created_at", datetime.now(UTC))),  # WR-03
+                # Prefer the real updated_at the service supplies; copying
+                # created_at into it would mask any later update on the
+                # movements returned to the client. created_at is only the
+                # fallback.
+                updated_at=m.get("updated_at", m.get("created_at", datetime.now(UTC))),
             )
         )
 
@@ -970,12 +978,12 @@ async def confirm_import(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ImportResultPublic:
-    """D-08, MOV-05: confirm and insert the movements suspected of being duplicates.
+    """Confirm and insert the movements suspected of being duplicates.
 
-    P4: the confirmed rows get import_hash=None — PostgreSQL allows several NULLs
+    The confirmed rows get import_hash=None — PostgreSQL allows several NULLs
     under a UNIQUE constraint.
-    T-08-09: IDOR mitigated through require_family_access.
-    T-08-12: import_hash=None is what keeps the UNIQUE constraint from firing.
+    IDOR mitigated through require_family_access.
+    import_hash=None is what keeps the UNIQUE constraint from firing.
     """
     # Resolve account_uuid to an Account
     result = await session.execute(select(Account).where(Account.uuid == confirm_in.account_uuid))
@@ -986,9 +994,9 @@ async def confirm_import(
     # Check membership
     await require_family_access(db_account.family_id, current_user, session)
 
-    # Insert the confirmed movements with import_hash=None (P4/D-08).
+    # Insert the confirmed movements with import_hash=None.
     # Every object is accumulated before the commit, for atomicity — no partial
-    # state is left behind when one insert fails mid-batch (CR-03).
+    # state is left behind when one insert fails mid-batch.
     db_movements: list[Movement] = []
 
     for movement_in in confirm_in.movements:
@@ -1032,7 +1040,9 @@ async def confirm_import(
 
 
 # ---------------------------------------------------------------------------
-# FinancialEntry — LAN-01..05, D-REC-01..05, T-09-04..08
+# FinancialEntry — subcategory suggestions for a movement, reconciling a
+# movement into an entry (1:1), the entry's detail, its partial update and
+# the listing by accrual period. Family-scoped and authenticated throughout.
 # ---------------------------------------------------------------------------
 
 
@@ -1045,12 +1055,12 @@ async def get_suggest_category(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
-    """LAN-03, D-CAT-01/02/03: top-5 subcategory suggestions, by fuzzy match.
+    """Top-5 subcategory suggestions, by fuzzy match.
 
-    T-09-04: IDOR mitigated — resolves movement -> account -> family, then
+    IDOR mitigated — resolves movement -> account -> family, then
              require_family_access.
-    T-09-07: AUTH-FIN-01 through get_current_user.
-    D-CAT-03: answers [] when the movement has no history (not a 404).
+    An unauthenticated caller gets 401, through get_current_user.
+    Answers [] when the movement has no history (not a 404).
     """
     # Resolve movement_uuid to a Movement (404 when unknown)
     result = await session.execute(select(Movement).where(Movement.uuid == movement_uuid))
@@ -1066,10 +1076,10 @@ async def get_suggest_category(
     if db_account is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.account_not_found"))
 
-    # T-09-04: check membership — 403 for a non-member (IDOR mitigated)
+    # Check membership — 403 for a non-member (IDOR mitigated)
     await require_family_access(db_account.family_id, current_user, session)
 
-    # Delegate to the service (D-CAT-04)
+    # Delegate to the service
     suggestions = await suggest_category(movement_uuid, db_account.family_id, session)
     return suggestions
 
@@ -1085,13 +1095,13 @@ async def reconcile_movement(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> FinancialEntryRichPublic:
-    """LAN-01/02/04, D-REC-01/02: create a 1:1 financial entry from a movement.
+    """Create a 1:1 financial entry from a movement.
 
-    T-09-04: IDOR mitigated through require_family_access.
-    T-09-05: responsible_user_uuid is validated against membership (D-ATTR-02).
-    T-09-06: UNIQUE(movement_id) + IntegrityError -> 409 (race-safe, LAN-02).
-    T-09-07: AUTH-FIN-01 through get_current_user.
-    T-09-08: the UUID and the accrual period are validated by the Pydantic model
+    IDOR mitigated through require_family_access.
+    responsible_user_uuid is validated against membership.
+    UNIQUE(movement_id) + IntegrityError -> 409 (race-safe).
+    An unauthenticated caller gets 401, through get_current_user.
+    The UUID and the accrual period are validated by the Pydantic model
              (an automatic 422).
     """
     # 1. Resolve movement_uuid to a Movement (404 when unknown)
@@ -1141,8 +1151,7 @@ async def reconcile_movement(
             cat_result = await session.execute(select(Category).where(Category.id == sub_cat_id))
             db_category = cat_result.scalars().first()
 
-    # 4. Resolve responsible_user_uuid to responsible_user_id (optional,
-    #    D-ATTR-01/02)
+    # 4. Resolve responsible_user_uuid to responsible_user_id (optional).
     responsible_user_id: int | None = None
     responsible_user_uuid: UUID | None = None
     if entry_in.responsible_user_uuid is not None:
@@ -1154,7 +1163,7 @@ async def reconcile_movement(
             raise HTTPException(
                 status_code=422, detail=error_detail("finances.responsible_user_not_found")
             )
-        # D-ATTR-02: validate membership
+        # Validate membership
         member_result = await session.execute(
             select(FamilyMember).where(
                 FamilyMember.family_id == family_id,
@@ -1169,9 +1178,9 @@ async def reconcile_movement(
         responsible_user_id = responsible_user.id
         responsible_user_uuid = responsible_user.uuid
 
-    # 5. Create the FinancialEntry, turning an IntegrityError into a 409
-    #    (T-09-06, LAN-02). subcategory_id is read with getattr because a test
-    #    mock may hand back an object of a different type.
+    # 5. Create the FinancialEntry, turning an IntegrityError into a 409.
+    #    subcategory_id is read with getattr because a test mock may hand
+    #    back an object of a different type.
     subcategory_id_val = getattr(db_subcategory, "id", None) or 0
     db_entry = FinancialEntry(
         movement_id=db_movement.id,
@@ -1194,7 +1203,7 @@ async def reconcile_movement(
         ) from e
 
     # 6. Build the rich schema with no lazy load (avoiding the selectinload
-    #    pitfall). CR-05: when db_category is still None after both paths, answer
+    #    pitfall). When db_category is still None after both paths, answer
     #    404 instead of fabricating a uuid4().
     if db_category is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.category_not_found"))
@@ -1230,11 +1239,11 @@ async def get_entry(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> FinancialEntryRichPublic:
-    """D-REC-03: one financial entry's detail, by public UUID.
+    """One financial entry's detail, by public UUID.
 
-    T-09-04: IDOR mitigated — resolves entry -> movement -> account -> family,
+    IDOR mitigated — resolves entry -> movement -> account -> family,
              then require_family_access.
-    T-09-07: AUTH-FIN-01 through get_current_user.
+    An unauthenticated caller gets 401, through get_current_user.
     """
     # Resolve entry_uuid to a FinancialEntry (404 when unknown)
     entry_result = await session.execute(
@@ -1310,13 +1319,13 @@ async def update_entry(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> FinancialEntryRichPublic:
-    """D-REC-04, LAN-05: update an entry's subcategory, period, notes or owner.
+    """Update an entry's subcategory, period, notes or owner.
 
-    T-09-04: IDOR mitigated through require_family_access.
-    T-09-05: responsible_user_uuid is validated against membership.
-    Pitfall P2: responsible_user_uuid is read from model_fields_set, NOT from
+    IDOR mitigated through require_family_access.
+    responsible_user_uuid is validated against membership.
+    responsible_user_uuid is read from model_fields_set, NOT from
                 model_dump(exclude_none=True).
-    Pitfall P3: updated_at is set by hand (there is no automatic onupdate).
+    updated_at is set by hand (there is no automatic onupdate).
     """
     # Resolve entry_uuid to a FinancialEntry (404 when unknown)
     entry_result = await session.execute(
@@ -1327,7 +1336,7 @@ async def update_entry(
         raise HTTPException(status_code=404, detail=error_detail("finances.entry_not_found"))
 
     # Resolve Movement and Account through the right chain, for the
-    # authorization check (IDOR fix: CR-01)
+    # authorization check (IDOR fix)
     entry_movement_id = getattr(db_entry, "movement_id", None)
     mov_auth_result = await session.execute(
         select(Movement).where(Movement.id == entry_movement_id)
@@ -1363,21 +1372,21 @@ async def update_entry(
         db_entry.competencia_year = entry_in.competencia_year
     if entry_in.competencia_month is not None:
         db_entry.competencia_month = entry_in.competencia_month
-    # WR-04: notes is nullable, so model_fields_set is what tells "not sent"
+    # notes is nullable, so model_fields_set is what tells "not sent"
     # apart from "sent as null, meaning clear it"
     if "notes" in entry_in.model_fields_set:
         db_entry.notes = entry_in.notes  # None = clear the note; a value = update
     if entry_in.is_recorrente is not None:
         db_entry.is_recorrente = entry_in.is_recorrente
 
-    # Pitfall P2: read responsible_user_uuid from model_fields_set, to tell
+    # Read responsible_user_uuid from model_fields_set, to tell
     # "field absent" (leave alone) from "field = null" (clear the owner)
     if "responsible_user_uuid" in entry_in.model_fields_set:
         if entry_in.responsible_user_uuid is None:
             # Explicitly clear the responsible member
             db_entry.responsible_user_id = None
         else:
-            # Resolve UUID -> id, then check membership (D-ATTR-01/02)
+            # Resolve UUID -> id, then check membership
             user_result = await session.execute(
                 select(User).where(User.uuid == entry_in.responsible_user_uuid)
             )
@@ -1400,7 +1409,7 @@ async def update_entry(
                 )
             db_entry.responsible_user_id = responsible_user.id
 
-    # Pitfall P3: updated_at is set by hand (there is no automatic onupdate)
+    # updated_at is set by hand (there is no automatic onupdate)
     db_entry.updated_at = datetime.now(UTC)
 
     session.add(db_entry)
@@ -1428,7 +1437,7 @@ async def update_entry(
             responsible_user_uuid = getattr(responsible_user, "uuid", None)
 
     # Build the rich schema, with getattr fallbacks for mock compatibility.
-    # CR-05: when db_category is None after the reload, answer 404 instead of
+    # When db_category is None after the reload, answer 404 instead of
     # fabricating a uuid4().
     if db_category is None:
         raise HTTPException(status_code=404, detail=error_detail("finances.category_not_found"))
@@ -1475,10 +1484,10 @@ async def list_entries(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[FinancialEntryRichPublic]:
-    """D-REC-05: list the family's entries by accrual period (year/month optional).
+    """List the family's entries by accrual period (year/month optional).
 
-    T-09-04: IDOR mitigated through require_family_access.
-    T-09-07: AUTH-FIN-01 through get_current_user.
+    IDOR mitigated through require_family_access.
+    An unauthenticated caller gets 401, through get_current_user.
     Open Question 3: limit defaults to 100, with offset for pagination.
     """
     # Resolve family_uuid to a Family (404 when unknown)
@@ -1541,7 +1550,8 @@ async def list_entries(
 
 
 # ---------------------------------------------------------------------------
-# Balances — REL-01/02, D-BAL-01/02/03
+# Balances — one account's balance and the consolidated balance of every
+# active account of the family, both computed on demand from the movements.
 # ---------------------------------------------------------------------------
 
 
@@ -1551,10 +1561,10 @@ async def get_account_balance(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> AccountBalancePublic:
-    """REL-01, D-BAL-01: the account's current balance, SUM(movement.amount) on demand.
+    """The account's current balance, SUM(movement.amount) on demand.
 
-    T-09-04: IDOR mitigated through require_family_access.
-    T-09-07: AUTH-FIN-01 through get_current_user.
+    IDOR mitigated through require_family_access.
+    An unauthenticated caller gets 401, through get_current_user.
     """
     result = await session.execute(select(Account).where(Account.uuid == account_uuid))
     db_account = result.scalars().first()
@@ -1577,10 +1587,10 @@ async def get_family_balance(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> FamilyBalancePublic:
-    """REL-02, D-BAL-02: consolidated balance of every active family account.
+    """Consolidated balance of every active family account.
 
-    T-09-04: IDOR mitigated through require_family_access.
-    T-09-07: AUTH-FIN-01 through get_current_user.
+    IDOR mitigated through require_family_access.
+    An unauthenticated caller gets 401, through get_current_user.
     """
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     db_family = family_result.scalars().first()
@@ -1615,7 +1625,8 @@ async def get_family_balance(
 
 
 # ---------------------------------------------------------------------------
-# Reports — REL-03/04/05, D-REP-01/02/03/04
+# Reports — the monthly breakdown by subcategory and the breakdown by
+# responsible member, both aggregating over the accrual period.
 # ---------------------------------------------------------------------------
 
 
@@ -1628,12 +1639,12 @@ async def get_monthly_report(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> MonthlyReportPublic:
-    """REL-03/04/05, D-REP-01/03/04: monthly breakdown by subcategory.
+    """Monthly breakdown by subcategory.
 
     Grouped by accrual period (competencia), NOT by the movement date.
-    The optional member_uuid filters by responsible_user_uuid (D-REP-01).
-    Uses session.execute() with func.sum + group_by (D-REP-04).
-    T-09-04: IDOR mitigated through require_family_access.
+    The optional member_uuid filters by responsible_user_uuid.
+    Uses session.execute() with func.sum + group_by.
+    IDOR mitigated through require_family_access.
     """
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     db_family = family_result.scalars().first()
@@ -1669,12 +1680,12 @@ async def get_by_member_report(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> ByMemberReportPublic:
-    """D-REP-02: breakdown by responsible member for one accrual period.
+    """Breakdown by responsible member for one accrual period.
 
     Entries with no responsible member are grouped into a row with user_uuid=None
     and the catalog's "unassigned" label.
-    year and month are both required (D-REP-02).
-    T-09-04: IDOR mitigated through require_family_access.
+    year and month are both required.
+    IDOR mitigated through require_family_access.
     """
     family_result = await session.execute(select(Family).where(Family.uuid == family_uuid))
     db_family = family_result.scalars().first()

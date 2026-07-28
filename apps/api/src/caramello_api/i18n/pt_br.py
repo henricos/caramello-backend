@@ -82,7 +82,7 @@ MESSAGES: dict[str, str] = {
         "Mais de 50% das linhas falharam ({failed}/{total}). Verificar formato do arquivo."
     ),
     "finances.unsupported_import_format": "Formato não suportado: {format!r}",
-    # Row grouping every entry with no responsible member (D-REP-02): it is a
+    # Row grouping every entry with no responsible member: it is a
     # label on a report, not an error.
     "finances.unassigned_member": "Não atribuído",
 }

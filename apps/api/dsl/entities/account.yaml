@@ -1,6 +1,6 @@
 # dsl/entities/account.yaml
 # Bank account, card, savings or investment account of a family member.
-# Domain: finances (Phase 6, Plan 02)
+# Domain: finances
 
 name: Account
 domain: finances

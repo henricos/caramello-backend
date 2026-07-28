@@ -1,4 +1,4 @@
-"""Tests for the DSL generator evolution (Phase 3 — STRUCT-02).
+"""Tests for the DSL generator evolution.
 
 Covers: the `domain` field in the YAMLs, the dynamic output path, the
 CARAMELLO-GENERATED annotation and the generation of operations.py out of
@@ -18,9 +18,10 @@ DSL_OPERATIONS_DIR = REPO_ROOT / "dsl" / "operations"
 
 
 def test_user_yaml_has_domain_field():
-    """Phase 3 -> Phase 4: user.yaml carries `domain: user` or `domain: users`.
+    """user.yaml carries `domain: user` or `domain: users`.
 
-    Phase 3 emits `user`, Phase 4+ emits `users` — both are accepted here.
+    The generator emitted the singular `user` historically and emits the plural
+    `users` now — both are accepted here.
     """
     data = yaml.safe_load((DSL_ENTITIES_DIR / "user.yaml").read_text())
     assert data.get("domain") in ("user", "users"), (
@@ -29,7 +30,7 @@ def test_user_yaml_has_domain_field():
 
 
 def test_family_yamls_have_domain_field():
-    """Phase 3 -> Phase 4: family*.yaml declare domain: family (Phase 3) or families (Phase 4+)."""
+    """family*.yaml declare domain: family (the old form) or families (the current one)."""
     for fname in ("family.yaml", "family_member.yaml", "family_invitation.yaml"):
         data = yaml.safe_load((DSL_ENTITIES_DIR / fname).read_text())
         assert data.get("domain") in ("family", "families"), (
@@ -38,7 +39,7 @@ def test_family_yamls_have_domain_field():
 
 
 def test_operations_user_yaml_exists():
-    """Wave 1 (Plan 02): dsl/operations/user.yaml exists with a get_me operation."""
+    """dsl/operations/user.yaml exists with a get_me operation."""
     path = DSL_OPERATIONS_DIR / "user.yaml"
     assert path.exists(), f"dsl/operations/user.yaml must exist at {path}"
     data = yaml.safe_load(path.read_text())
@@ -60,7 +61,7 @@ def test_operations_user_yaml_exists():
 
 
 def test_schema_yaml_has_domain_property():
-    """Wave 1 (Plan 02): dsl/schema.yaml has a domain field as a property."""
+    """dsl/schema.yaml has a domain field as a property."""
     schema_path = REPO_ROOT / "dsl" / "schema.yaml"
     schema = yaml.safe_load(schema_path.read_text())
     assert "domain" in schema.get("properties", {}), (
@@ -201,7 +202,7 @@ def test_expose_as_uuid_splits_table_and_schema():
 
 
 def test_generated_router_requires_auth():
-    """Plan 04-03: the generated router imports get_current_user and uses Depends."""
+    """The generated router imports get_current_user and uses Depends."""
     router_path = REPO_ROOT / "src/caramello_api/users/router.py"
     content = router_path.read_text()
     assert "from caramello_api.shared.auth import get_current_user" in content
@@ -209,7 +210,7 @@ def test_generated_router_requires_auth():
 
 
 def test_user_operations_stub_or_implemented():
-    """Plan 04-03: users/operations.py exists with a stub or implemented annotation."""
+    """Users/operations.py exists with a stub or implemented annotation."""
     ops_path = REPO_ROOT / "src/caramello_api/users/operations.py"
     assert ops_path.exists()
     first_line = ops_path.read_text().splitlines()[0].strip()
@@ -220,45 +221,45 @@ def test_user_operations_stub_or_implemented():
 
 
 def test_legacy_paths_removed():
-    """Plan 04-03: src/caramello_api/models, api/generated, user/ and family/ are gone."""
+    """Src/caramello_api/models, api/generated, user/ and family/ are gone."""
     assert not (REPO_ROOT / "src/caramello_api/models").exists()
     assert not (REPO_ROOT / "src/caramello_api/api").exists()
     assert not (REPO_ROOT / "src/caramello_api/user").exists(), (
-        "src/caramello_api/user must have been removed in Phase 4"
+        "src/caramello_api/user must have been removed"
     )
     assert not (REPO_ROOT / "src/caramello_api/family").exists(), (
-        "src/caramello_api/family must have been removed in Phase 4"
+        "src/caramello_api/family must have been removed"
     )
 
 
 def test_user_yaml_domain_is_users():
-    """Plan 04-02 (D-09): dsl/entities/user.yaml declares domain == 'users'."""
+    """Dsl/entities/user.yaml declares domain == 'users'."""
     data = yaml.safe_load((DSL_ENTITIES_DIR / "user.yaml").read_text())
     domain = data.get("domain")
     if domain == "user":
-        pytest.xfail("plan 04-02 has not run yet — user.yaml still has domain: user")
+        pytest.xfail("user.yaml still has domain: user")
     assert domain == "users", f"user.yaml must declare domain: users; found: {domain!r}"
 
 
 def test_family_yamls_domain_is_families():
-    """Plan 04-02 (D-09): family*.yaml declare domain == 'families'."""
+    """Family*.yaml declare domain == 'families'."""
     for fname in ("family.yaml", "family_member.yaml", "family_invitation.yaml"):
         data = yaml.safe_load((DSL_ENTITIES_DIR / fname).read_text())
         domain = data.get("domain")
         if domain == "family":
-            pytest.xfail(f"plan 04-02 has not run yet — {fname} still has domain: family")
+            pytest.xfail(f"{fname} still has domain: family")
         assert domain == "families", f"{fname} must declare domain: families; found: {domain!r}"
 
 
 def test_family_invitation_yaml_uses_pending_login_status():
-    """Plan 04-02 (D-01): family_invitation.yaml redesigned — no invitee_email."""
+    """family_invitation.yaml redesigned — no invitee_email."""
     data = yaml.safe_load((DSL_ENTITIES_DIR / "family_invitation.yaml").read_text())
     field_names = {f["name"] for f in data.get("fields", [])}
     # Old fields, REMOVED:
     forbidden = {"invitee_email", "expires_at"}
     present_forbidden = forbidden & field_names
     if present_forbidden:
-        pytest.xfail(f"plan 04-02 has not run yet — old fields present: {present_forbidden}")
+        pytest.xfail(f"old fields present: {present_forbidden}")
     # New fields, PRESENT:
     assert "email" in field_names, f"the 'email' field is mandatory; fields: {field_names}"
     assert "status" in field_names, f"the 'status' field is mandatory; fields: {field_names}"
@@ -270,7 +271,7 @@ def test_family_invitation_yaml_uses_pending_login_status():
 
 
 def test_router_url_has_domain_prefix_and_hyphens():
-    """Plan 04-02 (D-09/D-10/D-11): generate_router emits a domain prefix with hyphens."""
+    """generate_router emits a domain prefix with hyphens."""
     import sys
 
     sys.path.insert(0, str(REPO_ROOT))
@@ -304,9 +305,9 @@ def test_router_url_has_domain_prefix_and_hyphens():
     try:
         code = generate_router(entity_data)
     except Exception as exc:  # noqa: BLE001
-        pytest.xfail(f"plan 04-02 has not run yet — generate_router failed: {exc}")
+        pytest.xfail(f"generate_router failed: {exc}")
     if 'prefix="/family_invitation"' in code:
-        pytest.xfail("plan 04-02 has not run yet — the old prefix is still emitted")
+        pytest.xfail("the old prefix is still emitted")
     prefix_lines = [line for line in code.splitlines() if "prefix=" in line]
     assert 'prefix="/families/family-invitation"' in code, (
         f"Expected prefix='/families/family-invitation' in the generated code; "
@@ -315,20 +316,20 @@ def test_router_url_has_domain_prefix_and_hyphens():
 
 
 def test_operations_user_yaml_path_is_users_me():
-    """Plan 04-02 (D-11): dsl/operations/user.yaml.get_me.path == /users/me."""
+    """Dsl/operations/user.yaml.get_me.path == /users/me."""
     data = yaml.safe_load((DSL_OPERATIONS_DIR / "user.yaml").read_text())
     get_me = next(op for op in data["operations"] if op["name"] == "get_me")
     path = get_me.get("path")
     if path == "/user/me":
-        pytest.xfail("plan 04-02 has not run yet — get_me.path is still /user/me")
+        pytest.xfail("get_me.path is still /user/me")
     assert path == "/users/me", f"get_me.path must be '/users/me'; got {path!r}"
 
 
 def test_operations_family_yaml_exists_with_six_operations():
-    """Plan 04-02 (D-05, D-07): dsl/operations/family.yaml exists with 6 operations."""
+    """Dsl/operations/family.yaml exists with 6 operations."""
     family_ops_path = DSL_OPERATIONS_DIR / "family.yaml"
     if not family_ops_path.exists():
-        pytest.xfail("plan 04-02 has not run yet — dsl/operations/family.yaml does not exist")
+        pytest.xfail("dsl/operations/family.yaml does not exist")
     data = yaml.safe_load(family_ops_path.read_text())
     assert data.get("domain") == "families", (
         f"domain must be 'families'; got {data.get('domain')!r}"
@@ -347,12 +348,12 @@ def test_operations_family_yaml_exists_with_six_operations():
 
 
 # ---------------------------------------------------------------------------
-# Phase 6 — Plan 01: extending the generator for Decimal and filters:
+# Generator support for Decimal and filters:
 # ---------------------------------------------------------------------------
 
 
 def test_generator_decimal_emits_numeric():
-    """Phase 6 Plan 01 (D-01/SC-7): generate_models emits Numeric(15, 2) for a Decimal field.
+    """generate_models emits Numeric(15, 2) for a Decimal field.
 
     Checks that:
     - the generated code carries `mapped_column(Numeric(15, 2), nullable=False)`
@@ -399,7 +400,7 @@ def test_generator_decimal_emits_numeric():
 
 
 def test_generator_filters_emits_table_args():
-    """Phase 6 Plan 01 (D-11/SC-8): generate_models emits __table_args__ with Index.
+    """generate_models emits __table_args__ with Index.
 
     For every entity that declares filters:, it checks that:
     - the generated code carries `__table_args__ = (`
@@ -457,12 +458,12 @@ def test_generator_filters_emits_table_args():
 
 
 # ---------------------------------------------------------------------------
-# Phase 6 — Plan 02: finance YAMLs, generation, import (Wave 0)
+# Finance YAMLs: generation and import
 # ---------------------------------------------------------------------------
 
 
 def test_finances_yamls_have_domain_finances():
-    """Phase 6 Plan 02 (SC-5): the 5 finance YAMLs declare domain: finances.
+    """The 5 finance YAMLs declare domain: finances.
 
     Checks that each one of the 5 YAMLs has domain == 'finances'.
     """
@@ -481,7 +482,7 @@ def test_finances_yamls_have_domain_finances():
 
 
 def test_finances_models_no_float():
-    """Phase 6 Plan 02 (SC-6): finances/models.py and schemas.py use no float.
+    """Finances/models.py and schemas.py use no float.
 
     No monetary path touches floating point: the column is Numeric(15, 2) and
     the annotation is Decimal, both on the table and on the DTO.
@@ -496,7 +497,7 @@ def test_finances_models_no_float():
         )
     models_content = (REPO_ROOT / "src/caramello_api/finances/models.py").read_text()
     assert "Numeric(15, 2)" in models_content, (
-        "models.py must carry `Numeric(15, 2)` for monetary fields (SC-6)"
+        "models.py must carry `Numeric(15, 2)` for monetary fields"
     )
     assert "Mapped[Decimal]" in models_content, "the amount column must be Mapped[Decimal]"
     schemas_content = (REPO_ROOT / "src/caramello_api/finances/schemas.py").read_text()
@@ -504,7 +505,7 @@ def test_finances_models_no_float():
 
 
 def test_finances_models_import_ok():
-    """Phase 6 Plan 02 (SC-4): the finances models and schemas import without error.
+    """The finances models and schemas import without error.
 
     Checks that the generated code is importable and that the SQLAlchemy mapping
     configures (a forward reference error only shows up in configure_mappers).

@@ -1,18 +1,18 @@
 # CARAMELLO-GENERATED: implemented
-"""Business operations of the families domain — Phase 4.
+"""Business operations of the families domain.
 
 Covers:
-  - FAMILY-01: POST /families/registry (create a family, become its owner)
-  - FAMILY-02: GET  /families/families (list my families)
-  - FAMILY-03: GET  /families/families/{uuid} (detail when member, 403 otherwise)
-  - D-07:      POST /families/families/{uuid}/pre-register (owner pre-registers an e-mail)
-  - D-07:      GET  /families/families/{uuid}/members (member list, members only)
-  - FAMILY-07: DELETE /families/families/{uuid}/members/{user_uuid} (owner removes)
+  - POST   /families/registry (create a family, become its owner)
+  - GET    /families/families (list my families)
+  - GET    /families/families/{uuid} (detail when member, 403 otherwise)
+  - POST   /families/families/{uuid}/pre-register (owner pre-registers an e-mail)
+  - GET    /families/families/{uuid}/members (member list, members only)
+  - DELETE /families/families/{uuid}/members/{user_uuid} (owner removes)
 
-NOT implemented in this phase (D-04 — deferred to M2):
-  - FAMILY-04: POST /families/families/{uuid}/invitations (reusable invite code)
-  - FAMILY-05: POST /families/invitations/{code}/join (join request)
-  - FAMILY-06: PATCH /families/invitations/{id} (approve/reject)
+Deliberately NOT implemented, and deferred to a later milestone: the reusable
+invite-code flow (create an invitation, join through a code, approve or reject a
+join request). Membership is granted only by e-mail pre-registration plus the
+auto-join at first login.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ class FamilyMemberRead(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Authorization helpers (D-13 — role check)
+# Authorization helpers (role check)
 # ---------------------------------------------------------------------------
 
 
@@ -118,7 +118,7 @@ async def _require_member(
 
 
 # ---------------------------------------------------------------------------
-# FAMILY-01: POST /families/registry
+# POST /families/registry
 # ---------------------------------------------------------------------------
 
 
@@ -128,7 +128,7 @@ async def registry_family(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Family:
-    """FAMILY-01: create a family and register the authenticated user as its owner."""
+    """Create a family and register the authenticated user as its owner."""
     # exclude_none=True so the model's own defaults are not overwritten (e.g.
     # Family.status defaults to "active", and would be None if FamilyCreate
     # omitted it).
@@ -136,9 +136,8 @@ async def registry_family(
     db_family = Family(**family_data)
     session.add(db_family)
     # flush to obtain db_family.id without committing — needed for the
-    # FamilyMember FK. RESOLVED (Open Question 1 of 04-RESEARCH.md):
-    # session.flush() with SQLAlchemy+asyncpg is a safe way to get an
-    # autoincrement PK before the commit (established pattern).
+    # FamilyMember FK. session.flush() with SQLAlchemy+asyncpg is a safe way
+    # to get an autoincrement PK before the commit (established pattern).
     await session.flush()
 
     owner_member = FamilyMember(
@@ -153,7 +152,7 @@ async def registry_family(
 
 
 # ---------------------------------------------------------------------------
-# FAMILY-02: GET /families/families
+# GET /families/families
 # ---------------------------------------------------------------------------
 
 
@@ -166,14 +165,14 @@ async def list_my_families(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[Family]:
-    """FAMILY-02: list the families the authenticated user belongs to."""
+    """List the families the authenticated user belongs to."""
     from caramello_api.families.services import list_my_families as svc
 
     return await svc(session, current_user)
 
 
 # ---------------------------------------------------------------------------
-# FAMILY-03: GET /families/families/{family_uuid}
+# GET /families/families/{family_uuid}
 # ---------------------------------------------------------------------------
 
 
@@ -183,12 +182,12 @@ async def get_family_detail(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Family:
-    """FAMILY-03: return the family's details when the user is a member; 403 otherwise."""
+    """Return the family's details when the user is a member; 403 otherwise."""
     return await _require_member(family_uuid, current_user, session)
 
 
 # ---------------------------------------------------------------------------
-# D-07: POST /families/families/{family_uuid}/pre-register
+# POST /families/families/{family_uuid}/pre-register
 # ---------------------------------------------------------------------------
 
 
@@ -203,7 +202,7 @@ async def pre_register_member(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> FamilyInvitationRead:
-    """D-07: the owner pre-registers an e-mail for automatic joining (D-02 auto-join)."""
+    """The owner pre-registers an e-mail; the member auto-joins at first login."""
     family, _ = await _require_owner(family_uuid, current_user, session)
 
     invitation = FamilyInvitation(
@@ -231,7 +230,7 @@ async def pre_register_member(
 
 
 # ---------------------------------------------------------------------------
-# D-07: GET /families/families/{family_uuid}/members
+# GET /families/families/{family_uuid}/members
 # ---------------------------------------------------------------------------
 
 
@@ -244,7 +243,7 @@ async def list_members(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[FamilyMemberRead]:
-    """D-07: list every member, provided the caller is a member of the family."""
+    """List every member, provided the caller is a member of the family."""
     family = await _require_member(family_uuid, current_user, session)
 
     result = await session.execute(
@@ -264,7 +263,7 @@ async def list_members(
 
 
 # ---------------------------------------------------------------------------
-# FAMILY-07: DELETE /families/families/{family_uuid}/members/{user_uuid}
+# DELETE /families/families/{family_uuid}/members/{user_uuid}
 # ---------------------------------------------------------------------------
 
 
@@ -278,7 +277,7 @@ async def remove_member(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
-    """FAMILY-07: the owner removes a member from the family; 403 otherwise."""
+    """The owner removes a member from the family; 403 otherwise."""
     family, _ = await _require_owner(family_uuid, current_user, session)
 
     # Locate the target user

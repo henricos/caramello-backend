@@ -1,4 +1,4 @@
-"""Tests for src/caramello_api/users/operations.py — USER-01.
+"""Tests for src/caramello_api/users/operations.py.
 
 GET /users/me requires valid auth plus a real database (JIT provisioning).
 Strategy for CI: use app.dependency_overrides to mock get_current_user.
@@ -10,7 +10,7 @@ from datetime import UTC
 
 
 def test_get_me_returns_user_fields():
-    """USER-01: GET /users/me returns id, email, name (via a mocked get_current_user)."""
+    """GET /users/me returns id, email, name (via a mocked get_current_user)."""
     from datetime import datetime
     from uuid import uuid4
 
@@ -51,7 +51,7 @@ def test_get_me_returns_user_fields():
 
 
 def test_operations_annotation_is_implemented():
-    """D-10: once implemented, the annotation changes from stub to implemented."""
+    """Once implemented, the annotation changes from stub to implemented."""
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[1]

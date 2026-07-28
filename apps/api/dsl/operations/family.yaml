@@ -1,6 +1,6 @@
 # dsl/operations/family.yaml
-# Business operations of the families domain (Phase 4 — D-05, D-07).
-# Generates src/caramello_api/families/operations.py (the stub implemented in plan 04-04).
+# Business operations of the families domain.
+# Generates src/caramello_api/families/operations.py (a stub, then implemented).
 
 domain: families
 operations:

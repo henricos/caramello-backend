@@ -1,6 +1,6 @@
 # dsl/operations/user.yaml
 # Business operations of the users domain.
-# Generates src/caramello_api/users/operations.py (the stub implemented in Phase 3 — D-10).
+# Generates src/caramello_api/users/operations.py (a stub, then implemented).
 
 domain: users
 operations:

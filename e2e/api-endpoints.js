@@ -27,7 +27,7 @@
  *       allowlisted e-mail (mock rotation on the same port, which also proves
  *       the api's JWKS refresh on an unknown kid).
  *   10. A token whose `aud` is another service's audience is rejected with 401
- *       invalid_token (the invariant that closed deferral D-02).
+ *       invalid_token — `aud` is required and validated, no longer deferred.
  *   11. GET /.well-known/oauth-protected-resource is public and announces the
  *       resource (`<PUBLIC_URL>/mcp`) and the authorization server (the
  *       issuer) — RFC 9728, MCP spec 2025-06-18. The `/mcp` path form answers
@@ -361,7 +361,7 @@ async function run() {
       `email_verified=false responds 403 email_not_verified even when allowlisted (got ${unverified.status} ${JSON.stringify(unverifiedBody)})`,
     );
 
-    // Scenario 10 — D-02: a token minted for another resource server.
+    // Scenario 10 — a token minted for another resource server.
     await rotateMock({
       email: OWNER_EMAIL,
       sub: OWNER_SUB,

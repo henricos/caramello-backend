@@ -1,9 +1,9 @@
-"""Tests for src/caramello_api/finances/operations.py — ACC-01, ACC-02, ACC-03,
-CAT-01, CAT-02, CAT-03, CAT-04, AUTH-FIN-01, AUTH-FIN-02.
+"""Tests for src/caramello_api/finances/operations.py — the Account and
+Category/Subcategory CRUD surface plus its 401/403 authorization behaviour.
 
 These tests start out skipped (the finances/operations module is not implemented
 yet). Each test uses pytest.importorskip so it fails cleanly until the
-implementation lands (plans 07-02 and 07-03). Once operations.py is marked as
+implementation lands. Once operations.py is marked as
 `# CARAMELLO-GENERATED: implemented`, the tests start running automatically.
 
 Strategy (same as tests/test_family_operations.py):
@@ -47,7 +47,7 @@ def _skip_if_stub() -> None:
     if ops_path.exists():
         first_line = ops_path.read_text().splitlines()[0].strip()
         if "stub" in first_line:
-            pytest.skip("finances/operations.py is still a stub — waiting on plan 07-02")
+            pytest.skip("finances/operations.py is still a stub")
 
 
 def _make_fake_user(user_id: int = 42):
@@ -68,7 +68,7 @@ def _make_fake_user(user_id: int = 42):
 
 
 def _assert_not_family_member(response) -> None:
-    """AUTH-FIN-02: assert the exact 403 `require_family_access` raises.
+    """Assert the exact 403 `require_family_access` raises.
 
     The status alone is not enough: 403 is also what an unrelated policy could
     answer, and the machine-readable `reason` is the part of the contract a
@@ -81,27 +81,27 @@ def _assert_not_family_member(response) -> None:
 
 
 def test_finances_module_exists():
-    """Plan 07-02/07-03: the src/caramello_api/finances/operations.py module exists."""
+    """The src/caramello_api/finances/operations.py module exists."""
     pytest.importorskip("caramello_api.finances.operations")
 
 
 def test_finances_operations_annotation_is_implemented():
-    """Plan 07-02: first line == # CARAMELLO-GENERATED: implemented."""
+    """First line == # CARAMELLO-GENERATED: implemented."""
     _skip_if_stub()
     ops_path = Path(__file__).resolve().parents[1] / "src/caramello_api/finances/operations.py"
     if not ops_path.exists():
         pytest.skip("finances/operations.py has not been generated/implemented yet")
     first_line = ops_path.read_text().splitlines()[0].strip()
     assert first_line == "# CARAMELLO-GENERATED: implemented", (
-        f"Annotation must be 'implemented' after plan 07-02; got: {first_line!r}"
+        f"Annotation must be 'implemented'; got: {first_line!r}"
     )
 
 
 def test_finances_router_paths():
-    """CAT-03: the router exposes the expected paths (phases 7-8).
+    """The router exposes the expected account and category paths.
 
-    Phase 9 paths are checked in test_finances_router_paths_phase9 (guarded) and
-    get enabled by plan 09-04 Task 3 once the endpoints land.
+    The reconciliation, balance and report paths are checked separately, by
+    test_finances_router_paths_reconciliation_and_reports.
     """
     _skip_if_stub()
     ops_mod = pytest.importorskip("caramello_api.finances.operations")
@@ -125,17 +125,16 @@ def test_finances_router_paths():
     )
 
 
-def test_finances_router_paths_phase9():
-    """Validates the 8 Phase 9 paths — all implemented by plan 09-03/09-04.
+def test_finances_router_paths_reconciliation_and_reports():
+    """Validates the 8 reconciliation, balance and report paths.
 
-    Plan 09-04 Task 3: the phase-9 skip guard is gone (helper deleted) — the
-    endpoints are now asserted directly, with no skip condition.
+    They are asserted directly, with no skip condition.
     """
     _skip_if_stub()
     ops_mod = pytest.importorskip("caramello_api.finances.operations")
     router = ops_mod.router
     paths = {getattr(r, "path", None) for r in router.routes}
-    phase9_expected = {
+    expected_paths = {
         "/finances/movements/{movement_uuid}/reconcile",
         "/finances/movements/{movement_uuid}/suggest-category",
         "/finances/entries/{entry_uuid}",
@@ -145,16 +144,14 @@ def test_finances_router_paths_phase9():
         "/finances/reports/monthly",
         "/finances/reports/by-member",
     }
-    missing = phase9_expected - paths
-    assert not missing, (
-        f"Phase 9 paths missing from finances.operations.router: {missing}. Found: {paths}"
-    )
+    missing = expected_paths - paths
+    assert not missing, f"paths missing from finances.operations.router: {missing}. Found: {paths}"
 
 
 def test_create_account_returns_uuid():
-    """ACC-01: POST /finances/accounts returns uuid without the internal id/family_id.
+    """POST /finances/accounts returns uuid without the internal id/family_id.
 
-    T-07-01: the public response does NOT expose `id` or `family_id`.
+    The public response does NOT expose `id` or `family_id`.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -236,7 +233,7 @@ def test_create_account_returns_uuid():
         body = response.json()
         assert "uuid" in body, f"Response must contain 'uuid'; body: {body}"
         assert "family_uuid" in body, f"Response must contain 'family_uuid'; body: {body}"
-        # T-07-01: the response must NOT expose internal keys
+        # The response must NOT expose internal keys
         assert "id" not in body, f"Response must NOT expose 'id'; body: {body}"
         assert "family_id" not in body, f"Response must NOT expose 'family_id'; body: {body}"
     finally:
@@ -244,7 +241,7 @@ def test_create_account_returns_uuid():
 
 
 def test_list_accounts_scoped_to_family():
-    """ACC-02: GET /finances/accounts?family_uuid=xxx returns only that family's accounts."""
+    """GET /finances/accounts?family_uuid=xxx returns only that family's accounts."""
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
@@ -316,7 +313,7 @@ def test_list_accounts_scoped_to_family():
 
 
 def test_accounts_require_auth():
-    """AUTH-FIN-01: without a get_current_user override, /finances/accounts returns 401.
+    """Without a get_current_user override, /finances/accounts returns 401.
 
     _HTTPBearer401 returns 401 when the token is missing (RFC 7235 §3.1).
     """
@@ -352,7 +349,7 @@ def test_accounts_require_auth():
 
 
 def test_accounts_403_non_member():
-    """AUTH-FIN-02: an authenticated but non-member user gets 403.
+    """An authenticated but non-member user gets 403.
 
     The mock returns an existing Family but no FamilyMember (first()=None on the
     membership query).
@@ -411,7 +408,7 @@ def test_accounts_403_non_member():
 
 
 def test_archive_account():
-    """ACC-03: PATCH /finances/accounts/{uuid} with is_active=false archives without deleting.
+    """PATCH /finances/accounts/{uuid} with is_active=false archives without deleting.
 
     Checks that the response returns is_active=False and that session.delete was
     never called.
@@ -487,14 +484,14 @@ def test_archive_account():
         assert response.status_code == 200, response.text
         body = response.json()
         assert body.get("is_active") is False, f"Response must have is_active=False; body: {body}"
-        # ACC-03: archiving never deletes — session.delete must not have been called
+        # Archiving never deletes — session.delete must not have been called
         mock_session.delete.assert_not_called()
     finally:
         app.dependency_overrides.clear()
 
 
 def test_create_category():
-    """CAT-01: POST /finances/categories creates a parent category scoped to a family."""
+    """POST /finances/categories creates a parent category scoped to a family."""
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
@@ -574,7 +571,7 @@ def test_create_category():
 
 
 def test_list_update_categories():
-    """CAT-04: GET /finances/categories?family_uuid=xxx (200) and
+    """GET /finances/categories?family_uuid=xxx (200) and
     PATCH /finances/categories/{uuid} (200).
     """
     _skip_if_stub()
@@ -682,7 +679,7 @@ def test_list_update_categories():
 
 
 def test_create_subcategory():
-    """CAT-02: POST /finances/subcategory creates a subcategory via category_uuid."""
+    """POST /finances/subcategory creates a subcategory via category_uuid."""
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
@@ -777,15 +774,16 @@ def test_create_subcategory():
 
 
 # =============================================================================
-# Phase 8: Movement endpoints — MOV-01..05, D-15, AUTH-FIN-01/02
-# Nyquist stubs — red/skipped until plans 08-02/08-03/08-04 deliver the implementation
+# Movement endpoints — single entry, statement import, duplicate
+# confirmation and the paginated listing
+# Nyquist stubs — red/skipped until the implementation lands
 # =============================================================================
 
 
 def test_create_movement():
-    """MOV-01: POST /finances/accounts/{uuid}/movements creates a movement, returns 201 + uuid.
+    """POST /finances/accounts/{uuid}/movements creates a movement, returns 201 + uuid.
 
-    Nyquist stub — red/skip until operations.py implements the endpoint (plan 08-02).
+    Nyquist stub — red/skip until operations.py implements the endpoint.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -865,9 +863,9 @@ def test_create_movement():
 
 
 def test_create_movement_409_duplicate():
-    """MOV-01 + D-17: POST with an already existing hash returns 409 + existing_uuid.
+    """POST with an already existing hash returns 409 + existing_uuid.
 
-    Nyquist stub — red/skip until operations.py implements the hash check (plan 08-02).
+    Nyquist stub — red/skip until operations.py implements the hash check.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -915,7 +913,7 @@ def test_create_movement_409_duplicate():
             # Membership check — valid member
             r.first.return_value = MagicMock()
         else:
-            # Hash pre-check: returns an existing movement with the same hash (D-17)
+            # Hash pre-check: returns an existing movement with the same hash
             r.first.return_value = existing_movement
         r.all.return_value = []
         return r
@@ -951,9 +949,9 @@ def test_create_movement_409_duplicate():
 
 
 def test_import_csv():
-    """MOV-02: POST /accounts/{uuid}/movements/import?format=csv returns inserted + movements[].
+    """POST /accounts/{uuid}/movements/import?format=csv returns inserted + movements[].
 
-    Nyquist stub — red/skip until operations.py implements the import endpoint (plan 08-03).
+    Nyquist stub — red/skip until operations.py implements the import endpoint.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -1025,9 +1023,9 @@ def test_import_csv():
 
 
 def test_import_ofx():
-    """MOV-03: POST /accounts/{uuid}/movements/import?format=ofx works with a sample OFX.
+    """POST /accounts/{uuid}/movements/import?format=ofx works with a sample OFX.
 
-    Nyquist stub — red/skip until operations.py implements the OFX endpoint (plan 08-03).
+    Nyquist stub — red/skip until operations.py implements the OFX endpoint.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -1132,9 +1130,9 @@ NEWFILEUID:NONE
 
 
 def test_import_xlsx():
-    """MOV-03: POST /accounts/{uuid}/movements/import?format=xlsx works with a BytesIO XLSX.
+    """POST /accounts/{uuid}/movements/import?format=xlsx works with a BytesIO XLSX.
 
-    Nyquist stub — red/skip until operations.py implements the XLSX endpoint (plan 08-03).
+    Nyquist stub — red/skip until operations.py implements the XLSX endpoint.
     """
     _skip_if_stub()
     import openpyxl
@@ -1217,9 +1215,9 @@ def test_import_xlsx():
 
 
 def test_import_deduplication():
-    """MOV-04: re-importing the same file does not duplicate movements.
+    """Re-importing the same file does not duplicate movements.
 
-    Nyquist stub — red/skip until operations.py implements hash-based dedup (plan 08-03).
+    Nyquist stub — red/skip until operations.py implements hash-based dedup.
     Simulates the pre-check returning already existing hashes → inserted=0.
     """
     _skip_if_stub()
@@ -1246,7 +1244,7 @@ def test_import_deduplication():
 
     csv_content = b"date,amount,description\n2026-01-15,-150.00,PIX FULANO\n"
 
-    # WR-05: compute the real hash so the mocked pre-check rejects the row correctly
+    # Compute the real hash so the mocked pre-check rejects the row correctly
     from decimal import Decimal
 
     from caramello_api.finances.services import (  # type: ignore[import-not-found]
@@ -1276,7 +1274,7 @@ def test_import_deduplication():
         r.all.return_value = []
         return r
 
-    # Mocks for session.execute: 2 distinct calls (WR-05)
+    # Mocks for session.execute: 2 distinct calls
     # 1st call: pre-check of existing hashes (returns real_hash as already present)
     mock_precheck_result = MagicMock()
     mock_precheck_result.fetchall.return_value = [(real_hash,)]
@@ -1312,9 +1310,9 @@ def test_import_deduplication():
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        # D-05: a CSV row has no FITID, so a known hash is a SUSPECTED duplicate
-        # handed back for confirmation — never a silent duplicates_skipped (D-04,
-        # which is the OFX path) and never an insert
+        # A CSV row has no FITID, so a known hash is a SUSPECTED duplicate
+        # handed back for confirmation — never a silent duplicates_skipped
+        # (which is the OFX path) and never an insert
         assert body["inserted"] == 0, body
         assert body["movements"] == [], body
         assert body["duplicates_skipped"] == 0, body
@@ -1335,10 +1333,10 @@ def test_import_deduplication():
 
 
 def test_import_potential_duplicates():
-    """MOV-05 + D-05: CSV/XLSX with a hash match returns potential_duplicates[].
+    """CSV/XLSX with a hash match returns potential_duplicates[].
 
     Nyquist stub — red/skip until operations.py implements returning
-    potential_duplicates for CSV/XLSX (plan 08-03). OFX uses definitive dedup;
+    potential_duplicates for CSV/XLSX. OFX uses definitive dedup;
     CSV/XLSX return potential_duplicates[] for the user to confirm.
     """
     _skip_if_stub()
@@ -1413,10 +1411,10 @@ def test_import_potential_duplicates():
 
 
 def test_import_confirm():
-    """MOV-05 + D-08: POST /import/confirm inserts confirmed rows without hash collision.
+    """POST /import/confirm inserts confirmed rows without hash collision.
 
     Nyquist stub — red/skip until operations.py implements the /import/confirm
-    endpoint (plan 08-03). Confirmed rows are inserted with import_hash=None (D-08).
+    endpoint. Confirmed rows are inserted with import_hash=None.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -1470,7 +1468,7 @@ def test_import_confirm():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        # Payload: list of movements confirmed by the user (D-08)
+        # Payload: list of movements confirmed by the user
         payload = {
             "account_uuid": str(account_uuid),
             "movements": [
@@ -1491,7 +1489,7 @@ def test_import_confirm():
         body = response.json()
         assert body["inserted"] == 1, body
         assert [m["description"] for m in body["movements"]] == ["PIX FULANO"], body
-        # D-08/P4: a confirmed row is inserted with no hash, so the UNIQUE
+        # A confirmed row is inserted with no hash, so the UNIQUE
         # constraint cannot fire on the duplicate the user just accepted
         assert body["movements"][0]["import_hash"] is None, body
     finally:
@@ -1499,10 +1497,10 @@ def test_import_confirm():
 
 
 def test_list_movements():
-    """D-15: GET /finances/accounts/{uuid}/movements returns a paginated list.
+    """GET /finances/accounts/{uuid}/movements returns a paginated list.
 
     Nyquist stub — red/skip until operations.py implements the GET movements
-    endpoint (plan 08-02). Supports ?limit=50&offset=0&date_from=&date_to=.
+    endpoint. Supports ?limit=50&offset=0&date_from=&date_to=.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -1575,9 +1573,9 @@ def test_list_movements():
 
 
 def test_movements_require_auth():
-    """AUTH-FIN-01/02: 401 without a token, 403 for another family on Movement endpoints.
+    """401 without a token, 403 for another family on Movement endpoints.
 
-    Nyquist stub — red/skip until operations.py implements the Movement endpoints (plan 08-02).
+    Nyquist stub — red/skip until operations.py implements the Movement endpoints.
     Mirrors the pattern of test_accounts_require_auth and test_accounts_403_non_member.
     """
     _skip_if_stub()
@@ -1662,16 +1660,17 @@ def test_movements_require_auth():
 
 
 # ---------------------------------------------------------------------------
-# Reconciliation endpoint stubs — LAN-01, LAN-02, LAN-03
+# Reconciliation endpoints — turning a movement into a financial entry, the
+# already-reconciled conflict, and the subcategory suggestions
 # ---------------------------------------------------------------------------
 
 
 def test_reconcile_movement():
-    """LAN-01, LAN-04, D-REC-02: POST /finances/movements/{uuid}/reconcile returns 201.
+    """POST /finances/movements/{uuid}/reconcile returns 201.
 
     The response must include the rich schema: uuid, movement, subcategory_uuid,
     competencia_year, is_recorrente.
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
+    The skip guard is gone: the endpoint is implemented.
     """
     from decimal import Decimal
 
@@ -1740,7 +1739,7 @@ def test_reconcile_movement():
     )
     added = []
 
-    # CR-05 fix: counter-based mock — answers in the order of the SINGLE-entity
+    # Counter-based mock — answers in the order of the SINGLE-entity
     # selects (session.execute + .scalars()): 1=Movement, 2=Account,
     # 3=FamilyMember(require_family_access), 4=Subcategory(fallback), 5=Category
     exec_call_count = [0]
@@ -1813,7 +1812,7 @@ def test_reconcile_movement():
         assert body["competencia_month"] == 5, body
         assert body["is_recorrente"] is False, body
         assert body["responsible_user_uuid"] is None, body
-        # LAN-01: exactly one FinancialEntry was handed to the session
+        # Exactly one FinancialEntry was handed to the session
         entries = [o for o in added if isinstance(o, FinancialEntry)]
         assert len(entries) == 1, added
         assert entries[0].movement_id == fake_movement.id
@@ -1823,11 +1822,11 @@ def test_reconcile_movement():
 
 
 def test_reconcile_409_duplicate():
-    """LAN-02: POST /finances/movements/{uuid}/reconcile returns 409 if already reconciled.
+    """POST /finances/movements/{uuid}/reconcile returns 409 if already reconciled.
 
     When session.commit raises IntegrityError, the endpoint must roll back and
-    return 409 with an error message (D-REC-01).
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
+    return 409 with an error message.
+    The skip guard is gone: the endpoint is implemented.
     """
     from decimal import Decimal
 
@@ -1919,7 +1918,7 @@ def test_reconcile_409_duplicate():
 
 
 def test_suggest_category():
-    """LAN-03, D-CAT-01/02: GET /finances/movements/{uuid}/suggest-category.
+    """GET /finances/movements/{uuid}/suggest-category.
 
     The mocks answer the whole chain the endpoint resolves (movement -> account ->
     membership) plus the two queries the service runs, so the request reaches the
@@ -2028,20 +2027,20 @@ def test_suggest_category():
         assert body[0]["subcategory_name"] == "Supermercado", body
         assert body[0]["category_uuid"] == str(food_cat_uuid), body
         assert body[0]["category_name"] == "Alimentação", body
-        # D-CAT-02: an identical description scores 100, as an int
+        # An identical description scores 100, as an int
         assert body[0]["score"] == 100, body
         assert isinstance(body[0]["score"], int), body
         assert body[1]["subcategory_uuid"] == str(ride_sub_uuid), body
         assert body[1]["subcategory_name"] == "Aplicativo", body
         assert body[1]["category_uuid"] == str(transport_cat_uuid), body
-        # D-CAT-01: ordered by score descending
+        # Ordered by score descending
         assert body[0]["score"] > body[1]["score"], body
     finally:
         app.dependency_overrides.clear()
 
 
 def test_suggest_category_403_non_member():
-    """AUTH-FIN-02, T-09-04: suggest-category answers 403 to a non-member (IDOR).
+    """Suggest-category answers 403 to a non-member (IDOR).
 
     The movement and its account resolve; the FamilyMember lookup finds nothing,
     which is the only difference from test_suggest_category.
@@ -2103,15 +2102,16 @@ def test_suggest_category_403_non_member():
 
 
 # ---------------------------------------------------------------------------
-# Entry update stubs — LAN-05, D-ATTR
+# Entry update — the partial update of an entry, including the round-trip of
+# its responsible member
 # ---------------------------------------------------------------------------
 
 
 def test_update_entry():
-    """LAN-05, D-REC-04: PATCH /finances/entries/{uuid} updates a financial entry.
+    """PATCH /finances/entries/{uuid} updates a financial entry.
 
     Updates subcategory_uuid, competencia_year and notes, and returns the rich schema.
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
+    The skip guard is gone: the endpoint is implemented.
     """
     from decimal import Decimal
 
@@ -2190,7 +2190,7 @@ def test_update_entry():
         joined_at=datetime.now(UTC),
     )
 
-    # WR-06: counter-based mock — returns the right object per entity-select order
+    # Counter-based mock — returns the right object per entity-select order
     # Order: 1=FinancialEntry, 2=Movement(auth), 3=Account, 4=FamilyMember(require_family_access),
     #        5=Subcategory(update), 6=Subcategory(reload after commit), 7=Category(reload)
     exec_call_count = [0]
@@ -2238,7 +2238,7 @@ def test_update_entry():
                 "notes": "Nota atualizada",
             },
         )
-        # WR-06: asserts 200 only and validates the body shape (404 is not a success)
+        # Asserts 200 only and validates the body shape (404 is not a success)
         assert response.status_code == 200, (
             f"Expected 200; got {response.status_code}: {response.text}"
         )
@@ -2335,14 +2335,14 @@ def _entry_patch_fixtures(fake_user, responsible_user=None):
 
 
 def test_entry_responsible_user_uuid():
-    """D-ATTR-01/02, D-REC-04: PATCH entries/{uuid} round-trips responsible_user_uuid.
+    """PATCH entries/{uuid} round-trips responsible_user_uuid.
 
     Two requests, one mocked session each, both reaching the endpoint's logic:
 
       - responsible_user_uuid=<uuid> assigns the owner — the response carries the
         member's public UUID and the ORM object received the internal id.
-      - responsible_user_uuid=null clears it (the model_fields_set sentinel of
-        pitfall P2) — the response carries null and the internal id is gone.
+      - responsible_user_uuid=null clears it (through the model_fields_set
+        sentinel) — the response carries null and the internal id is gone.
     """
     from fastapi.testclient import TestClient
 
@@ -2358,7 +2358,7 @@ def test_entry_responsible_user_uuid():
 
     mock_session = AsyncMock()
     # Entity selects, in order: entry, movement (auth), account, FamilyMember
-    # (require_family_access), the responsible User, its FamilyMember (D-ATTR-02),
+    # (require_family_access), the responsible User, its FamilyMember,
     # then the subcategory/category/User reloaded for the rich schema.
     mock_session.execute.side_effect = execute_mock(
         entity_sequence(
@@ -2393,7 +2393,7 @@ def test_entry_responsible_user_uuid():
         body = response.json()
         assert body["uuid"] == str(entry.uuid), body
         assert body["responsible_user_uuid"] == str(responsible_user.uuid), body
-        # D-ATTR-01: the UUID was resolved to the internal id on the way in
+        # The UUID was resolved to the internal id on the way in
         assert entry.responsible_user_id == responsible_user.id
         # The rest of the rich schema still describes the entry it patched
         assert body["movement"]["uuid"] == str(movement.uuid), body
@@ -2438,10 +2438,10 @@ def test_entry_responsible_user_uuid():
 
 
 def test_update_entry_403_non_member():
-    """AUTH-FIN-02, T-09-04: PATCH /finances/entries/{uuid} answers 403 to a non-member.
+    """PATCH /finances/entries/{uuid} answers 403 to a non-member.
 
-    The entry, its movement and its account resolve (CR-01's chain); the
-    FamilyMember lookup finds nothing.
+    The entry, its movement and its account all resolve (the handler walks
+    entry -> movement -> account); the FamilyMember lookup finds nothing.
     """
     from fastapi.testclient import TestClient
 
@@ -2478,7 +2478,7 @@ def test_update_entry_403_non_member():
 
 
 # ---------------------------------------------------------------------------
-# Balance stubs — REL-01, REL-02
+# Balance endpoints — one account's balance and the family consolidation
 # ---------------------------------------------------------------------------
 
 
@@ -2515,7 +2515,7 @@ def _sum_for_account(balances):
     The account being summed is read back out of the compiled WHERE, so a handler
     that mixed the accounts up — or an endpoint that summed the wrong one — shows
     up as a wrong balance instead of a passing test. An account absent from
-    `balances` answers None, which is the empty SUM of pitfall P6.
+    `balances` answers None, which is what an empty SUM returns.
     """
 
     def _row(stmt):
@@ -2536,7 +2536,7 @@ def _sum_for_account(balances):
 
 
 def test_account_balance():
-    """REL-01, D-BAL-01: GET /finances/accounts/{uuid}/balance returns the balance.
+    """GET /finances/accounts/{uuid}/balance returns the balance.
 
     The mocked SUM answers only for account 7, which is the account the URL
     resolves to, so the asserted figure proves the endpoint summed that account
@@ -2582,7 +2582,7 @@ def test_account_balance():
         client = TestClient(app)
         response = client.get(f"/api/v1/finances/accounts/{account_uuid}/balance")
         assert response.status_code == 200, response.text
-        # D-BAL-01: the whole body, by value — money crosses the wire as a string
+        # The whole body, by value — money crosses the wire as a string
         assert response.json() == {
             "account_uuid": str(account_uuid),
             "balance": "1234.56",
@@ -2593,7 +2593,7 @@ def test_account_balance():
 
 
 def test_account_balance_403_non_member():
-    """AUTH-FIN-02, T-09-04: the account balance answers 403 to a non-member."""
+    """The account balance answers 403 to a non-member."""
     from fastapi.testclient import TestClient
 
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
@@ -2634,7 +2634,7 @@ def test_account_balance_403_non_member():
 
 
 def test_family_balance():
-    """REL-02, D-BAL-02: GET /finances/families/{uuid}/balance consolidates the accounts.
+    """GET /finances/families/{uuid}/balance consolidates the accounts.
 
     Two accounts with different balances, one of them negative: the response must
     carry each account's own figure and their sum as total_balance.
@@ -2717,7 +2717,7 @@ def test_family_balance():
 
 
 def test_family_balance_403_non_member():
-    """AUTH-FIN-02, T-09-04: the family balance answers 403 to a non-member."""
+    """The family balance answers 403 to a non-member."""
     from fastapi.testclient import TestClient
 
     from caramello_api.main import app
@@ -2748,7 +2748,7 @@ def test_family_balance_403_non_member():
 
 
 # ---------------------------------------------------------------------------
-# Report stubs — REL-03, REL-04, REL-05
+# Report endpoints — the monthly breakdown and the by-member breakdown
 # ---------------------------------------------------------------------------
 
 
@@ -2757,7 +2757,7 @@ def _monthly_report_rows(*rows):
 
     The GROUP BY runs inside the mocked session, so the stand-in plays the part
     the database would: it hands the rows over only when the compiled query is
-    the one D-REP-03 requires — filtered by FinancialEntry.competencia_year/month.
+    the required one — filtered by FinancialEntry.competencia_year/month.
     A report grouped by Movement.date instead comes back empty, which is what
     makes this test able to fail.
     """
@@ -2778,7 +2778,7 @@ def _monthly_report_rows(*rows):
 
 
 def test_monthly_report():
-    """REL-03/04, D-REP-01/03: GET /finances/reports/monthly returns the breakdown.
+    """GET /finances/reports/monthly returns the breakdown.
 
     Two subcategory rows go in and the response is asserted whole: the period
     echoed back, both rows by value, and `total` as the sum of their totals.
@@ -2857,7 +2857,7 @@ def test_monthly_report():
                 },
             ],
         }, response.text
-        # D-REP-04: one aggregate query, with func.sum and a GROUP BY
+        # One aggregate query, with func.sum and a GROUP BY
         assert len(recorded_sql) == 1, recorded_sql
         assert "sum(movement.amount)" in recorded_sql[0], recorded_sql[0]
         assert "GROUP BY" in recorded_sql[0], recorded_sql[0]
@@ -2866,7 +2866,7 @@ def test_monthly_report():
 
 
 def test_monthly_report_403_non_member():
-    """AUTH-FIN-02, T-09-04: the monthly report answers 403 to a non-member."""
+    """The monthly report answers 403 to a non-member."""
     from fastapi.testclient import TestClient
 
     from caramello_api.main import app
@@ -2899,7 +2899,7 @@ def test_monthly_report_403_non_member():
 
 
 def test_report_uses_competencia():
-    """REL-05, D-REP-03: the report groups by accrual period, not by Movement.date.
+    """The report groups by accrual period, not by Movement.date.
 
     The year/month query params must reach the aggregate as
     FinancialEntry.competencia_year/competencia_month. The compiled statement is
@@ -2946,14 +2946,15 @@ def test_report_uses_competencia():
         sql = recorded_sql[0]
         assert "financial_entry.competencia_year = 2026" in sql, sql
         assert "financial_entry.competencia_month = 3" in sql, sql
-        # REL-05: the movement date is joined for its amount, never filtered on
+        # The movement date is joined for its amount, never filtered on
         assert "movement.date" not in sql, sql
     finally:
         app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
-# Movement stubs — D-MOV-01, D-MOV-02
+# Movement listing — the entry_uuid carried by the LEFT JOIN and the
+# reconciled filter
 # ---------------------------------------------------------------------------
 
 
@@ -2961,7 +2962,7 @@ def _movement_listing_fixtures(account_uuid, fake_user):
     """Build the account plus one reconciled and one pending movement.
 
     Returns (account, member, reconciled_row, pending_row), where each row is the
-    (Movement, entry_uuid) pair the LEFT JOIN of D-MOV-01 hands back.
+    (Movement, entry_uuid) pair the LEFT JOIN hands back.
     """
     from decimal import Decimal
 
@@ -3009,7 +3010,7 @@ def _movement_listing_fixtures(account_uuid, fake_user):
 
 
 def _movement_rows_handler(rows):
-    """Row handler applying the D-MOV-02 filter the way the database would.
+    """Row handler applying the reconciled filter the way the database would.
 
     The IS NULL / IS NOT NULL predicate lives in the SQL, so a mock that ignored
     it would answer the same three lists for the three different requests. This
@@ -3032,7 +3033,7 @@ def _movement_rows_handler(rows):
 
 
 def test_movement_entry_uuid_field():
-    """D-MOV-01: GET movements carries entry_uuid, populated only when reconciled.
+    """GET movements carries entry_uuid, populated only when reconciled.
 
     Two movements come back from the LEFT JOIN: one carrying the uuid of its
     FinancialEntry, one with none. Both are asserted by value — a handler that
@@ -3073,7 +3074,7 @@ def test_movement_entry_uuid_field():
         assert body[0]["uuid"] == str(reconciled_movement.uuid), body
         assert body[0]["description"] == "Farmácia", body
         assert body[0]["amount"] == "-89.90", body
-        # D-MOV-01: a reconciled movement carries its entry's uuid
+        # A reconciled movement carries its entry's uuid
         assert body[0]["entry_uuid"] == str(entry_uuid), body
         assert body[1]["uuid"] == str(pending_movement.uuid), body
         assert body[1]["description"] == "Transferência recebida", body
@@ -3084,7 +3085,7 @@ def test_movement_entry_uuid_field():
 
 
 def test_movement_reconciled_filter():
-    """D-MOV-02: ?reconciled= filters the listing through the LEFT JOIN.
+    """?reconciled= filters the listing through the LEFT JOIN.
 
     The same two movements (one reconciled, one pending) are asked for three
     ways. Each request must answer a different list, which is what tells a real

@@ -11,7 +11,7 @@ import pytest
 
 @pytest.mark.integration
 async def test_create_family(async_client):
-    """FAMILY-01: POST /families/registry creates a family against the real database."""
+    """POST /families/registry creates a family against the real database."""
     response = await async_client.post(
         "/api/v1/families/registry",
         json={"name": "Familia Integração"},
@@ -24,7 +24,7 @@ async def test_create_family(async_client):
 
 @pytest.mark.integration
 async def test_list_my_families(async_client):
-    """FAMILY-02: GET /families/families returns a list containing the created family."""
+    """GET /families/families returns a list containing the created family."""
     # Creates a family to guarantee at least one result
     create_response = await async_client.post(
         "/api/v1/families/registry",
@@ -44,7 +44,7 @@ async def test_list_my_families(async_client):
 
 @pytest.mark.integration
 async def test_pre_register_member(async_client):
-    """D-07: POST /families/{uuid}/pre-register pre-registers a member by e-mail."""
+    """POST /families/{uuid}/pre-register pre-registers a member by e-mail."""
     # Creates a family to have a valid UUID
     create_response = await async_client.post(
         "/api/v1/families/registry",
@@ -73,7 +73,7 @@ async def test_pre_register_member(async_client):
 
 @pytest.mark.integration
 async def test_list_members(async_client):
-    """D-07: GET /families/{uuid}/members lists the family members with the owner role."""
+    """GET /families/{uuid}/members lists the family members with the owner role."""
     # Creates a family to have a valid UUID
     create_response = await async_client.post(
         "/api/v1/families/registry",

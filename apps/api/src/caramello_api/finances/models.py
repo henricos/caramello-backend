@@ -56,7 +56,7 @@ class Movement(Base):
 
 class FinancialEntry(Base):
     """
-    Classified financial entry. Inherits amount and type from Movement (1:1 relation, D-05).
+    Classified financial entry. Inherits amount and type from Movement (1:1 relation).
     """
 
     __tablename__ = "financial_entry"
@@ -95,7 +95,7 @@ class FinancialEntry(Base):
 
 class Category(Base):
     """
-    Financial classification category — level 1 of the hierarchy (D-06). Child: Subcategory.
+    Financial classification category — level 1 of the hierarchy. Child: Subcategory.
     """
 
     __tablename__ = "category"
@@ -116,7 +116,7 @@ class Category(Base):
 
 class Subcategory(Base):
     """
-    Financial classification subcategory — level 2 of the hierarchy (D-06). Parent: Category.
+    Financial classification subcategory — level 2 of the hierarchy. Parent: Category.
     """
 
     __tablename__ = "subcategory"

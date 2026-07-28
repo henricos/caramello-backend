@@ -1,12 +1,13 @@
 # dsl/entities/subcategory.yaml
 # Financial classification subcategory (level 2 of the hierarchy).
-# Domain: finances (Phase 6, Plan 02)
-# Two-level hierarchy: Category -> Subcategory (D-06).
-# No field pointing at another Subcategory (D-09 — CAT-03 enforced by the schema).
+# Domain: finances
+# Two-level hierarchy: Category -> Subcategory.
+# No field pointing at another Subcategory — the two-level limit is
+# enforced by the schema, not by business logic.
 
 name: Subcategory
 domain: finances
-description: "Financial classification subcategory — level 2 of the hierarchy (D-06). Parent: Category."
+description: "Financial classification subcategory — level 2 of the hierarchy. Parent: Category."
 table_name: subcategory
 
 # No generic CRUD router — see dsl/entities/account.yaml.
@@ -29,7 +30,7 @@ fields:
     type: int
     foreign_key: "category.id"
     nullable: false
-    description: "FK to the parent category (level 1). D-06 — two-level hierarchy."
+    description: "FK to the parent category (level 1) of the two-level hierarchy."
 
   - name: name
     type: str

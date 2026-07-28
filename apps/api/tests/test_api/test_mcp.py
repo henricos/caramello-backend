@@ -10,7 +10,7 @@ from datetime import UTC
 
 
 def test_mcp_requires_auth(client):
-    """MCP-02: POST /mcp without a Bearer token returns 401 or 403."""
+    """POST /mcp without a Bearer token returns 401 or 403."""
     response = client.post(
         "/mcp",
         json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
@@ -23,7 +23,7 @@ def test_mcp_requires_auth(client):
 
 
 def test_mcp_with_valid_token_returns_tools(client):
-    """MCP-01: POST /mcp with a Bearer token returns a valid MCP structure with tools."""
+    """POST /mcp with a Bearer token returns a valid MCP structure with tools."""
     from datetime import datetime
     from uuid import uuid4
 

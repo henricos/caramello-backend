@@ -1,12 +1,12 @@
 # dsl/entities/category.yaml
 # Financial classification category (level 1 of the hierarchy).
-# Domain: finances (Phase 6, Plan 02)
-# Note: the two-level hierarchy uses a separate Subcategory entity (D-06/D-07).
-# No self-reference (D-09).
+# Domain: finances
+# Note: the two-level hierarchy uses a separate Subcategory entity.
+# No self-reference.
 
 name: Category
 domain: finances
-description: "Financial classification category — level 1 of the hierarchy (D-06). Child: Subcategory."
+description: "Financial classification category — level 1 of the hierarchy. Child: Subcategory."
 table_name: category
 
 # No generic CRUD router — see dsl/entities/account.yaml.

@@ -55,4 +55,4 @@ def error_detail(key: str, **params: object) -> dict[str, str]:
     This mirrors `shared.auth._error_detail`, which predates it and hardcodes
     the `auth.` namespace of the only surface it serves.
     """
-    return {"reason": key.rsplit(".", 1)[-1], "message": translate(key, **params)}
+    return {"reason": key.rsplit(".", 1)[-1], "message": translate(key, **params)}  # type: ignore[arg-type]

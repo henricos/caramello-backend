@@ -212,8 +212,6 @@ set -a && source .env.development && set +a
 
 Two things about step 3 are easy to get wrong. An `operations.py` already marked `implemented` is **not** a licence to add a route without a DSL entry — the marker only stops the generator from overwriting implementations it already emitted. And a generated `models.py` is never patched by hand: a wrong column is fixed in the YAML and regenerated.
 
-Step 6 currently fails for a reason unrelated to your change — see [Troubleshooting](#troubleshooting).
-
 ---
 
 ## Tests
@@ -263,12 +261,3 @@ Usually the issuer. `AUTH_OIDC_ISSUER` must be the full realm URL and must match
 **Health reports `"data_dir":false`**
 The path in `DATA_DIR` is not an existing directory. In dev it points at the repository's `data/` folder; create it or point the variable elsewhere.
 
-### Known broken, not your fault
-
-**`./bin/validate_generation` fails.** It reports `❌ Missing generated test file: tests/generated/test_<entity>.py` for every entity and exits `1`. The `tests/generated/` directory was removed deliberately — those tests ran against a real database with no isolation — but `scripts/validate_generation.py` still asserts the directory exists and still tries to run `pytest tests/generated`. The class and schema assertions above those lines do pass, so the useful half of the check works; the entity-file assertion is stale and the script needs fixing. Until then, read its output rather than its exit code.
-
-**`uv run mypy src/` reports 6 errors in 3 files.** None is a runtime bug:
-- `shared/auth.py:405` — two errors on the `pg_insert(User.__table__)` line. SQLAlchemy 2 types `__table__` as `FromClause`, which `pg_insert` does not accept in its signature, and the narrow `# type: ignore[attr-defined]` present there no longer matches the reported code. `finances/services.py:669` has the same construct without the comment.
-- `migrations/env.py` — three errors from Alembic's untyped `config.get_section()` returning `dict | None`.
-
-These are typing gaps in third-party stubs, not defects; they should be resolved with correctly scoped ignores rather than by changing working code.

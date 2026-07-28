@@ -36,11 +36,11 @@ class ParsedRow:
     date: datetime
     amount: Decimal
     description: str
-    fitid: str | None = None  # OFX FITID — used directly as the hash (D-04)
+    fitid: str | None = None  # OFX FITID — used directly as the hash
 
 
 def _normalize_description(desc: str) -> str:
-    """Conservative normalization of a description (D-06).
+    """Conservative normalization of a description.
 
     strip().lower() plus collapsing runs of whitespace (tabs, newlines).
     Digits and punctuation are deliberately kept — this stays simple.
@@ -51,8 +51,8 @@ def _normalize_description(desc: str) -> str:
 def _compute_hash(account_id: int, row: ParsedRow) -> str:
     """Compute the deterministic SHA-256 used for deduplication.
 
-    D-04: OFX with a FITID -> hash = sha256("fitid:{fitid}")
-    D-07: CSV/XLSX without one -> sha256("{account_id}|{date}|{amount}|{desc_norm}")
+    OFX with a FITID -> hash = sha256("fitid:{fitid}")
+    CSV/XLSX without one -> sha256("{account_id}|{date}|{amount}|{desc_norm}")
     """
     if row.fitid:
         raw = f"fitid:{row.fitid}"
@@ -63,11 +63,11 @@ def _compute_hash(account_id: int, row: ParsedRow) -> str:
 
 
 def _parse_date(value: str, line: int) -> datetime:
-    """Try to parse a date as ISO 8601, then in the BR format (D-12).
+    """Try to parse a date as ISO 8601, then in the BR format.
 
     Raises ValueError carrying the line number when no format matches.
     """
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):  # D-12: ISO first, BR as the fallback
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):  # ISO first, BR as the fallback
         try:
             return datetime.strptime(value.strip(), fmt).replace(tzinfo=UTC)
         except ValueError:
@@ -78,12 +78,11 @@ def _parse_date(value: str, line: int) -> datetime:
 def _parse_csv(content: bytes) -> list[ParsedRow]:
     """Parse CSV statement content; returns only the valid rows.
 
-    D-10: auto-detects the separator (;/,) with csv.Sniffer, comma as the
-          fallback (P7).
-    D-11: headers are case-insensitive and read by name, not by position.
-    D-13: invalid rows are dropped silently through this public interface.
-          Use _parse_csv_with_errors to get error_lines.
-          Raises ValueError once >50% of the rows fail.
+    Auto-detects the separator (;/,) with csv.Sniffer, comma as the fallback.
+    Headers are case-insensitive and read by name, not by position.
+    Invalid rows are dropped silently through this public interface — use
+    _parse_csv_with_errors to get error_lines. Raises ValueError once >50% of
+    the rows fail.
     """
     rows, _ = _parse_csv_with_errors(content)
     return rows
@@ -94,18 +93,17 @@ def _parse_csv_with_errors(
 ) -> tuple[list[ParsedRow], list[dict[str, Any]]]:
     """Parse CSV content, returning (rows, error_lines).
 
-    D-10: auto-detects the separator (;/,) with csv.Sniffer, comma as the
-          fallback (P7).
-    D-11: headers are case-insensitive and read by name, not by position.
-    D-13: an invalid row goes to error_lines[] without aborting the batch;
-          raises ValueError once >50% of the rows fail.
+    Auto-detects the separator (;/,) with csv.Sniffer, comma as the fallback.
+    Headers are case-insensitive and read by name, not by position.
+    An invalid row goes to error_lines[] without aborting the batch; raises
+    ValueError once >50% of the rows fail.
     """
     text = content.decode("utf-8", errors="replace")
     sniffer = csv.Sniffer()
     try:
-        dialect = sniffer.sniff(text[:1024])  # D-10: auto-detect ; or ,
+        dialect = sniffer.sniff(text[:1024])  # auto-detect ; or ,
     except csv.Error:
-        dialect = csv.excel  # P7: fall back to comma
+        dialect = csv.excel  # fall back to comma
 
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
 
@@ -115,7 +113,7 @@ def _parse_csv_with_errors(
     total_data_rows = 0
     for i, row in enumerate(reader, start=2):  # line 2 = first data line
         total_data_rows += 1
-        # D-11: normalize the headers to lowercase
+        # Normalize the headers to lowercase
         norm = {k.strip().lower(): v for k, v in row.items() if k is not None}
 
         # Validate and parse the date
@@ -126,7 +124,7 @@ def _parse_csv_with_errors(
             error_lines.append({"line_number": i, "reason": str(e)})
             continue
 
-        # Validate and parse the amount — never a float (P1)
+        # Validate and parse the amount — never a float
         amount_str = norm.get("amount", "").strip()
         try:
             amount_val = Decimal(str(amount_str))
@@ -149,7 +147,7 @@ def _parse_csv_with_errors(
             )
         )
 
-    # D-13: abort once >=50% of the rows fail (inclusive — matches the message)
+    # Abort once >=50% of the rows fail (inclusive — matches the message)
     if total_data_rows > 0 and len(error_lines) / total_data_rows >= 0.5:
         raise ValueError(
             translate(
@@ -165,8 +163,8 @@ def _parse_csv_with_errors(
 def _parse_ofx(content: bytes) -> list[ParsedRow]:
     """Parse OFX statement content; returns only the valid rows.
 
-    D-04: uses transaction.id (FITID) as the ParsedRow's fitid.
-    P6: falls back to an iso-8859-1 decode, for BR banks with a non-standard
+    Uses transaction.id (FITID) as the ParsedRow's fitid.
+    Falls back to an iso-8859-1 decode, for BR banks with a non-standard
         encoding.
     """
     rows, _ = _parse_ofx_with_errors(content)
@@ -178,8 +176,8 @@ def _parse_ofx_with_errors(
 ) -> tuple[list[ParsedRow], list[dict[str, Any]]]:
     """Parse OFX content, returning (rows, error_lines).
 
-    D-04: uses transaction.id (FITID) as the ParsedRow's fitid.
-    P6: falls back to an iso-8859-1 decode, for BR banks with a non-standard
+    Uses transaction.id (FITID) as the ParsedRow's fitid.
+    Falls back to an iso-8859-1 decode, for BR banks with a non-standard
         encoding.
     """
     from ofxparse import OfxParser  # lazy import
@@ -189,7 +187,7 @@ def _parse_ofx_with_errors(
     try:
         ofx = OfxParser.parse(io.BytesIO(content))
     except Exception:
-        # P6: fall back to ISO-8859-1 (BR banks with a non-standard encoding)
+        # Fall back to ISO-8859-1 (BR banks with a non-standard encoding)
         text = content.decode("iso-8859-1", errors="replace")
         ofx = OfxParser.parse(io.StringIO(text))
 
@@ -236,8 +234,8 @@ def _parse_ofx_with_errors(
 def _parse_xlsx(content: bytes) -> list[ParsedRow]:
     """Parse XLSX statement content; returns only the valid rows.
 
-    P5: read_only=True for memory efficiency; wb.close() in a finally is MANDATORY.
-    D-11: headers are case-insensitive and read by name, not by position.
+    read_only=True for memory efficiency; wb.close() in a finally is MANDATORY.
+    Headers are case-insensitive and read by name, not by position.
     """
     rows, _ = _parse_xlsx_with_errors(content)
     return rows
@@ -248,8 +246,8 @@ def _parse_xlsx_with_errors(
 ) -> tuple[list[ParsedRow], list[dict[str, Any]]]:
     """Parse XLSX content, returning (rows, error_lines).
 
-    P5: read_only=True for memory efficiency; wb.close() in a finally is MANDATORY.
-    D-11: headers are case-insensitive and read by name, not by position.
+    read_only=True for memory efficiency; wb.close() in a finally is MANDATORY.
+    Headers are case-insensitive and read by name, not by position.
     """
     import openpyxl  # lazy import
 
@@ -264,7 +262,7 @@ def _parse_xlsx_with_errors(
         if header_row is None:
             return rows, error_lines
 
-        # D-11: normalize the headers to lowercase
+        # Normalize the headers to lowercase
         headers = [str(c.value or "").strip().lower() for c in header_row]
 
         # Map the indexes of the mandatory columns
@@ -304,7 +302,7 @@ def _parse_xlsx_with_errors(
                 error_lines.append({"line_number": i, "reason": str(e)})
                 continue
 
-            # Parse the amount — never a float (P1)
+            # Parse the amount — never a float
             try:
                 amount_val = Decimal(str(amount_raw))
             except (InvalidOperation, ValueError, TypeError):
@@ -336,7 +334,7 @@ async def suggest_category(
     family_id: int,
     session: AsyncSession,
 ) -> list[dict]:
-    """LAN-03, D-CAT-01/02/03/04: top-5 subcategory suggestions, by similarity.
+    """Top-5 subcategory suggestions, by similarity.
 
     Compares the target movement's description against the descriptions of the
     same family's earlier entries, through rapidfuzz.fuzz.token_set_ratio.
@@ -384,11 +382,11 @@ async def suggest_category(
     entries = entries_result.fetchall()
 
     if not entries:
-        return []  # D-CAT-03: no history -> empty list, not an error
+        return []  # no history -> empty list, not an error
 
     # 3. Score per subcategory — keeps the highest score per subcategory_id.
-    #    A1: token_set_ratio returns a float; the public contract is an int
-    #    (D-CAT-02), hence the cast.
+    #    token_set_ratio returns a float; the public contract is an int,
+    #    hence the cast.
     scored: dict[int, dict] = {}
     for entry in entries:
         score = int(fuzz.token_set_ratio(target_desc, entry[0]))
@@ -402,15 +400,15 @@ async def suggest_category(
                 "score": score,
             }
 
-    # 4. Sort by score descending, return the top-5 (D-CAT-01: no threshold)
+    # 4. Sort by score descending, return the top-5 (no threshold)
     top5 = sorted(scored.values(), key=lambda x: x["score"], reverse=True)[:5]
     return top5
 
 
 async def account_balance(account_id: int, session: AsyncSession) -> Decimal:
-    """REL-01, D-BAL-01: the account balance, as SUM(movement.amount).
+    """The account balance, as SUM(movement.amount).
 
-    Returns Decimal('0.00') when there is no movement (pitfall P6 — an empty
+    Returns Decimal('0.00') when there is no movement (an empty
     SUM is NULL).
     """
     from sqlalchemy import func
@@ -421,12 +419,12 @@ async def account_balance(account_id: int, session: AsyncSession) -> Decimal:
     total = result.scalar_one_or_none()
     if total is None:
         return Decimal("0.00")
-    # CR-04: guarantees a Decimal whatever type the driver returned
+    # Guarantees a Decimal whatever type the driver returned
     return Decimal(str(total))
 
 
 async def family_balance(family_id: int, session: AsyncSession) -> Decimal:
-    """REL-02, D-BAL-02: the consolidated balance of every active family account.
+    """The consolidated balance of every active family account.
 
     Iterates over the active accounts and sums their account_balance().
     Returns Decimal('0.00') when there is no active account.
@@ -450,12 +448,12 @@ async def monthly_breakdown(
     session: AsyncSession,
     member_uuid: UUID | None = None,
 ) -> list[dict]:
-    """REL-03/04, D-REP-01/03: monthly breakdown by subcategory.
+    """Monthly breakdown by subcategory.
 
     Grouped by accrual period (competencia), NOT by the movement date. Returns a
     flat list with one total per subcategory for the requested period.
-    The optional member_uuid filters by responsible_user_uuid (D-REP-01).
-    Uses func.sum + group_by (D-REP-04).
+    The optional member_uuid filters by responsible_user_uuid.
+    Uses func.sum + group_by.
     """
     from sqlalchemy import func
 
@@ -495,8 +493,8 @@ async def monthly_breakdown(
         )
     )
 
-    # Optional per-member filter (D-REP-01).
-    # WR-02: `.scalars()` unwraps the Row — a single-entity select hands back the
+    # Optional per-member filter.
+    # `.scalars()` unwraps the Row — a single-entity select hands back the
     # entity itself.
     if member_uuid is not None:
         user_result = await session.execute(select(User).where(User.uuid == member_uuid))
@@ -525,12 +523,12 @@ async def by_member_breakdown(
     month: int,
     session: AsyncSession,
 ) -> list[dict]:
-    """D-REP-02: breakdown by responsible member for one accrual period.
+    """Breakdown by responsible member for one accrual period.
 
     Entries with no responsible_user_id are grouped into a row with
     user_uuid=None and the catalog's "unassigned" label — they are never dropped
-    from the totals (pitfall P7).
-    Uses func.sum + group_by (D-REP-04).
+    from the totals.
+    Uses func.sum + group_by.
     """
     from sqlalchemy import func
 
@@ -547,7 +545,7 @@ async def by_member_breakdown(
             func.sum(Movement.amount).label("total"),
             func.count(FinancialEntry.id).label("count"),
         )
-        # CR-02: explicit FROM clause, to avoid a ProgrammingError
+        # Explicit FROM clause, to avoid a ProgrammingError
         .select_from(FinancialEntry)
         .outerjoin(User, FinancialEntry.responsible_user_id == User.id)
         .join(Movement, FinancialEntry.movement_id == Movement.id)
@@ -584,15 +582,15 @@ async def import_movements(
 ) -> dict[str, Any]:
     """Parse a statement file, deduplicate it and persist the movements.
 
-    Returns a dict with the D-14 shape: inserted, duplicates_skipped,
+    Returns a dict shaped as: inserted, duplicates_skipped,
     potential_duplicates[], error_lines[], movements[].
 
     Deduplication:
-    - OFX (rows with a fitid): known hash -> duplicates_skipped (D-04, no insert)
-    - CSV/XLSX (rows without one): known hash -> potential_duplicates[] (D-05,
-      no insert)
-    - One batched pre-check query (P8)
-    - on_conflict_do_nothing as the safety net against races (P4)
+    - OFX (rows with a fitid): known hash -> duplicates_skipped, no insert
+    - CSV/XLSX (rows without one): known hash -> potential_duplicates[], no
+      insert
+    - One batched pre-check query
+    - on_conflict_do_nothing as the safety net against races
     """
     # Dispatch per format, using the variants that report error_lines
     if format == "csv":
@@ -621,7 +619,7 @@ async def import_movements(
 
     all_hashes = list(hash_map.keys())
 
-    # Batched pre-check, one query (P8)
+    # Batched pre-check, one query
     result = await session.execute(
         select(Movement.import_hash).where(Movement.import_hash.in_(all_hashes))
     )
@@ -635,15 +633,15 @@ async def import_movements(
     for h, row in hash_map.items():
         if h in existing_hashes:
             if row.fitid:
-                # OFX: a definitive duplicate — do not insert, do not ask (D-04)
+                # OFX: a definitive duplicate — do not insert, do not ask
                 duplicates_skipped += 1
             else:
-                # CSV/XLSX: a suspected duplicate — hand it back for confirmation (D-05)
+                # CSV/XLSX: a suspected duplicate — hand it back for confirmation
                 csv_xlsx_existing.append(h)
         else:
             to_insert.append((h, row))
 
-    # Resolve the UUIDs of the suspected duplicates (D-05/D-14)
+    # Resolve the UUIDs of the suspected duplicates
     potential_duplicates: list[dict[str, Any]] = []
     if csv_xlsx_existing:
         uuid_result = await session.execute(
@@ -690,14 +688,14 @@ async def import_movements(
             )
 
         stmt = (
-            pg_insert(Movement.__table__)
+            pg_insert(Movement.__table__)  # type: ignore[arg-type]  # see shared/auth.py
             .values(values)
             .on_conflict_do_nothing(index_elements=["import_hash"])
         )
         await session.execute(stmt)
         await session.commit()
 
-        # Read the inserted movements back to populate movements[] (D-14)
+        # Read the inserted movements back to populate movements[]
         inserted_hashes = [v["import_hash"] for v in values]
         movements_result = await session.execute(
             select(Movement).where(Movement.import_hash.in_(inserted_hashes))
@@ -717,7 +715,7 @@ async def import_movements(
                     "amount": str(mvt.amount),
                     "description": mvt.description,
                     "created_at": mvt.created_at.isoformat(),
-                    # WR-03: report updated_at, so the response is faithful
+                    # Report updated_at, so the response is faithful
                     "updated_at": mvt.updated_at.isoformat(),
                 }
             )

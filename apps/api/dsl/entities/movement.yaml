@@ -1,6 +1,6 @@
 # dsl/entities/movement.yaml
 # Raw financial movement imported from the bank.
-# Domain: finances (Phase 6, Plan 02)
+# Domain: finances
 
 name: Movement
 domain: finances
@@ -49,7 +49,7 @@ fields:
     type: str
     unique: true
     nullable: true
-    description: "SHA-256 hash of the imported record, for deduplication (D-10). Null for a manual entry."
+    description: "SHA-256 hash of the imported record, for deduplication. Null for a manual entry."
 
   - name: created_at
     type: datetime

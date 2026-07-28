@@ -5,7 +5,7 @@ Exercises the parsers and the deduplication logic without a real database
 normally before services.py exists — an ImportError shows up as a failure in
 the test body (an explicit red), not as a collection error.
 
-Nyquist stubs — red until plan 08-03 delivers services.py implemented.
+Nyquist stubs — red until services.py is implemented.
 """
 
 from __future__ import annotations
@@ -22,9 +22,9 @@ from tests.conftest import constant, execute_mock
 
 
 def test_parse_csv():
-    """MOV-02 + D-10: _parse_csv detects the ';' and ',' separators via csv.Sniffer.
+    """_parse_csv detects the ';' and ',' separators via csv.Sniffer.
 
-    Nyquist stub — red until services.py implements _parse_csv (plan 08-03).
+    Nyquist stub — red until services.py implements _parse_csv.
     Checks that Sniffer tells semicolon and comma apart correctly.
     """
     services = pytest.importorskip("caramello_api.finances.services")
@@ -51,7 +51,7 @@ def test_parse_csv():
 
 
 def test_parse_csv_error_lines():
-    """MOV-02 + D-13: a CSV mixing valid and invalid rows parses the valid ones.
+    """A CSV mixing valid and invalid rows parses the valid ones.
 
     Pins ONE contract for a batch of 5 data rows, 2 of them broken (40% — below
     the abort threshold of test_parse_csv_abort_threshold):
@@ -92,7 +92,7 @@ def test_parse_csv_error_lines():
         datetime(2026, 1, 17, tzinfo=UTC),
         datetime(2026, 1, 18, tzinfo=UTC),
     ]
-    assert all(row.fitid is None for row in rows), "a CSV row has no FITID (D-07)"
+    assert all(row.fitid is None for row in rows), "a CSV row has no FITID"
 
     assert error_lines == [
         {
@@ -105,12 +105,12 @@ def test_parse_csv_error_lines():
         },
     ]
 
-    # D-13: the public parser exposes the same batch without the error report
+    # The public parser exposes the same batch without the error report
     assert _parse_csv(csv_content) == rows
 
 
 def test_parse_csv_abort_threshold():
-    """MOV-02 + D-13: 50% or more invalid rows aborts the batch with ValueError.
+    """50% or more invalid rows aborts the batch with ValueError.
 
     With 3 of 3 rows invalid, _parse_csv must raise, and the message must be the
     catalog's — it is what the endpoint turns into the 422's `message`.
@@ -134,9 +134,9 @@ def test_parse_csv_abort_threshold():
 
 
 def test_compute_hash():
-    """D-04 + D-07: the (account_id|date|amount|desc_norm) hash is deterministic; FITID differs.
+    """The (account_id|date|amount|desc_norm) hash is deterministic; FITID differs.
 
-    Nyquist stub — red until services.py implements _compute_hash (plan 08-03).
+    Nyquist stub — red until services.py implements _compute_hash.
     """
     services = pytest.importorskip("caramello_api.finances.services")
     _compute_hash = getattr(services, "_compute_hash", None)
@@ -151,7 +151,7 @@ def test_compute_hash():
     date = datetime(2026, 1, 15, tzinfo=UTC)
     amount = Decimal("-150.00")
 
-    # D-07: CSV/XLSX hash — based on (account_id|date|amount|desc_norm)
+    # CSV/XLSX hash — based on (account_id|date|amount|desc_norm)
     row_no_fitid = ParsedRow(date=date, amount=amount, description="PIX FULANO", fitid=None)
     hash1 = _compute_hash(account_id=10, row=row_no_fitid)
     hash2 = _compute_hash(account_id=10, row=row_no_fitid)
@@ -160,7 +160,7 @@ def test_compute_hash():
     assert hash1 == hash2, f"Hash must be deterministic; got: {hash1!r} and {hash2!r}"
     assert len(hash1) == 64, f"SHA-256 must be 64 hex characters long; got: {len(hash1)}"
 
-    # D-04: OFX — the hash is derived from the FITID, not from the compound key
+    # OFX — the hash is derived from the FITID, not from the compound key
     row_with_fitid = ParsedRow(date=date, amount=amount, description="PIX FULANO", fitid="TX001")
     hash_fitid = _compute_hash(account_id=10, row=row_with_fitid)
 
@@ -172,9 +172,9 @@ def test_compute_hash():
 
 
 def test_normalize_description():
-    """D-06: conservative normalization — strip + lower + collapse of repeated spaces.
+    """Conservative normalization — strip + lower + collapse of repeated spaces.
 
-    Nyquist stub — red until services.py implements _normalize_description (plan 08-03).
+    Nyquist stub — red until services.py implements _normalize_description.
     Checks that '  PIX  RECEBIDO  ' → 'pix recebido'.
     """
     services = pytest.importorskip("caramello_api.finances.services")
@@ -201,7 +201,7 @@ def test_normalize_description():
 
 
 # ---------------------------------------------------------------------------
-# Helpers for the Phase 9 stubs
+# Helpers for the reconciliation, balance and report tests
 # ---------------------------------------------------------------------------
 
 
@@ -231,16 +231,16 @@ def _run(coro):
 
 
 # ---------------------------------------------------------------------------
-# Nyquist stubs — Phase 9 (reconciliation, balances, reports)
+# Service-level tests — reconciliation, balances, reports
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# suggest_category — LAN-03, D-CAT-01/02/03
+# suggest_category
 # ---------------------------------------------------------------------------
 
 
 def test_suggest_category_service():
-    """LAN-03, D-CAT-01/02: suggest_category returns the top 5 with a score when history exists.
+    """suggest_category returns the top 5 with a score when history exists.
 
     The session.execute mock simulates a history with a single entry so that the
     return value is a list of dicts holding the keys expected by the API contract
@@ -318,7 +318,7 @@ def test_suggest_category_service():
 
 
 def test_suggest_category_empty_history():
-    """D-CAT-03: suggest_category returns [] when there is no movement history.
+    """suggest_category returns [] when there is no movement history.
 
     No minimum threshold — the function simply returns an empty list, no error.
     """
@@ -357,19 +357,19 @@ def test_suggest_category_empty_history():
         )
     )
 
-    assert result == [], f"D-CAT-03: with no history it must return []; returned {result!r}"
+    assert result == [], f"with no history it must return []; returned {result!r}"
 
 
 # ---------------------------------------------------------------------------
-# account_balance — REL-01, D-BAL-01, pitfall P6
+# account_balance
 # ---------------------------------------------------------------------------
 
 
 def test_account_balance_empty():
-    """REL-01: account_balance returns Decimal('0.00') when there are no movements.
+    """account_balance returns Decimal('0.00') when there are no movements.
 
     SUM() over an empty set returns NULL in PostgreSQL — the function must
-    convert that to Decimal('0.00') (pitfall P6 from STATE.md).
+    convert that to Decimal('0.00').
     """
     account_balance = _load_service("account_balance")
 
@@ -388,12 +388,12 @@ def test_account_balance_empty():
 
 
 # ---------------------------------------------------------------------------
-# family_balance — REL-02, D-BAL-02
+# family_balance
 # ---------------------------------------------------------------------------
 
 
 def test_family_balance():
-    """REL-02: family_balance returns a Decimal consolidating every account of the family.
+    """family_balance returns a Decimal consolidating every account of the family.
 
     The mock simulates one account with a balance of 500.00, expecting a Decimal back.
     """
@@ -437,15 +437,15 @@ def test_family_balance():
 
 
 # ---------------------------------------------------------------------------
-# monthly_breakdown — REL-03/04, D-REP-01/03
+# monthly_breakdown
 # ---------------------------------------------------------------------------
 
 
 def test_monthly_breakdown():
-    """REL-03/04, D-REP-01: monthly_breakdown returns a structure of rows per subcategory.
+    """monthly_breakdown returns a structure of rows per subcategory.
 
     Every row must carry category_uuid, subcategory_uuid, total (Decimal), count (int).
-    The report works over competencia_year/month — not over Movement.date (REL-05).
+    The report works over competencia_year/month — not over Movement.date.
     """
     monthly_breakdown = _load_service("monthly_breakdown")
 
@@ -478,12 +478,12 @@ def test_monthly_breakdown():
 
 
 # ---------------------------------------------------------------------------
-# by_member_breakdown — D-REP-02
+# by_member_breakdown
 # ---------------------------------------------------------------------------
 
 
 def test_by_member_breakdown():
-    """D-REP-02: by_member_breakdown returns rows including the user_uuid=None group.
+    """by_member_breakdown returns rows including the user_uuid=None group.
 
     Movements without a responsible_user_id are grouped into a row with
     user_uuid=None and name='Não atribuído' — they are not dropped from the totals.

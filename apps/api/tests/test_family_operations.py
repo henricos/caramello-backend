@@ -1,8 +1,8 @@
-"""Tests for src/caramello_api/families/operations.py — FAMILY-01, 02, 03, 07.
+"""Tests for src/caramello_api/families/operations.py.
 
 These tests start out skipped (the families/operations module does not exist yet).
 Each one uses pytest.importorskip so it fails cleanly until the implementation
-lands (plan 04-04). Once implemented, just drop the skip line (or it passes on
+lands. Once implemented, just drop the skip line (or it passes on
 its own if the module is already there).
 
 Strategy (same as tests/test_user_operations.py):
@@ -41,12 +41,12 @@ def _make_fake_user(user_id: int = 42):
 
 
 def test_families_operations_module_exists():
-    """Plan 04-04: the module src/caramello_api/families/operations.py exists."""
+    """The module src/caramello_api/families/operations.py exists."""
     pytest.importorskip("caramello_api.families.operations")
 
 
 def test_operations_annotation_is_implemented():
-    """Plan 04-04: first line == # CARAMELLO-GENERATED: implemented."""
+    """First line == # CARAMELLO-GENERATED: implemented."""
     pytest.importorskip("caramello_api.families.operations")
     from pathlib import Path
 
@@ -55,12 +55,12 @@ def test_operations_annotation_is_implemented():
         pytest.skip("families/operations.py has not been generated/implemented yet")
     first_line = ops_path.read_text().splitlines()[0].strip()
     assert first_line == "# CARAMELLO-GENERATED: implemented", (
-        f"The annotation must be 'implemented' after plan 04-04; got: {first_line!r}"
+        f"The annotation must be 'implemented'; got: {first_line!r}"
     )
 
 
 def test_families_operations_router_paths():
-    """Plan 04-04: the router carries the 6 expected paths (D-07).
+    """The router carries the 6 expected paths.
 
     FastAPI/Starlette stores `route.path` as the FULL path within the router
     (decorator path plus the router's own prefix — for `@router.post("/registry")`
@@ -90,7 +90,7 @@ def test_families_operations_router_paths():
 
 
 def test_registry_creates_family_and_owner():
-    """FAMILY-01 / D-07 / D-13: POST /families/registry creates Family + owner.
+    """POST /families/registry creates Family + owner.
 
     Checks that the operation adds 1 Family and 1 FamilyMember with role='owner'.
     """
@@ -154,7 +154,7 @@ def test_registry_creates_family_and_owner():
 
 
 def test_list_families_only_mine():
-    """FAMILY-02: GET /families/families filters by the user's membership."""
+    """GET /families/families filters by the user's membership."""
     pytest.importorskip("caramello_api.families.operations")
     from fastapi.testclient import TestClient
 
@@ -202,7 +202,7 @@ def test_list_families_only_mine():
 
 
 def test_get_family_detail_non_member_returns_403():
-    """FAMILY-03: GET /families/families/{uuid} returns 403 when the user is not a member."""
+    """GET /families/families/{uuid} returns 403 when the user is not a member."""
     pytest.importorskip("caramello_api.families.operations")
     from fastapi.testclient import TestClient
 
@@ -237,7 +237,7 @@ def test_get_family_detail_non_member_returns_403():
 
 
 def test_pre_register_member_exposes_uuids_not_integer_fks():
-    """D-07: the 201 body carries family_uuid/inviter_uuid, never the integer FKs.
+    """The 201 body carries family_uuid/inviter_uuid, never the integer FKs.
 
     `FamilyInvitationRead` declares both foreign keys with `expose_as_uuid: true`
     in the DSL, so the attributes do not exist on the ORM instance and the
@@ -316,7 +316,7 @@ def test_pre_register_member_exposes_uuids_not_integer_fks():
 
 
 def test_pre_register_member_non_owner_returns_403():
-    """D-07: POST /families/families/{uuid}/pre-register returns 403 without the owner role."""
+    """POST /families/families/{uuid}/pre-register returns 403 without the owner role."""
     pytest.importorskip("caramello_api.families.operations")
     from fastapi.testclient import TestClient
 
@@ -353,7 +353,7 @@ def test_pre_register_member_non_owner_returns_403():
 
 
 def test_remove_member_non_owner_returns_403():
-    """FAMILY-07: DELETE members requires role==owner; without owner it returns 403."""
+    """DELETE members requires role==owner; without owner it returns 403."""
     pytest.importorskip("caramello_api.families.operations")
     from fastapi.testclient import TestClient
 

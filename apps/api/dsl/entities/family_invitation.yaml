@@ -1,11 +1,11 @@
 # dsl/entities/family_invitation.yaml
 # Definition of the FamilyInvitation entity.
-# Redesigned in Phase 4 (D-01): from "e-mail invitation with expiry" to
+# Redesigned from "e-mail invitation with expiry" to
 # "member pre-registration".
 
 name: FamilyInvitation
 domain: families
-description: "Pre-registration of a family member by e-mail (D-01)."
+description: "Pre-registration of a family member by e-mail."
 table_name: family_invitation
 
 # The generic CRUD router is not emitted for this entity: an invitation is
@@ -49,14 +49,14 @@ fields:
   - name: email
     type: str
     nullable: false
-    description: "E-mail matched automatically at login (pre-registration, D-01)."
+    description: "E-mail matched automatically at login (pre-registration)."
 
   - name: status
     type: str
     max_length: 20
     default: "pending_login"
     nullable: false
-    description: "Pre-registration status: pending_login or joined (D-01)."
+    description: "Pre-registration status: pending_login or joined."
 
   - name: created_at
     type: datetime

@@ -1,10 +1,10 @@
 # dsl/entities/financial_entry.yaml
-# Classified financial entry — inherits amount/type from Movement (D-05).
-# Domain: finances (Phase 6, Plan 02)
+# Classified financial entry — inherits amount/type from Movement.
+# Domain: finances
 
 name: FinancialEntry
 domain: finances
-description: "Classified financial entry. Inherits amount and type from Movement (1:1 relation, D-05)."
+description: "Classified financial entry. Inherits amount and type from Movement (1:1 relation)."
 table_name: financial_entry
 
 # No generic CRUD router — see dsl/entities/account.yaml.
@@ -28,23 +28,23 @@ fields:
     foreign_key: "movement.id"
     unique: true
     nullable: false
-    description: "FK to Movement (1:1 relation — a movement has at most one entry). D-05."
+    description: "FK to Movement (1:1 relation — a movement has at most one entry)."
 
   - name: subcategory_id
     type: int
     foreign_key: "subcategory.id"
     nullable: false
-    description: "FK to the subcategory classifying the entry (D-08)."
+    description: "FK to the subcategory classifying the entry."
 
   - name: competencia_year
     type: int
     nullable: false
-    description: "Accrual year (competencia) of the entry (e.g. 2024). D-04."
+    description: "Accrual year (competencia) of the entry (e.g. 2024)."
 
   - name: competencia_month
     type: int
     nullable: false
-    description: "Accrual month (competencia) of the entry (1-12). D-04."
+    description: "Accrual month (competencia) of the entry (1-12)."
 
   - name: notes
     type: str
@@ -56,14 +56,14 @@ fields:
     type: bool
     default: false
     nullable: false
-    description: "Whether the entry is recurring (LAN-04)."
+    description: "Whether the entry is recurring."
 
   - name: responsible_user_id
     type: int
     foreign_key: "user.id"
     nullable: true
     expose_as_uuid: true
-    description: "Nullable FK to User — who is responsible for the entry (D-SCHEMA-01/02, D-ATTR-03). Exposed as responsible_user_uuid (UUID) in the public schemas."
+    description: "Nullable FK to User — who is responsible for the entry. Exposed as responsible_user_uuid (UUID) in the public schemas."
 
   - name: created_at
     type: datetime

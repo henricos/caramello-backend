@@ -1,8 +1,8 @@
-"""Tests for shared/auth.py — AUTH-01, AUTH-02, AUTH-03.
+"""Tests for shared/auth.py — the authorization boundary.
 
-Strategy: for AUTH-01 (401 without a token) we use TestClient directly.
-For AUTH-02/03, which depend on a real database, we use `@pytest.mark.integration`
-plus mocking through app.dependency_overrides (Phase 5 delivers an isolated database).
+Strategy: the 401-without-a-token cases use TestClient directly. The cases that
+depend on a real database are marked `@pytest.mark.integration` and mock through
+app.dependency_overrides until an isolated test database exists.
 
 The tests for the two authorization layers (e-mail allowlist and family
 membership) call `get_current_user` directly with a mocked session: what is
@@ -52,7 +52,7 @@ def _call_get_current_user(session, payload):
 
 
 def test_auth_module():
-    """AUTH-03: get_current_user is importable from caramello.shared.auth."""
+    """get_current_user is importable from caramello.shared.auth."""
     from caramello_api.shared.auth import (
         fetch_jwks,  # noqa: F401
         get_current_user,  # noqa: F401
@@ -60,37 +60,42 @@ def test_auth_module():
 
 
 def test_me_unauthenticated(client):
-    """AUTH-01: GET /users/me without a token returns 401 (or HTTPBearer's 403)."""
+    """A missing credential is 401 with a reason, never the bare 403.
+
+    `shared/auth.py` wraps `HTTPBearer` precisely to avoid FastAPI's default 403:
+    a missing credential is "unauthenticated", so it must carry
+    `WWW-Authenticate` and tell the caller where to authenticate. Accepting
+    either status here would let that wrapper be removed without a test failing.
+    """
     response = client.get("/api/v1/users/me")
-    # HTTPBearer returns 403 by default; 401 is also acceptable if the app configures it
-    assert response.status_code in (401, 403), (
-        f"Expected 401 or 403 without a token; got {response.status_code}: {response.text}"
-    )
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"]["reason"] == "missing_token"
+    assert "WWW-Authenticate" in response.headers
 
 
 def test_user_crud_requires_auth(client):
-    """D-11 / AUTH-01: GET /users/user/ (CRUD) without a token returns 401/403."""
+    """The generated CRUD is behind the same boundary, with the same status."""
     response = client.get("/api/v1/users/user/")
-    assert response.status_code in (401, 403)
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"]["reason"] == "missing_token"
 
 
 @pytest.mark.integration
 def test_jit_provisioning():
-    """AUTH-02: the first request with a valid token creates a row in the users table.
+    """The first request with a valid token creates a row in the users table.
 
     Note: this test is marked @pytest.mark.integration because it depends on a
-    real database configured through .env. Phase 5 delivers an isolated database
-    (TEST-01). Until then it only runs locally against a real database and Keycloak.
+    real database configured through .env. Until an isolated test database
+    exists it only runs locally against a real database and Keycloak.
     """
     pytest.skip(
         "Requires a real Keycloak and a PostgreSQL database configured through .env "
-        "(run manually by the operator in plan 03-07; "
-        "the isolated database arrives in Phase 5)"
+        "(run manually by the operator; an isolated test database does not exist yet)"
     )
 
 
 def test_jwt_decode_only_accepts_rs256():
-    """Threat T-3-03: jwt.decode in shared/auth.py declares algorithms=['RS256']."""
+    """The token signature algorithm is pinned: no downgrade, and never 'none'."""
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -104,9 +109,9 @@ def test_jwt_decode_only_accepts_rs256():
 
 
 def test_auto_join_on_login():
-    """D-02: get_current_user auto-joins when a pending FamilyInvitation exists.
+    """get_current_user auto-joins when a pending FamilyInvitation exists.
 
-    Skips while src/caramello_api/families/models.py does not exist (plan 04-03).
+    Skips while src/caramello_api/families/models.py does not exist.
     Once it does, it validates the behaviour through a mocked session:
     - FamilyMember(role="member") is created for the invitation's family
     - invitation.status is marked as "joined"
@@ -396,7 +401,7 @@ def test_401_carries_the_www_authenticate_header(client):
 
 
 def test_audience_and_issuer_are_validated():
-    """D-02 closed: the decode validates `aud` and `iss` against the Settings."""
+    """The decode validates `aud` and `iss` against the Settings."""
     from caramello_api.core.config import get_settings
     from caramello_api.shared import auth as auth_module
 
