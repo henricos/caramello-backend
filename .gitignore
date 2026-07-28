@@ -1,12 +1,17 @@
 # Environment variables
 .env
 .env.*
-!.env.example
-!.env.*.example
+# .env.development is versioned on purpose (per module): committed dev-only
+# defaults, never real production secrets. Real secrets referenced from it
+# come from the developer's own shell env (never written into the file
+# itself) or are throwaway/ephemeral dev-only values (e.g. local pgembed).
+# See "Configuration and environment variables" in AGENTS.md.
+!.env.development
 
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Editor
 .vscode/
@@ -20,8 +25,29 @@ Thumbs.db
 .claude/settings.local.json
 .cursor/settings.local.json
 
-# OS
-Desktop.ini
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pgembed-data/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Real compose (holds secrets) — only compose.example.yaml is versioned
+compose.yaml
+compose.override.yaml
+
+# Data (dev symlink)
+/data
 
 # Temp
 /tmp

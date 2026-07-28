@@ -1,19 +1,32 @@
 # Caramello
 
-Plataforma pessoal e familiar para centralizar agenda, finanças, listas de compras, saúde e entretenimento. Destinada a um grupo fechado de 1 a 5 usuários (membros da família), com autenticação via Keycloak e acesso por aplicações web/mobile e agentes de IA.
+Personal and family platform that centralizes the administrative side of family life — schedule, finances, shopping lists, health and entertainment. Built for a closed group of 1 to 5 people (the members of a household), with authentication through Keycloak and access from web and mobile clients as well as AI agents.
+
+The product is delivered in pt-BR; the repository is written in English. See "Language" in [`AGENTS.md`](AGENTS.md).
 
 ---
 
-## Módulos
+## Modules
 
-| Módulo | Descrição |
-|---|---|
-| [`apps/backend`](apps/backend/README.md) | API Python/FastAPI — núcleo de dados e regras de negócio |
-| [`apps/frontend`](apps/frontend/README.md) | Aplicativo mobile-first React/Capacitor — em definição |
+| Module | Description |
+|--------|-------------|
+| [`apps/api`](apps/api/README.md) | Python/FastAPI backend — hybrid REST + MCP, the data model and all business rules |
+| [`apps/web`](apps/web/README.md) | Next.js frontend — the mobile-first interface for the family group |
 
 ---
 
-## Documentação transversal
+## Cross-cutting documentation
 
-- [`docs/monorepo.md`](docs/monorepo.md) — convenções de organização, escopo e documentação do monorepo
-- [`docs/testing.md`](docs/testing.md) — estratégia de testes conduzidos pela IA e UAT E2E
+- [`docs/architecture.md`](docs/architecture.md) — system overview, data flow and cross-cutting decisions
+- [`docs/monorepo.md`](docs/monorepo.md) — organization, work scope, per-module documentation and dependency policy
+- [`docs/testing.md`](docs/testing.md) — AI-driven test strategy and the autonomous E2E/UAT flow
+- [`docs/skill-conventions.md`](docs/skill-conventions.md) — conventions for authoring project skills
+
+## Getting started
+
+Each module is self-contained and documents its own setup:
+
+- [`apps/api/docs/dev-setup.md`](apps/api/docs/dev-setup.md)
+- [`apps/web/docs/dev-setup.md`](apps/web/docs/dev-setup.md)
+
+Development requires no installed PostgreSQL and no Keycloak: both modules run against self-contained ephemeral services. Configuration comes from a committed `.env.development` per module — see "Configuration and environment variables" in [`AGENTS.md`](AGENTS.md).

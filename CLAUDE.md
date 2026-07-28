@@ -1,2 +1,2 @@
-IMPORTANTE: Não use diretamente CLAUDE.md!
-Leia e edite @AGENTS.md no lugar
+IMPORTANT: Do not use CLAUDE.md directly!
+Read and edit @AGENTS.md instead

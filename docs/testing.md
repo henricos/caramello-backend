@@ -1,84 +1,87 @@
-# Testes conduzidos pela IA
+# AI-driven tests
 
-A IA assume integralmente os testes: escreve e atualiza os scripts conforme funcionalidades são implementadas, e executa os scripts ao verificar ou conduzir UAT. Só delega ao operador quando a automação é impossível (SSO com MFA, hardware externo).
-
----
-
-## 1. Tipos de teste e quando usar cada um
-
-| Tipo | O que cobre | Onde ficam | Quando executar |
-|---|---|---|---|
-| Unitário | Funções e componentes isolados | `tests/` ou `src/` do módulo | Ao alterar lógica interna de uma unidade |
-| Integração de módulo | Fluxos internos de um módulo com dependências reais | `tests/` do módulo | Ao alterar fluxos ou contratos internos |
-| E2E / UAT | Jornadas completas do usuário pela interface ou pela API | `e2e/` na raiz | Ao verificar funcionalidades ou conduzir UAT |
-
-**UAT é sempre E2E** — testa o sistema em execução de ponta a ponta. Nunca substitua UAT por testes unitários.
+The AI fully owns the tests: it writes and updates the scripts as functionality is implemented, and runs the scripts when verifying or conducting UAT. It only delegates to the operator when automation is impossible (SSO with MFA, external hardware).
 
 ---
 
-## 2. Fluxo de UAT autônomo
+## 1. Test types and when to use each
 
-### Passo 0 — verificar serviços em execução
+| Type | What it covers | Where it lives | When to run |
+|------|----------------|----------------|-------------|
+| Unit | Isolated functions and components | the module's `tests/` or `src/` | When changing the internal logic of a unit |
+| Module integration | Internal flows of one module against real dependencies | the module's `tests/` | When changing internal flows or contracts |
+| E2E / UAT | Complete user journeys through the interface or the API | `e2e/` at the repository root | When verifying functionality or conducting UAT |
 
-Antes de qualquer setup, verificar se os serviços necessários já estão no ar conforme as URLs definidas em `docs/development.md` de cada módulo.
+**UAT is always E2E** — it exercises the running system end to end. Never substitute unit tests for UAT.
 
-Se todos estiverem respondendo, pule direto para o Passo 3. Não suba serviços desnecessariamente.
+E2E scripts live in `e2e/` at the repository root, never inside a module, regardless of how many modules the journey crosses. Single-module scripts stay in that module's `tests/`.
 
-### Passo 1 — preparar variáveis de ambiente (só se precisar subir serviços)
+---
 
-Verificar se o arquivo de variáveis de ambiente já existe **antes** de criar. Nunca sobrescreva um arquivo existente. Se ele existir e os serviços não estiverem no ar, investigar o motivo antes de subir.
+## 2. Autonomous UAT flow
 
-### Passo 2 — subir os serviços (só se necessário)
+### Step 0 — check for already running services
 
-Subir em background conforme `docs/development.md` de cada módulo. Aguardar o startup via health check antes de prosseguir.
+Before any setup, check whether the required services are already responding at the URLs documented in each module's `docs/dev-setup.md`.
 
-### Passo 3 — executar os scripts E2E
+If they all respond, skip straight to Step 3. Do not start services unnecessarily.
 
-Scripts E2E aceitam URLs via variável de ambiente com defaults apontando para localhost. Passe as variáveis na linha de comando se os defaults não servirem.
+### Step 1 — prepare the environment (only if services must be started)
 
-### Passo 4 — encerrar os serviços (só se foram subidos nesta sessão)
+Each module ships a committed `.env.development` (see "Configuration and environment variables" in `AGENTS.md`), so there is nothing to create or copy. Two things to verify instead:
 
-Se você subiu os serviços no Passo 2, encerre-os ao concluir. Não encerre processos que já estavam rodando antes do UAT.
+- Any variable that uses `${VAR}` indirection needs the corresponding **user-level** variable exported in the shell — those are credentials of real external services and are never stored in the repository. If one is missing, the api fails loudly at boot naming the variable.
+- Never overwrite `.env.development` to work around a failure. It is versioned; a local edit to it is a change to the repository, not a test fixture. The exception is the embedded Postgres DSN lines, which are expected to differ per machine.
+
+### Step 2 — start the services (only if needed)
+
+Start in the background as documented in each module's `docs/dev-setup.md`. Wait for startup via health check before proceeding.
+
+### Step 3 — run the E2E scripts
+
+E2E scripts accept base URLs via environment variables with defaults pointing at localhost. Pass the variables on the command line when the defaults do not fit.
+
+Each script provisions its own ephemeral dependencies (an embedded Postgres instance and a mock OIDC provider on dedicated ports), so scripts never collide with each other or with a running dev instance.
+
+### Step 4 — stop the services (only those started in this session)
+
+If you started the services in Step 2, stop them when finished. Never stop processes that were already running before the UAT.
 
 ---
 
 ## 3. Playwright
 
-O CLI `playwright` está instalado globalmente. Usar diretamente — não via `npx`.
+The `playwright` CLI is a global environment prerequisite, installed outside this repository and deliberately absent from every module's manifest. Use it directly — not via `npx`.
 
 ```bash
 playwright screenshot --browser chromium http://localhost:3000 /tmp/page.png
 ```
 
-Para scripts interativos, resolver o módulo Node a partir do CLI global:
+The Playwright **library** used by the E2E scripts is declared in `e2e/package.json` and installed by the scripts themselves on first run.
 
-```bash
-PW_NM=$(dirname $(which playwright))/../lib/node_modules
-node e2e/meu-script.js
-```
-
-Screenshots em `/tmp/` — descartados ao encerrar a sessão, usados para diagnóstico inline.
+Screenshots go to `/tmp/` — discarded when the session ends, used for inline diagnosis.
 
 ---
 
-## 4. Scripts de teste
+## 4. Test scripts
 
-Scripts de integração entre módulos ficam em `e2e/` na raiz. Scripts de módulo único ficam em `tests/` do próprio módulo.
+When implementing or changing functionality, create or update the corresponding scripts.
 
-Ao implementar ou alterar funcionalidades, criar ou atualizar os scripts correspondentes.
+Each script in `e2e/` must:
 
-Cada script em `e2e/` deve:
-
-- ser autocontido e executável de forma independente
-- listar os cenários cobertos em comentário no topo
-- receber URLs base via variável de ambiente com defaults para localhost, nunca hardcoded
+- be self-contained and independently runnable
+- list the covered scenarios in a comment at the top
+- take base URLs from environment variables with localhost defaults, never hardcoded
+- tear down in reverse order of startup, in a `finally` block, stopping only what it started
 
 ```
 e2e/
-  walking-skeleton.js   ← pilha completa end-to-end
-  auth-flows.js         ← fluxos de autenticação e controle de acesso
+  lib/                  shared harness, mock OIDC provider, login helpers
+  walking-skeleton.js   the full stack end to end
+  auth-flows.js         authentication and access-control flows
+  api-endpoints.js      API contract without a browser
 ```
 
 ---
 
-*Agnóstico de stack — aplicável a qualquer monorepo com este padrão.*
+*Stack-agnostic — applicable to any monorepo following this pattern.*
