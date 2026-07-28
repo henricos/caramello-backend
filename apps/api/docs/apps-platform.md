@@ -1,87 +1,88 @@
-# Plataforma Pessoal — Contexto, Decisões e Arquitetura
+# Personal Platform — Context, Decisions and Architecture
 
 ---
 
-## Visão Geral
+## Overview
 
-Conjunto de aplicações web pessoais independentes, rodando em servidor próprio via Docker com DNS público. O objetivo atual é experimentação e evolução incremental, com convergência futura para agrupamentos lógicos por domínio de uso. O volume de uso é pequeno (1 a 5 usuários). Performance não é prioridade; simplicidade, flexibilidade, manutenibilidade e evolução gradual são.
-
----
-
-## 1. Universo de Aplicações
-
-Total estimado: **10 a 15 aplicações**, organizadas em três grupos com perfis distintos de arquitetura e convergência.
-
-### Grupo A — Família
-- Aplicações de gestão familiar: orçamento, lista de compras, compromissos familiares e similares.
-- Usuários: conjunto fechado e conhecido (membros da família).
-- Domínio coeso — as funcionalidades se beneficiam de dados compartilhados entre si.
-- **Destino definido:** backend monolítico único com APIs organizadas por domínio de negócio. Frontend único, mobile-first, crescendo gradualmente com novas funcionalidades adicionadas ao menu. Empacotado como aplicativo mobile via Capacitor.
-
-### Grupo B — Trabalho
-- Aplicações de produtividade profissional: gestão de atividades, geração de apresentações, registro de feedback de equipe, base de conhecimento, estudos e similares.
-- Usuários: predominantemente um único usuário, com porta aberta para eventual compartilhamento com um segundo usuário no futuro.
-- **Requisito de UX:** isolamento de contexto visual — interfaces de assuntos distintos não devem ser misturadas na mesma tela, inclusive porque algumas dessas interfaces são usadas no dia a dia profissional.
-- **Modelo de navegação desejado:** chaveamento tipo Google (Gmail/YouTube) — SSO compartilhado com menu de atalho entre as aplicações, mas cada uma abre sua própria interface limpa e contextualmente isolada.
-- **Destino definido:** APIs separadas por aplicação, cada uma com repositório e ciclo de deploy independente.
-- **Em aberto:** quais aplicações serão agrupadas ou permanecerão separadas — decisão de negócio ainda não tomada, sem impacto técnico imediato.
-
-### Grupo C — Outros
-- Aplicações sem ligação entre si e sem domínio compartilhado. O nome "Pessoal" foi revisado para "Outros" por refletir melhor a natureza heterogênea do grupo.
-- Usuário único em todas — exclusivamente o próprio desenvolvedor.
-- **Destino definido:** aplicações totalmente independentes entre si, sem integração de navegação, sem banco compartilhado.
+A set of independent personal web applications, running on a self-hosted server via Docker with public DNS. The current goal is experimentation and incremental evolution, with future convergence into logical groupings by usage domain. Usage volume is small (1 to 5 users). Performance is not a priority; simplicity, flexibility, maintainability and gradual evolution are.
 
 ---
 
-## 2. Identidade e Autenticação
+## 1. Universe of Applications
 
-### Requisitos definidos
-- SSO dentro de cada grupo.
-- Login social via OAuth2 / Google.
-- Controle de acesso por e-mail (apenas determinados endereços podem se registrar).
-- Suporte a MFA e recuperação de senha.
-- Suporte futuro a múltiplos usuários reais (hoje cada aplicação usa usuário fixo/configurado).
-- Adoção de padrões abertos como JWT para facilitar interoperabilidade com frameworks, ferramentas de teste e agentes de IA.
+Estimated total: **10 to 15 applications**, organized into three groups with distinct architecture and convergence profiles.
 
-### Preferências definidas
-- Usar **solução pronta**, não construída do zero — sem reinventar roda.
-- Evitar over engineering.
-- Keycloak foi avaliado como pesado demais para o porte.
+### Group A — Family
+- Family management applications: budget, shopping list, family appointments and similar.
+- Users: a closed, known set (the family members).
+- Cohesive domain — the features benefit from data shared among themselves.
+- **Defined destination:** a single monolithic backend with APIs organized by business domain. A single frontend, mobile-first, growing gradually as new features are added to the menu. Packaged as a mobile app via Capacitor.
 
-### Decisão
-**Logto**, com **tenants isolados por grupo**.
+### Group B — Work
+- Professional productivity applications: activity management, presentation generation, team feedback records, knowledge base, studies and similar.
+- Users: predominantly a single user, with the door open for eventual sharing with a second user in the future.
+- **UX requirement:** visual context isolation — interfaces for distinct subjects must not be mixed on the same screen, not least because some of these interfaces are used in day-to-day professional work.
+- **Desired navigation model:** Google-style switching (Gmail/YouTube) — shared SSO with a shortcut menu between the applications, but each one opens its own clean, contextually isolated interface.
+- **Defined destination:** separate APIs per application, each with an independent repository and deploy cycle.
+- **Open:** which applications will be grouped or will remain separate — a business decision not yet made, with no immediate technical impact.
 
-Logto cobre todos os requisitos (OAuth2/Google, MFA, OIDC, JWT padrão, admin GUI, allowlist de e-mails), tem footprint significativamente menor que o Authentik (que consome ~375MB só no servidor + ~360MB no worker em idle), e foi desenhado para reduzir a complexidade de setups de porte pequeno a médio.
+### Group C — Other
+- Applications with no connection to each other and no shared domain. The name "Personal" was revised to "Other" because it better reflects the heterogeneous nature of the group.
+- Single user in all of them — exclusively the developer.
+- **Defined destination:** applications fully independent of each other, with no navigation integration and no shared database.
 
-A instância do Logto é única e compartilhada como serviço de infraestrutura, mas cada grupo opera em seu próprio tenant isolado:
+---
 
-| Grupo | Tenant | Usuários |
+## 2. Identity and Authentication
+
+### Defined requirements
+- SSO within each group.
+- Social login via OAuth2 / Google.
+- Access control by e-mail (only certain addresses may register).
+- Support for MFA and password recovery.
+- Future support for multiple real users (today each application uses a fixed/configured user).
+- Adoption of open standards such as JWT to ease interoperability with frameworks, testing tools and AI agents.
+
+### Defined preferences
+- Use an **off-the-shelf solution**, not one built from scratch — no reinventing the wheel.
+- Avoid over-engineering.
+
+### Decision
+**Keycloak**, with **tenants isolated per group** (in Keycloak terms, one realm per group).
+
+Keycloak covers all the requirements (OAuth2/Google, MFA, OIDC, standard JWT, admin GUI, e-mail allowlist) and is already running in the existing infrastructure with dev/prod clients configured, which removes the need to introduce and operate an additional identity service.
+
+> **Decision history:** the original choice recorded in this document was **Logto**, selected for its smaller footprint compared to Authentik (which consumes ~375MB on the server alone plus ~360MB on the worker at idle) and for being designed to reduce the complexity of small to medium setups; Keycloak had been assessed as too heavy for the size of the project. That decision was **reverted** in favor of Keycloak, because it was already provisioned in the infrastructure with dev/prod clients configured. See the Key Decisions table in `.planning/PROJECT.md`.
+
+The Keycloak instance is single and shared as an infrastructure service, but each group operates in its own isolated tenant:
+
+| Group | Tenant | Users |
 |---|---|---|
-| Família | `tenant-familia` | Membros da família |
-| Trabalho | `tenant-trabalho` | Usuário único, porta aberta para um segundo |
-| Outros | `tenant-outros` | Usuário único |
+| Family | `tenant-familia` | Family members |
+| Work | `tenant-trabalho` | Single user, door open for a second |
+| Other | `tenant-outros` | Single user |
 
-Essa separação por tenant é a **única** forma de compartilhamento entre os grupos. Dados, backends e bancos são completamente independentes entre si — não existe infraestrutura de dados cruzada entre grupos.
+This separation by tenant is the **only** form of sharing between the groups. Data, backends and databases are completely independent of each other — there is no cross-group data infrastructure.
 
 ---
 
-## 3. Arquitetura de Backend
+## 3. Backend Architecture
 
-### Situação atual
-- Backends monolíticos por aplicação (frontend e backend no mesmo repositório e container Docker).
-- Complexidade atual pequena — refatoração não é impeditivo técnico.
+### Current situation
+- Monolithic backends per application (frontend and backend in the same repository and Docker container).
+- Current complexity is small — refactoring is not a technical blocker.
 
-### Requisitos e intenções definidas
-- Separar frontend e backend de cada aplicação.
-- Backend deve ser projetado para sobreviver à unificação futura dos frontends — é o ativo de maior longevidade.
-- APIs reutilizáveis entre aplicações do mesmo grupo são desejadas.
-- Parte das funcionalidades deverá ser exposta para agentes de IA via MCP — o que pressiona por APIs bem definidas e separação clara entre interface e lógica de negócio.
+### Defined requirements and intentions
+- Separate the frontend and the backend of each application.
+- The backend must be designed to survive the future unification of the frontends — it is the longest-lived asset.
+- APIs reusable across applications of the same group are desirable.
+- Part of the functionality will have to be exposed to AI agents via MCP — which pushes for well-defined APIs and a clear separation between interface and business logic.
 
-### Decisão por grupo
+### Decision per group
 
-**Grupo Família — backend monolítico único, Python + FastAPI.**
+**Family Group — a single monolithic backend, Python + FastAPI.**
 
-Um único repositório de backend com APIs organizadas internamente por domínio de negócio. A coesão do domínio familiar e o fato de as funcionalidades compartilharem dados justificam o monolito — não há nada a ganhar com separação aqui.
+A single backend repository with APIs organized internally by business domain. The cohesion of the family domain and the fact that the features share data justify the monolith — there is nothing to gain from separation here.
 
 ```
 familia-backend/
@@ -98,15 +99,15 @@ familia-backend/
 │   │   └── compromissos/
 │   │       └── ...
 │   └── shared/
-│       └── auth.py       # validação JWT + upsert do usuário local
-├── migrations/           # Alembic, todas as tabelas do grupo
+│       └── auth.py       # JWT validation + upsert of the local user
+├── migrations/           # Alembic, all the group's tables
 ├── Dockerfile
 └── docker-compose.yml
 ```
 
-**Grupo Trabalho — APIs separadas por aplicação, Python + FastAPI.**
+**Work Group — separate APIs per application, Python + FastAPI.**
 
-Cada aplicação tem seu próprio repositório, container Docker e ciclo de deploy independente. Nenhuma atualização em uma aplicação afeta ou exige intervenção nas demais.
+Each application has its own repository, Docker container and independent deploy cycle. No update in one application affects or requires intervention in the others.
 
 ```
 trabalho-atividades/
@@ -115,88 +116,88 @@ trabalho-atividades/
 │   ├── models.py
 │   ├── schemas.py
 │   ├── services.py
-│   └── auth.py           # validação JWT + upsert do usuário local
+│   └── auth.py           # JWT validation + upsert of the local user
 ├── migrations/
 ├── Dockerfile
 └── docker-compose.yml
 ```
 
-**Grupo Outros — APIs separadas por aplicação, Python + FastAPI.**
+**Other Group — separate APIs per application, Python + FastAPI.**
 
-Mesma estrutura do Grupo Trabalho. Cada aplicação é completamente autônoma.
-
----
-
-Em todos os grupos, FastAPI é o framework de backend pelas mesmas razões: gera OpenAPI spec automaticamente (facilitando a futura exposição via MCP sem retrabalho), é leve, e tem o melhor ecossistema Python de integração com LLMs do mercado.
-
-A separação entre `services.py` e as rotas não é detalhe estético — é o que permitirá reutilizar a lógica tanto via API REST quanto via MCP no futuro, sem reescrita de código.
+Same structure as the Work Group. Each application is completely autonomous.
 
 ---
 
-## 4. Arquitetura de Frontend
+In all groups, FastAPI is the backend framework for the same reasons: it generates the OpenAPI spec automatically (making future exposure via MCP easier with no rework), it is lightweight, and it has the best Python ecosystem for LLM integration on the market.
 
-### Decisão por grupo
-
-**Grupo Família:** React com Capacitor para empacotamento mobile. Um único repositório de frontend que agrega todas as funcionalidades do grupo, com novas funcionalidades sendo adicionadas gradualmente ao menu. Mobile-first desde o início.
-
-**Grupo Trabalho:** cada aplicação mantém seu próprio frontend independente. O menu de chaveamento é implementado como **links simples com SSO** — um componente de navegação leve injetado no header de cada app, com ícones/atalhos para as demais. Como o SSO via Logto é transversal ao grupo, o usuário já estará autenticado ao navegar entre as aplicações, sem necessidade de micro-frontend ou arquitetura mais complexa.
-
-**Grupo Outros:** sem integração de navegação. Cada aplicação é completamente autônoma.
+The separation between `services.py` and the routes is not an aesthetic detail — it is what will allow reusing the logic both via the REST API and via MCP in the future, without rewriting code.
 
 ---
 
-## 5. Persistência e Banco de Dados
+## 4. Frontend Architecture
 
-### Situação atual
-- Persistência majoritariamente file-based por simplicidade.
-- Já existe PostgreSQL rodando no servidor, atualmente utilizado apenas por aplicações de terceiros.
+### Decision per group
 
-### Requisitos e intenções definidas
-- Migração de file-based para banco relacional é necessária e inevitável.
-- Preferência por migrar direto para o modelo final e definitivo, aproveitando a refatoração obrigatória para evitar retrabalho futuro.
-- Cada aplicação deve poder evoluir e fazer deploy de forma independente, atualizando apenas suas próprias tabelas.
-- Existe necessidade de espaço seguro para experimentação, separado do ambiente de produção.
+**Family Group:** React with Capacitor for mobile packaging. A single frontend repository that aggregates all of the group's features, with new features being added gradually to the menu. Mobile-first from the start.
 
-### Decisão
-**Um servidor PostgreSQL, dois databases por grupo (`prod` e `dev`), sem schemas explícitos, sem infraestrutura de dados compartilhada entre grupos.**
+**Work Group:** each application keeps its own independent frontend. The switching menu is implemented as **simple links with SSO** — a lightweight navigation component injected into the header of each app, with icons/shortcuts to the others. Since SSO via Keycloak is cross-cutting within the group, the user will already be authenticated when navigating between the applications, with no need for micro-frontends or a more complex architecture.
 
-| Database | Propósito |
+**Other Group:** no navigation integration. Each application is completely autonomous.
+
+---
+
+## 5. Persistence and Database
+
+### Current situation
+- Persistence mostly file-based for simplicity.
+- PostgreSQL is already running on the server, currently used only by third-party applications.
+
+### Defined requirements and intentions
+- Migrating from file-based to a relational database is necessary and inevitable.
+- Preference for migrating straight to the final, definitive model, taking advantage of the mandatory refactoring to avoid future rework.
+- Each application must be able to evolve and deploy independently, updating only its own tables.
+- There is a need for a safe space for experimentation, separate from the production environment.
+
+### Decision
+**One PostgreSQL server, two databases per group (`prod` and `dev`), no explicit schemas, no data infrastructure shared between groups.**
+
+| Database | Purpose |
 |---|---|
-| `caramello` | Produção do Grupo Família |
-| `caramello_dev` | Desenvolvimento e testes de integração (rollback por teste) |
-| `trabalho_prod` | Produção do Grupo Trabalho |
-| `trabalho_dev` | Desenvolvimento do Grupo Trabalho |
-| `outros_prod` | Produção do Grupo Outros |
-| `outros_dev` | Desenvolvimento do Grupo Outros |
+| `caramello` | Production of the Family Group |
+| `caramello_dev` | Development and integration tests (rollback per test) |
+| `trabalho_prod` | Production of the Work Group |
+| `trabalho_dev` | Development of the Work Group |
+| `outros_prod` | Production of the Other Group |
+| `outros_dev` | Development of the Other Group |
 
-Dentro de cada database, sem uso de schemas PostgreSQL — o isolamento é feito por convenção de nomenclatura das tabelas (prefixo por domínio, ex.: `orcamento_lancamentos`, `lista_itens`). Isso é suficiente dado que não há risco real de conflito entre domínios de negócio distintos dentro de um mesmo grupo.
+Within each database, no PostgreSQL schemas are used — isolation is done by table naming convention (prefix per domain, e.g. `orcamento_lancamentos`, `lista_itens`). This is sufficient given that there is no real risk of conflict between distinct business domains within the same group.
 
-Cada aplicação gerencia suas próprias migrations via **Alembic** e opera exclusivamente sobre suas tabelas — deploy completamente independente, sem risco de regressão entre aplicações.
+Each application manages its own migrations via **Alembic** and operates exclusively on its own tables — completely independent deploys, with no risk of regression between applications.
 
 ---
 
-## 6. Modelo de Usuários por Grupo — Decisão de Desacoplamento
+## 6. User Model per Group — Decoupling Decision
 
-Esta é uma das decisões arquiteturais mais relevantes do projeto, pois elimina o único ponto de acoplamento que existia entre grupos na versão anterior da arquitetura.
+This is one of the most relevant architectural decisions of the project, since it eliminates the only point of coupling that existed between groups in the previous version of the architecture.
 
-### O problema que foi descartado
+### The problem that was discarded
 
-Uma versão anterior desta arquitetura considerava uma tabela `users` compartilhada entre todas as aplicações, gerenciada por um repositório de infraestrutura dedicado chamado `plataforma-core`. Esse modelo foi descartado porque criava acoplamento entre grupos que têm perfis, usuários e domínios completamente distintos — uma complexidade sem benefício real para o contexto deste projeto.
+An earlier version of this architecture considered a `users` table shared across all applications, managed by a dedicated infrastructure repository called `plataforma-core`. That model was discarded because it created coupling between groups that have completely distinct profiles, users and domains — complexity with no real benefit for this project's context.
 
-### A decisão: cada grupo é uma ilha completa
+### The decision: each group is a complete island
 
-Cada grupo possui seus próprios usuários, sua própria tabela `users`, e não conhece nem depende dos usuários de nenhum outro grupo. O Logto é o único elo entre os grupos — e apenas como serviço de infraestrutura de autenticação, não como dado compartilhado.
+Each group has its own users, its own `users` table, and neither knows nor depends on the users of any other group. Keycloak is the only link between the groups — and only as an authentication infrastructure service, not as shared data.
 
-### Como funciona em cada grupo
+### How it works in each group
 
-**Grupo Família**
+**Family Group**
 
-A tabela `users` vive no database `caramello`, gerenciada pelas migrations do backend monolítico do grupo. Ela registra os membros da família que se autenticaram pelo tenant `tenant-familia` do Logto.
+The `users` table lives in the `caramello` database, managed by the migrations of the group's monolithic backend. It records the family members who authenticated through Keycloak's `tenant-familia` tenant.
 
 ```sql
 CREATE TABLE users (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    idp_sub    TEXT NOT NULL UNIQUE,  -- "sub" do JWT emitido pelo Logto
+    idp_sub    TEXT NOT NULL UNIQUE,  -- "sub" of the JWT issued by Keycloak
     email      TEXT NOT NULL UNIQUE,
     name       TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -204,100 +205,99 @@ CREATE TABLE users (
 );
 ```
 
-Todas as tabelas de domínio do grupo referenciam `users.id` com foreign key. O registro do usuário é criado automaticamente no primeiro acesso via **just-in-time provisioning** — sem fluxo de cadastro separado.
+All of the group's domain tables reference `users.id` with a foreign key. The user record is created automatically on first access via **just-in-time provisioning** — with no separate registration flow.
 
-**Grupo Trabalho**
+**Work Group**
 
-Cada aplicação do grupo possui sua própria tabela `users` no seu próprio database. Como o grupo tem predominantemente um único usuário, essa tabela terá na prática um único registro — mas a estrutura é idêntica à do Grupo Família, mantendo o padrão e deixando a porta aberta para um eventual segundo usuário sem nenhuma mudança arquitetural.
+Each application in the group has its own `users` table in its own database. Since the group has predominantly a single user, in practice this table will have a single record — but the structure is identical to the Family Group's, keeping the pattern and leaving the door open for an eventual second user with no architectural change at all.
 
-A independência aqui é total: não existe nenhuma tabela compartilhada entre as aplicações do grupo, nem entre o grupo e os demais. Cada aplicação gerencia seu próprio `users` via suas próprias migrations.
+Independence here is total: there is no table shared between the applications of the group, nor between the group and the others. Each application manages its own `users` via its own migrations.
 
-**Grupo Outros**
+**Other Group**
 
-Mesma estrutura do Grupo Trabalho. Cada aplicação tem sua tabela `users` local com um único registro. O uso do Logto não é motivado por segurança robusta, mas por **interoperabilidade por convenção**: o JWT emitido pelo Logto é um padrão reconhecido por middlewares, frameworks, ferramentas de teste e agentes de IA — sem necessidade de explicar ou customizar o mecanismo de autenticação em cada aplicação.
+Same structure as the Work Group. Each application has its local `users` table with a single record. The use of Keycloak is not motivated by robust security, but by **interoperability by convention**: the JWT issued by Keycloak is a standard recognized by middlewares, frameworks, testing tools and AI agents — with no need to explain or customize the authentication mechanism in each application.
 
-### O que o `plataforma-core` seria e por que foi descartado
+### What `plataforma-core` would be and why it was discarded
 
-Na arquitetura anterior, o `plataforma-core` seria um repositório dedicado a gerenciar a migration da tabela `users` compartilhada, criando uma dependência de sequência de execução entre todos os grupos. Sua existência introduzia três problemas:
+In the previous architecture, `plataforma-core` would be a repository dedicated to managing the migration of the shared `users` table, creating an execution-order dependency across all groups. Its existence introduced three problems:
 
-**Acoplamento implícito de deploy** — qualquer ambiente novo precisaria rodar o `plataforma-core` antes de qualquer outra aplicação, criando uma dependência operacional invisível para quem não conhece a arquitetura.
+**Implicit deploy coupling** — any new environment would need to run `plataforma-core` before any other application, creating an operational dependency invisible to anyone unfamiliar with the architecture.
 
-**Falsa economia** — a tabela `users` de cada grupo tem perfil de usuários, campos e semântica distintos. Forçar uma tabela única compartilhada significaria criar uma tabela genérica demais ou adicionar colunas que só fazem sentido para alguns grupos.
+**False economy** — each group's `users` table has distinct user profiles, fields and semantics. Forcing a single shared table would mean creating an overly generic table or adding columns that only make sense for some groups.
 
-**Violação do princípio de ilha** — grupos com domínios completamente independentes não deveriam compartilhar dado algum. O único compartilhamento legítimo é o serviço de autenticação (Logto), não os dados de usuário em si.
+**Violation of the island principle** — groups with completely independent domains should not share any data at all. The only legitimate sharing is the authentication service (Keycloak), not the user data itself.
 
-A decisão de eliminar o `plataforma-core` simplifica o modelo operacional sem abrir mão de nenhum requisito real do projeto.
+The decision to eliminate `plataforma-core` simplifies the operational model without giving up any real requirement of the project.
 
-### Resumo do modelo de usuários
+### Summary of the user model
 
-| Grupo | Tabela `users` | Dono das migrations | Usuários esperados |
+| Group | `users` table | Owner of the migrations | Expected users |
 |---|---|---|---|
-| Família | `caramello.users` | Backend monolítico do grupo | Membros da família |
-| Trabalho (por app) | `trabalho_prod.users` | Cada aplicação individualmente | 1, porta aberta para 2 |
-| Outros (por app) | `outros_prod.users` | Cada aplicação individualmente | 1 (usuário único) |
+| Family | `caramello.users` | The group's monolithic backend | Family members |
+| Work (per app) | `trabalho_prod.users` | Each application individually | 1, door open for 2 |
+| Other (per app) | `outros_prod.users` | Each application individually | 1 (single user) |
 
 ---
 
-## 7. Integração com IA e MCP
+## 7. Integration with AI and MCP
 
-### Requisitos e intenções definidas
-- Parte das funcionalidades deverá ser exposta para agentes de IA.
-- Intenção de adicionar camada MCP sobre APIs existentes.
-- Isso pressiona por: APIs bem definidas, separação clara entre interface e lógica de negócio, e backend com bom ecossistema de integração com LLMs.
+### Defined requirements and intentions
+- Part of the functionality will have to be exposed to AI agents.
+- Intention to add an MCP layer on top of the existing APIs.
+- This pushes for: well-defined APIs, a clear separation between interface and business logic, and a backend with a good ecosystem for LLM integration.
 
-### Posição arquitetural
-A escolha de FastAPI resolve boa parte desse requisito de forma automática: a OpenAPI spec gerada pelo framework é o insumo direto para a construção de servidores MCP. A separação de lógica em `services.py` garante que os endpoints MCP futuros sejam wrappers finos sobre código já existente e testado — sem duplicação de lógica de negócio.
+### Architectural position
+The choice of FastAPI solves a good part of this requirement automatically: the OpenAPI spec generated by the framework is the direct input for building MCP servers. Keeping the logic separated in `services.py` ensures that future MCP endpoints are thin wrappers over already existing and tested code — with no duplication of business logic.
 
-O JWT padrão emitido pelo Logto também contribui aqui: agentes de IA que conhecem o padrão OIDC/JWT conseguem autenticar e operar nas APIs sem configuração especial.
+The standard JWT issued by Keycloak also contributes here: AI agents that know the OIDC/JWT standard are able to authenticate and operate on the APIs with no special configuration.
 
-Não há nada a construir agora além de manter essa disciplina arquitetural desde o início.
-
----
-
-## 8. Restrições e Premissas
-
-- Uso pessoal e familiar.
-- 1 a 5 usuários simultâneos — sem necessidade de escala.
-- Microserviços por escala não fazem sentido para este contexto.
-- Prioridades: simplicidade operacional, manutenibilidade, evolução gradual sem retrabalho, liberdade de experimentação, preparação para IA e MCP, evitar over engineering.
+There is nothing to build right now beyond maintaining this architectural discipline from the start.
 
 ---
 
-## 9. Quadro de Decisões
+## 8. Constraints and Assumptions
 
-| Questão | Decisão |
+- Personal and family use.
+- 1 to 5 simultaneous users — no need for scale.
+- Microservices for scale make no sense in this context.
+- Priorities: operational simplicity, maintainability, gradual evolution without rework, freedom to experiment, preparation for AI and MCP, avoiding over-engineering.
+
+---
+
+## 9. Decision Table
+
+| Question | Decision |
 |---|---|
-| Provedor de identidade | **Logto** — leve, cobre OAuth2/Google + MFA + JWT padrão |
-| Modelo de tenants | **Um tenant por grupo** — Família, Trabalho e Outros isolados |
-| Linguagem do backend | **Python** |
-| Framework de backend | **FastAPI** — OpenAPI automático, ecossistema IA/LLM, leve |
-| Backend Grupo Família | **Monolítico único** — domínio coeso justifica o monolito |
-| Backend Grupo Trabalho | **APIs separadas por aplicação** — deploy independente por design |
-| Backend Grupo Outros | **APIs separadas por aplicação** — aplicações sem ligação entre si |
-| Banco de dados | **Um servidor PostgreSQL, dois databases por grupo** (`prod` e `dev`) |
-| Schemas PostgreSQL | **Não** — isolamento por nomenclatura de tabelas é suficiente |
-| Migrations | **Alembic** por aplicação/monolito, operando apenas sobre suas próprias tabelas |
-| Tabela `users` | **Local por aplicação/grupo** — sem compartilhamento entre grupos |
-| `plataforma-core` | **Descartado** — acoplamento sem benefício real para este contexto |
-| Menu de chaveamento Grupo Trabalho | **Links simples com SSO** via componente de navegação compartilhado |
-| Autenticação Grupo Outros | **Logto** — por interoperabilidade JWT, não por necessidade de segurança robusta |
+| Identity provider | **Keycloak** — already provisioned in the infrastructure, covers OAuth2/Google + MFA + standard JWT (reverted the original Logto decision) |
+| Tenant model | **One tenant per group** — Family, Work and Other isolated |
+| Backend language | **Python** |
+| Backend framework | **FastAPI** — automatic OpenAPI, AI/LLM ecosystem, lightweight |
+| Family Group backend | **A single monolith** — the cohesive domain justifies the monolith |
+| Work Group backend | **Separate APIs per application** — independent deploy by design |
+| Other Group backend | **Separate APIs per application** — applications with no connection to each other |
+| Database | **One PostgreSQL server, two databases per group** (`prod` and `dev`) |
+| PostgreSQL schemas | **No** — isolation by table naming is sufficient |
+| Migrations | **Alembic** per application/monolith, operating only on its own tables |
+| `users` table | **Local per application/group** — no sharing between groups |
+| `plataforma-core` | **Discarded** — coupling with no real benefit for this context |
+| Work Group switching menu | **Simple links with SSO** via a shared navigation component |
+| Other Group authentication | **Keycloak** — for JWT interoperability, not out of a need for robust security |
 
 ---
 
-## 10. Questões Ainda em Aberto
+## 10. Questions Still Open
 
-1. **Grupo Trabalho:** quais aplicações serão agrupadas ou permanecerão separadas — decisão de negócio pendente, sem impacto técnico imediato.
+1. **Work Group:** which applications will be grouped or will remain separate — a pending business decision, with no immediate technical impact.
 
 ---
 
-## 11. Sequência de Implementação Sugerida
+## 11. Suggested Implementation Sequence
 
-A fundação de infraestrutura vem primeiro, antes de qualquer aplicação:
+The infrastructure foundation comes first, before any application:
 
-1. Subir PostgreSQL com os databases de cada grupo (`caramello`, `caramello_dev`, `trabalho_prod`, `trabalho_dev`, `outros_prod`, `outros_dev`)
-2. Instalar e configurar Logto com os três tenants (`tenant-familia`, `tenant-trabalho`, `tenant-outros`)
-3. Configurar OAuth2/Google, MFA e allowlist de e-mails em cada tenant
-4. Definir e documentar o template base de backend (FastAPI + Alembic + estrutura de pastas padrão)
-5. Implementar o Grupo Família primeiro — o monolito é o caso mais representativo para validar toda a fundação na prática
-6. A partir daí, cada nova aplicação dos demais grupos segue o template e integra o tenant correspondente do Logto desde o início
-
+1. Bring up PostgreSQL with each group's databases (`caramello`, `caramello_dev`, `trabalho_prod`, `trabalho_dev`, `outros_prod`, `outros_dev`)
+2. Install and configure Keycloak with the three tenants (`tenant-familia`, `tenant-trabalho`, `tenant-outros`)
+3. Configure OAuth2/Google, MFA and the e-mail allowlist in each tenant
+4. Define and document the base backend template (FastAPI + Alembic + standard folder structure)
+5. Implement the Family Group first — the monolith is the most representative case for validating the whole foundation in practice
+6. From there, each new application of the other groups follows the template and integrates the corresponding Keycloak tenant from the start
