@@ -19,48 +19,42 @@
 # Unmarked lines are copied as-is.
 
 services:
-  # ---------------------------------------------------------------------------
-  # web — NOT YET AVAILABLE. `apps/web` does not exist in this repository yet,
-  # so there is no `ghcr.io/henricos/caramello-web` image to run and the whole
-  # service is kept commented out. When `apps/web` lands, uncomment this block
-  # TOGETHER WITH adding the `publish-web` job (and the paired
-  # `package.json`-vs-tag assertion) to .github/workflows/release-ghcr.yml —
-  # versions are paired, so a stack with a web service requires a release that
-  # publishes both images. The `# publish:` markers below only become active
-  # once the lines are uncommented.
-  #
-  # web:
-  #   image: ghcr.io/henricos/caramello-web:latest # publish:confirm
-  #   container_name: caramello-web # publish:confirm
-  #   restart: unless-stopped
-  #   depends_on:
-  #     api:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     # The base path is baked into the image (APP_BASE_PATH) — keep this
-  #     # URL in sync with it.
-  #     test: ["CMD", "node", "-e", "fetch('http://localhost:3000/caramello/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 15s
-  #   ports:
-  #     - "3000:3000/tcp" # publish:confirm
-  #   environment:
-  #     PUID: "1000" # publish:auto-uid
-  #     PGID: "1000" # publish:auto-gid
-  #     AUTH_SECRET: change-this-value # publish:ask-secret
-  #     AUTH_OIDC_ISSUER: https://keycloak.exemplo.com/realms/caramello # publish:ask
-  #     AUTH_OIDC_CLIENT_ID: caramello-web # publish:confirm
-  #     AUTH_OIDC_CLIENT_SECRET: change-this-value # publish:ask-secret
-  #     API_URL: https://exemplo.com/caramello-api # publish:ask
-  #     AUTH_TRUST_HOST: "true"
-  #     AUTH_URL: https://exemplo.com/caramello/api/auth # publish:ask
-  #   volumes:
-  #     # Shared with the api, which mounts the same label read-write.
-  #     - caramello/data:/data:ro # publish:auto-volume
-  #   networks:
-  #     - rede_containers # publish:auto-network
+  web:
+    image: ghcr.io/henricos/caramello-web:latest # publish:confirm
+    container_name: caramello-web # publish:confirm
+    restart: unless-stopped
+    # The web is useless without the api: the login itself calls
+    # POST /auth/verify, so it only starts once the api is healthy.
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # node-slim ships neither curl nor wget; fetch comes with the runtime.
+      # The base path is baked into the image (APP_BASE_PATH) — keep this URL in
+      # sync with it.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/caramello/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    ports:
+      - "3000:3000/tcp" # publish:confirm
+    environment:
+      PUID: "1000" # publish:auto-uid
+      PGID: "1000" # publish:auto-gid
+      AUTH_SECRET: change-this-value-min-32-characters # publish:ask-secret
+      AUTH_OIDC_ISSUER: https://keycloak.exemplo.com/realms/caramello # publish:ask
+      AUTH_OIDC_CLIENT_ID: caramello-web # publish:confirm
+      AUTH_OIDC_CLIENT_SECRET: change-this-value # publish:ask-secret
+      API_URL: https://exemplo.com/caramello-api # publish:ask
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: https://exemplo.com/caramello/api/auth # publish:ask
+    volumes:
+      # Read-only: the api is the writer of the shared data folder, which it
+      # mounts from the same label read-write.
+      - caramello/data:/data:ro # publish:auto-volume
+    networks:
+      - rede_containers # publish:auto-network
 
   api:
     image: ghcr.io/henricos/caramello-api:latest # publish:confirm
@@ -85,6 +79,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://user:password@host:5432/caramello # publish:ask-secret
       AUTH_OIDC_ISSUER: https://keycloak.exemplo.com/realms/caramello # publish:ask
       AUTH_OIDC_AUDIENCE: caramello-api # publish:confirm
+      # Required because APP_ENV is production: the api refuses to start without
+      # it, so the OAuth discovery metadata can never advertise localhost.
+      PUBLIC_URL: https://caramello-api.exemplo.com # publish:ask
       # Optional — only uncomment to change the defaults.
       # CARAMELLO_API_HOST: 0.0.0.0
       # CARAMELLO_API_PORT: "8000"

@@ -1,0 +1,18 @@
+# Build context exclusions. Anything the image does not need stays out, so the
+# context stays small and changing it never invalidates a build layer.
+#
+# `.env.development` is excluded through the `.env.*` pattern on purpose: the
+# image never carries dev configuration. The build gets the throwaway values it
+# needs for module evaluation from the Dockerfile itself, and the real values
+# arrive at runtime from the orchestrator.
+node_modules
+.next
+out
+.env
+.env.*
+data
+docs
+AGENTS.md
+README.md
+compose.yaml
+compose.override.yaml

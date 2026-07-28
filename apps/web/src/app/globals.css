@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* PLACEHOLDER design tokens — these are NOT Caramello's visual identity yet.
+   They exist so the first pages have coherent surfaces and text contrast; the
+   real palette, typography and spacing scale replace this block when the
+   product's identity is defined (the warm hue below is only a nod to the
+   product's name).
+
+   Tailwind v4 is CSS-first: @theme registers each token as a utility class
+   (bg-bg, text-ink, border-border, ...) AND emits it as a :root custom
+   property, so there is no tailwind.config.js in this module. */
+@theme {
+  --color-bg: oklch(0.985 0.006 75);
+  --color-surface: oklch(1 0 0);
+  --color-ink: oklch(0.24 0.02 60);
+  --color-muted: oklch(0.52 0.02 60);
+  --color-border: oklch(0.9 0.012 70);
+  --color-primary: oklch(0.62 0.13 55);
+  --color-primary-hover: oklch(0.54 0.13 55);
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+}
