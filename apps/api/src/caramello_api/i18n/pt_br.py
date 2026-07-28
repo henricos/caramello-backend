@@ -37,6 +37,19 @@ MESSAGES: dict[str, str] = {
     "auth.not_family_member": "Você não é membro desta família",
     "auth.not_owner": "Apenas owner pode realizar esta operação",
     # -----------------------------------------------------------------------
+    # crud — the generated CRUD routers (`{domain}/router.py`).
+    #
+    # Owned by the generator, which emits `crud.<table_name>_not_found` for
+    # every entity that opts into a router. Adding an entity with
+    # `generate_router: true` therefore means adding a key here — the contract
+    # test in `tests/test_i18n.py` fails otherwise. The text duplicates some
+    # `families.*`/`finances.*` entries on purpose: these are a distinct,
+    # generator-owned surface, and collapsing them would couple hand-written
+    # operations to whatever the generator happens to emit next.
+    # -----------------------------------------------------------------------
+    "crud.user_not_found": "Usuário não encontrado",
+    "crud.family_not_found": "Família não encontrada",
+    # -----------------------------------------------------------------------
     # families — `families/operations.py`
     # -----------------------------------------------------------------------
     "families.user_not_found": "Usuário não encontrado",

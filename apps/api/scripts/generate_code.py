@@ -515,6 +515,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from caramello_api.i18n import error_detail
 from caramello_api.shared.auth import get_current_user
 from caramello_api.shared.database import get_session
 {user_import_line}{model_import}
@@ -557,7 +558,7 @@ async def read_{var_name}(
     result = await session.execute(statement)
     {var_name} = result.scalars().first()
     if not {var_name}:
-        raise HTTPException(status_code=404, detail="{name} not found")
+        raise HTTPException(status_code=404, detail=error_detail("crud.{table_name}_not_found"))
     return {var_name}
 
 
@@ -572,7 +573,7 @@ async def update_{var_name}(
     result = await session.execute(statement)
     db_obj = result.scalars().first()
     if not db_obj:
-        raise HTTPException(status_code=404, detail="{name} not found")
+        raise HTTPException(status_code=404, detail=error_detail("crud.{table_name}_not_found"))
     update_data = {var_name}_in.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_obj, key, value)
@@ -592,7 +593,7 @@ async def delete_{var_name}(
     result = await session.execute(statement)
     db_obj = result.scalars().first()
     if not db_obj:
-        raise HTTPException(status_code=404, detail="{name} not found")
+        raise HTTPException(status_code=404, detail=error_detail("crud.{table_name}_not_found"))
     await session.delete(db_obj)
     await session.commit()
     return {{"ok": True}}
