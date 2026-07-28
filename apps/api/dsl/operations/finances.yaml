@@ -1,0 +1,140 @@
+# dsl/operations/finances.yaml
+# Operações de negócio do domínio finances.
+# Gera src/caramello_api/finances/operations.py (stub: # CARAMELLO-GENERATED: stub).
+# REGRA: nunca adicione endpoints em operations.py sem declarar aqui primeiro.
+# Fluxo obrigatório: declarar neste YAML → gerar stub (bin/generate_code) → implementar stub.
+
+domain: finances
+operations:
+  # --- Contas ---
+  - name: create_account
+    method: POST
+    path: /finances/accounts
+    description: "Cria nova conta bancária/cartão/poupança para a família autenticada."
+
+  - name: list_accounts
+    method: GET
+    path: /finances/accounts
+    description: "Lista contas da família autenticada."
+
+  - name: get_account
+    method: GET
+    path: /finances/accounts/{account_uuid}
+    description: "Retorna detalhes de uma conta pelo UUID."
+
+  - name: update_account
+    method: PATCH
+    path: /finances/accounts/{account_uuid}
+    description: "Atualiza nome, tipo ou arquiva uma conta (is_active=false)."
+
+  # --- Categorias ---
+  - name: create_category
+    method: POST
+    path: /finances/categories
+    description: "Cria categoria pai (nível 1) scoped por família."
+
+  - name: list_categories
+    method: GET
+    path: /finances/categories
+    description: "Lista categorias da família autenticada."
+
+  - name: get_category
+    method: GET
+    path: /finances/categories/{category_uuid}
+    description: "Retorna detalhes de uma categoria pelo UUID."
+
+  - name: update_category
+    method: PATCH
+    path: /finances/categories/{category_uuid}
+    description: "Atualiza nome de uma categoria."
+
+  # --- Subcategorias ---
+  - name: create_subcategory
+    method: POST
+    path: /finances/subcategory
+    description: "Cria subcategoria (nível 2) vinculada a uma categoria pai."
+
+  - name: list_subcategories
+    method: GET
+    path: /finances/subcategory
+    description: "Lista subcategorias da família, com filtro opcional por category_uuid."
+
+  - name: get_subcategory
+    method: GET
+    path: /finances/subcategory/{subcategory_uuid}
+    description: "Retorna detalhes de uma subcategoria pelo UUID."
+
+  - name: update_subcategory
+    method: PATCH
+    path: /finances/subcategory/{subcategory_uuid}
+    description: "Atualiza nome de uma subcategoria."
+
+  # --- Movimentações ---
+  - name: create_movement
+    method: POST
+    path: /finances/accounts/{account_uuid}/movements
+    description: "Registra movimentação individual (crédito/débito) em uma conta."
+
+  - name: list_movements
+    method: GET
+    path: /finances/accounts/{account_uuid}/movements
+    description: "Lista movimentações de uma conta com paginação e filtros."
+
+  - name: import_movements_endpoint
+    method: POST
+    path: /finances/accounts/{account_uuid}/movements/import
+    description: "Importa movimentações em lote via CSV/OFX/XLSX com deduplicação automática."
+
+  - name: confirm_import
+    method: POST
+    path: /finances/import/confirm
+    description: "Confirma importação pendente de movimentações após revisão."
+
+  # --- Conciliação ---
+  - name: get_suggest_category
+    method: GET
+    path: /finances/movements/{movement_uuid}/suggest-category
+    description: "Retorna top-5 sugestões de subcategoria por fuzzy match na descrição."
+
+  - name: reconcile_movement
+    method: POST
+    path: /finances/movements/{movement_uuid}/reconcile
+    description: "Concilia movimentação com subcategoria, criando lançamento financeiro."
+
+  # --- Lançamentos ---
+  - name: get_entry
+    method: GET
+    path: /finances/entries/{entry_uuid}
+    description: "Retorna detalhes de um lançamento financeiro pelo UUID."
+
+  - name: update_entry
+    method: PATCH
+    path: /finances/entries/{entry_uuid}
+    description: "Atualiza competência ou subcategoria de um lançamento existente."
+
+  - name: list_entries
+    method: GET
+    path: /finances/entries
+    description: "Lista lançamentos com filtros de família, conta, competência e subcategoria."
+
+  # --- Saldos ---
+  - name: get_account_balance
+    method: GET
+    path: /finances/accounts/{account_uuid}/balance
+    description: "Retorna saldo atual de uma conta derivado de movimentações."
+
+  - name: get_family_balance
+    method: GET
+    path: /finances/families/{family_uuid}/balance
+    description: "Retorna consolidado de saldo de todas as contas da família."
+
+  # --- Relatórios ---
+  - name: get_monthly_report
+    method: GET
+    path: /finances/reports/monthly
+    description: "Breakdown mensal de lançamentos por categoria pai e subcategoria."
+
+  - name: get_by_member_report
+    method: GET
+    path: /finances/reports/by-member
+    description: "Breakdown de lançamentos agrupados por membro da família."
