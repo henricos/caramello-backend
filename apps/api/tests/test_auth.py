@@ -3,11 +3,50 @@
 Estratégia: para AUTH-01 (401 sem token) usamos TestClient diretamente.
 Para AUTH-02/03 que dependem de banco real, usamos `@pytest.mark.integration`
 e mocking via app.dependency_overrides (Phase 5 implementa banco isolado).
+
+Os testes das duas camadas de autorização (allowlist de e-mail e pertencimento
+a família) chamam `get_current_user` diretamente com uma session mockada: o que
+está sob teste é a ORDEM das verificações — em especial que nenhuma consulta ao
+banco acontece antes de o token ser considerado confiável.
 """
 
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+
+CREDENTIALS = HTTPAuthorizationCredentials(scheme="Bearer", credentials="fake.token.value")
+
+
+def _entity_results(*values):
+    """Handler de `execute_mock` que responde `.scalars().first()` em sequência."""
+    remaining = iter(values)
+
+    def _handler(_stmt):
+        result = MagicMock()
+        try:
+            result.first.return_value = next(remaining)
+        except StopIteration:
+            result.first.return_value = None
+        return result
+
+    return _handler
+
+
+def _call_get_current_user(session, payload):
+    """Executa `get_current_user` com o JWKS e o decode do JWT mockados."""
+    from caramello_api.shared import auth as auth_module
+
+    with (
+        patch.object(auth_module, "_jwks_cache", {"fake-kid": object()}),
+        patch.object(auth_module.jwt, "get_unverified_header", return_value={"kid": "fake-kid"}),
+        patch.object(auth_module.jwt, "decode", return_value=payload),
+    ):
+        return asyncio.run(auth_module.get_current_user(credentials=CREDENTIALS, session=session))
 
 
 def test_auth_module():
@@ -71,10 +110,9 @@ def test_auto_join_on_login():
     - invitation.status é marcado como "joined"
     """
     pytest.importorskip("caramello_api.families.models")
-    from unittest.mock import AsyncMock, MagicMock, patch
 
     from caramello_api.families.models import FamilyInvitation, FamilyMember
-    from caramello_api.shared import auth as auth_module
+    from caramello_api.shared.models import AllowedEmail
     from tests.conftest import execute_mock
 
     # Construir uma FamilyInvitation pending_login simulada
@@ -99,18 +137,15 @@ def test_auto_join_on_login():
     )
 
     added = []
-    # Sequência esperada de SELECTs em get_current_user (após plano 04-04):
-    # 1) SELECT User WHERE idp_sub → retorna provisioned_user
-    # 2) SELECT FamilyInvitation WHERE email==status=='pending_login' → pending_inv
-    select_results = iter([provisioned_user, pending_inv])
-
-    def _exec(_stmt):
-        r = MagicMock()
-        try:
-            r.first.return_value = next(select_results)
-        except StopIteration:
-            r.first.return_value = None
-        return r
+    # Sequência esperada de SELECTs em get_current_user:
+    # 1) SELECT AllowedEmail WHERE email → allowlist libera o acesso
+    # 2) SELECT User WHERE idp_sub → retorna provisioned_user
+    # 3) SELECT FamilyInvitation WHERE email==status=='pending_login' → pending_inv
+    _exec = _entity_results(
+        AllowedEmail(id=1, email="recem@example.com"),
+        provisioned_user,
+        pending_inv,
+    )
 
     mock_session = AsyncMock()
     # O INSERT ... ON CONFLICT DO NOTHING também passa por session.execute, mas
@@ -125,33 +160,10 @@ def test_auto_join_on_login():
     fake_token_payload = {
         "sub": "kc-sub-recem",
         "email": "recem@example.com",
+        "email_verified": True,
         "name": "Recem Cadastrado",
     }
-    with (
-        patch.object(auth_module, "_jwks_cache", {"fake-kid": object()}),
-        patch.object(
-            auth_module.jwt,
-            "get_unverified_header",
-            return_value={"kid": "fake-kid"},
-        ),
-        patch.object(
-            auth_module.jwt,
-            "decode",
-            return_value=fake_token_payload,
-        ),
-    ):
-        from fastapi.security import HTTPAuthorizationCredentials
-
-        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="fake.token.value")
-
-        import asyncio
-
-        result_user = asyncio.run(
-            auth_module.get_current_user(
-                credentials=credentials,
-                session=mock_session,
-            )
-        )
+    result_user = _call_get_current_user(mock_session, fake_token_payload)
 
     # Asserções:
     # - User retornado deve ser o provisioned_user
@@ -166,3 +178,174 @@ def test_auto_join_on_login():
     assert pending_inv.status == "joined", (
         f"FamilyInvitation.status deve ser 'joined' após auto-join; foi {pending_inv.status!r}"
     )
+
+
+# ----------------------------------------------------------------------
+# Allowlist — a primeira camada de autorização
+# ----------------------------------------------------------------------
+
+
+def test_allowlist_helper_normalizes_the_email():
+    """O helper consulta sempre o e-mail normalizado (strip + lowercase)."""
+    from caramello_api.shared.auth import is_email_allowlisted
+    from tests.conftest import execute_mock
+
+    seen = []
+
+    def _capture(stmt):
+        seen.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+        result = MagicMock()
+        result.first.return_value = None
+        return result
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = execute_mock(_capture)
+
+    allowed = asyncio.run(is_email_allowlisted(mock_session, "  Pessoa@Exemplo.COM  "))
+
+    assert allowed is False
+    assert len(seen) == 1
+    assert "pessoa@exemplo.com" in seen[0]
+    assert "Pessoa@Exemplo.COM" not in seen[0]
+
+
+def test_email_not_verified_is_rejected_before_any_db_access():
+    """`email_verified` falsy → 403 antes de qualquer consulta ao banco."""
+    mock_session = AsyncMock()
+
+    payload = {
+        "sub": "kc-sub-naoverificado",
+        "email": "naoverificado@exemplo.com",
+        "email_verified": False,
+    }
+    with pytest.raises(HTTPException) as exc_info:
+        _call_get_current_user(mock_session, payload)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["reason"] == "email_not_verified"
+    # O ponto do teste: nenhuma query — sem custo e sem sinal de timing do
+    # allowlist para um token cujo e-mail ainda não é confiável.
+    mock_session.execute.assert_not_awaited()
+    mock_session.execute.assert_not_called()
+    # 403 nunca carrega WWW-Authenticate (a credencial foi entendida e negada).
+    assert exc_info.value.headers is None
+
+
+def test_missing_email_verified_claim_is_treated_as_false():
+    """Claim ausente é negação, nunca default permissivo."""
+    mock_session = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc_info:
+        _call_get_current_user(
+            mock_session,
+            {"sub": "kc-sub-sem-claim", "email": "semclaim@exemplo.com"},
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["reason"] == "email_not_verified"
+    mock_session.execute.assert_not_called()
+
+
+def test_not_allowlisted_returns_403_without_leaking_the_address():
+    """E-mail fora do allowlist → 403 not_allowlisted, sem eco do endereço."""
+    from tests.conftest import execute_mock
+
+    email = "forasteiro@exemplo.com"
+    mock_session = AsyncMock()
+    # Primeiro (e único) SELECT: o allowlist, que não encontra nada.
+    mock_session.execute.side_effect = execute_mock(_entity_results(None))
+
+    payload = {"sub": "kc-sub-forasteiro", "email": email, "email_verified": True}
+    with pytest.raises(HTTPException) as exc_info:
+        _call_get_current_user(mock_session, payload)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["reason"] == "not_allowlisted"
+    # O corpo do erro nunca revela o endereço consultado.
+    assert email not in str(exc_info.value.detail)
+    assert "forasteiro" not in str(exc_info.value.detail).lower()
+    # Nenhum usuário é provisionado para quem não passou pelo allowlist:
+    # o único execute foi o SELECT do allowlist.
+    assert mock_session.execute.await_count == 1
+    mock_session.commit.assert_not_called()
+
+
+def test_email_claim_is_normalized_before_the_allowlist_lookup():
+    """Claim com caixa alta é normalizado antes de comparar com o allowlist."""
+    from tests.conftest import execute_mock
+
+    seen = []
+
+    def _capture(stmt):
+        seen.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+        result = MagicMock()
+        result.first.return_value = None
+        return result
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = execute_mock(_capture)
+
+    payload = {"sub": "kc-sub-caixa", "email": " Pessoa@Exemplo.COM ", "email_verified": True}
+    with pytest.raises(HTTPException) as exc_info:
+        _call_get_current_user(mock_session, payload)
+
+    assert exc_info.value.status_code == 403
+    assert "pessoa@exemplo.com" in seen[0]
+
+
+def test_non_string_email_claim_is_a_401():
+    """Claim `email` com tipo inesperado → 401, nunca um 500."""
+    mock_session = AsyncMock()
+
+    payload = {"sub": "kc-sub-tipo", "email": ["lista", "de", "emails"], "email_verified": True}
+    with pytest.raises(HTTPException) as exc_info:
+        _call_get_current_user(mock_session, payload)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["reason"] == "invalid_token"
+    mock_session.execute.assert_not_called()
+
+
+def test_401_carries_the_www_authenticate_header(client):
+    """RFC 6750: um 401 aponta o cliente para o metadata do recurso protegido."""
+    response = client.get("/users/me")
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["detail"]["reason"] == "missing_token"
+    assert body["detail"]["message"]
+    header = response.headers["www-authenticate"]
+    assert header.startswith("Bearer ")
+    assert "resource_metadata=" in header
+    assert "/.well-known/oauth-protected-resource" in header
+
+
+def test_audience_and_issuer_are_validated():
+    """D-02 fechada: o decode valida `aud` e `iss` contra as Settings."""
+    from caramello_api.core.config import get_settings
+    from caramello_api.shared import auth as auth_module
+
+    settings = get_settings()
+    captured = {}
+
+    def _fake_decode(token, key, **kwargs):
+        captured.update(kwargs)
+        return {"sub": "kc-sub", "email": "x@exemplo.com", "email_verified": False}
+
+    mock_session = AsyncMock()
+    with (
+        patch.object(auth_module, "_jwks_cache", {"fake-kid": object()}),
+        patch.object(auth_module.jwt, "get_unverified_header", return_value={"kid": "fake-kid"}),
+        patch.object(auth_module.jwt, "decode", _fake_decode),
+        pytest.raises(HTTPException),
+    ):
+        asyncio.run(auth_module.get_current_user(credentials=CREDENTIALS, session=mock_session))
+
+    assert captured["algorithms"] == ["RS256"]
+    assert captured["audience"] == settings.auth_oidc_audience
+    assert captured["issuer"] == settings.auth_oidc_issuer
+    assert captured["options"]["verify_aud"] is True
+    assert captured["options"]["verify_iss"] is True
+    # Toda claim que o código lê é obrigatória: faltar uma é 401, não KeyError.
+    for claim in ("exp", "iss", "aud", "sub", "email"):
+        assert claim in captured["options"]["require"]

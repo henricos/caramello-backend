@@ -40,6 +40,10 @@ Regras detalhadas: `docs/dsl_rules.md`.
 - Auth via **Keycloak** com OIDC/JWT.
 - Clients `dev` e `prod` já configurados na infra. Não criar novos clients sem alinhamento.
 - Endpoints gerados são públicos por padrão — proteção deve ser adicionada explicitamente via dependência FastAPI.
+- A api é **resource server OAuth2**: valida o `access_token` de qualquer consumidor por conta própria (JWKS/RS256, `iss`, `exp` e `aud` com a audience da própria api). Nunca aceite token sem validar `aud`.
+- Autorização tem **duas camadas**, ambas atrás de `get_current_user` em `shared/auth.py`: allowlist de e-mail (`allowed_emails` — pode usar o sistema?) e pertencimento a família (quais dados alcança?).
+- A **ordem** das verificações é invariante: `email_verified` é checado **antes de qualquer consulta ao banco** (sem custo e sem sinal de timing do allowlist) e nenhum corpo de erro pode conter o e-mail do chamador.
+- `allowed_emails` é infraestrutura, não entidade de negócio: mora em `shared/models.py` (fora do alcance do gerador do DSL), não tem `uuid` e não tem rota — administração é via `scripts/seed_allowed_email.py` / `scripts/remove_allowed_email.py`.
 
 ---
 

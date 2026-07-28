@@ -46,6 +46,7 @@ from caramello_api.finances.models import (  # noqa: E402, F401
     Movement,
     Subcategory,
 )
+from caramello_api.shared.models import AllowedEmail  # noqa: E402, F401
 from caramello_api.users.models import User  # noqa: E402, F401
 
 target_metadata = Base.metadata

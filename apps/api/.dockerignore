@@ -1,10 +1,16 @@
 # Build context exclusions. Anything the runtime does not need stays out, so
 # the context stays small and changing it never invalidates a build layer.
 #
-# `dsl/`, `bin/` and `scripts/` are development tooling (the YAML DSL and its
-# code generator) and are deliberately absent from the image — nothing at
-# runtime reads them. `alembic.ini` and `src/caramello_api/migrations/` ARE
-# included, because entrypoint.sh runs `alembic upgrade head` at boot.
+# `dsl/` and `bin/` are development tooling (the YAML DSL and its code
+# generator) and are deliberately absent from the image — nothing at runtime
+# reads them. `scripts/` IS included: allowlist administration has no HTTP
+# route on purpose, so `scripts/seed_allowed_email.py` and
+# `scripts/remove_allowed_email.py` are the operator's only tools and must be
+# reachable via `docker exec` (see docs/release.md). The DSL generator scripts
+# ride along in the same directory: nothing executes them at runtime, and their
+# pyyaml dependency stays dev-only. `alembic.ini` and
+# `src/caramello_api/migrations/` are included too, because entrypoint.sh runs
+# `alembic upgrade head` at boot.
 .venv
 .pgembed-data
 .pytest_cache
@@ -21,6 +27,5 @@ tests
 docs
 dsl
 bin
-scripts
 compose.yaml
 compose.override.yaml

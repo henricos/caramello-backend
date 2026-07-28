@@ -32,7 +32,7 @@ is optional here.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -101,6 +101,15 @@ class Settings(BaseSettings):
 
     app_base_path: str = Field(default="", validation_alias="APP_BASE_PATH")
 
+    # Public base URL of this service as consumers reach it (scheme + host +
+    # base path, no trailing slash), e.g. https://exemplo.com/caramello-api.
+    # Used ONLY to build the absolute URLs served by the OAuth discovery
+    # endpoints that MCP clients consume, plus the `resource_metadata` pointer
+    # in the `WWW-Authenticate` header — never for routing. Defaults to local
+    # dev; in production it MUST be set explicitly (enforced below), otherwise
+    # the discovery metadata would silently advertise localhost.
+    public_url: str = Field(default="", validation_alias="PUBLIC_URL")
+
     # Shared data folder. The process always assumes `/data` (a fixed path
     # inside the container; mapping it to a host folder is the deploy's
     # responsibility). In local dev without a container `/data` usually is
@@ -120,6 +129,18 @@ class Settings(BaseSettings):
         # silent, hard-to-diagnose failure. Normalize once at the source so
         # discovery and claims validation always agree.
         return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def _resolve_public_url(self) -> "Settings":
+        if not self.public_url:
+            if self.app_env == "production":
+                raise ValueError(
+                    "PUBLIC_URL is required when APP_ENV=production: without it the"
+                    " OAuth discovery metadata would advertise localhost URLs."
+                )
+            self.public_url = "http://localhost:8000"
+        self.public_url = self.public_url.rstrip("/")
+        return self
 
 
 @lru_cache

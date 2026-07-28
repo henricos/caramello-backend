@@ -43,6 +43,11 @@ COPY --from=builder /app/src ./src
 # let the entrypoint apply the schema automatically on every boot. Both are
 # required in the image: without them `alembic upgrade head` cannot run at all.
 COPY alembic.ini ./
+# Operator tooling that has no HTTP equivalent by design: allowlist
+# administration (`scripts/seed_allowed_email.py`,
+# `scripts/remove_allowed_email.py`) is run with `docker exec` against the
+# running container — see the "User authorization" section of docs/release.md.
+COPY scripts ./scripts
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

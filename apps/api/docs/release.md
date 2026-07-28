@@ -60,6 +60,7 @@ Single home for the semantics of every runtime variable of this image (the compo
 | `DATABASE_URL` | yes | Async SQLAlchemy DSN (`postgresql+asyncpg://user:password@host:5432/caramello`) of the production Postgres. No default — the service fails loudly at startup without it |
 | `AUTH_OIDC_ISSUER` | yes | Full realm URL of the OIDC provider (e.g. `https://keycloak.exemplo.com/realms/caramello`). A trailing slash is stripped automatically. Discovery and JWKS are derived from it, never hardcoded |
 | `AUTH_OIDC_AUDIENCE` | yes | The api's own audience (e.g. `caramello-api`), required in the `aud` claim of incoming access tokens |
+| `PUBLIC_URL` | yes when `APP_ENV=production` | Public base URL of this service (e.g. `https://caramello-api.exemplo.com`), with no trailing slash. It is what the OAuth discovery documents advertise and what the `resource_metadata` pointer in `WWW-Authenticate` points at, so MCP clients can find the authorization server. In production it has no default **and the service refuses to start without it** — otherwise the metadata would advertise `localhost` and every MCP client would fail to authenticate |
 | `APP_ENV` | no — default `development` | One of `development`, `test`, `production`. Set it to `production`: that is what disables `/docs` and `/openapi.json`. An invalid value fails at startup instead of silently falling back |
 | `PUID` / `PGID` | no — default `1000` | UID/GID the container's `app` user is adjusted to, matching the owner of `/data` on the host. `0` (root) and non-numeric values are rejected by the entrypoint before anything is touched |
 | `APP_BASE_PATH` | no — default empty | FastAPI's `root_path` when the api sits behind a reverse proxy under a prefix (e.g. `/caramello-api`). It only affects generated OpenAPI URLs; it does not rewrite routes. Must start with `/`, no trailing or duplicated slashes |
@@ -77,12 +78,29 @@ The service reads the process environment only; it never loads a dotenv file on 
 
 ### User authorization
 
-There is no HTTP route and no CLI script for granting access, and the image deliberately carries no `scripts/` directory (that is development tooling). Authorization has two layers, both driven by data already in the database:
+There is no HTTP route for granting access — on purpose: the allowlist is operator data, not application data. Authorization has two layers, both driven by data already in the database:
 
-- **Identity**: a user record is provisioned just-in-time on the first authenticated request, from the verified token's claims. Whoever can obtain a token from the configured realm — and is a member of a family — can use the system.
-- **Family membership**: every business read and write is scoped to the caller's family. A brand-new user with no family sees nothing until they create one (`POST /families/registry`, which makes the caller its owner) or are added to an existing one by its owner.
+- **E-mail allowlist** (`allowed_emails`): decides whether an identity may use the system at all. A token that is perfectly valid but whose `email` is not on the list gets `403 not_allowlisted`, before any user record is created. A `email_verified` that is missing or false gets `403 email_not_verified`. The operator's own e-mail is seeded automatically at every boot, so a fresh deployment is never locked out.
+- **Family membership**: decides which data that identity may reach. Every business read and write is scoped to the caller's family. An allowlisted user with no family sees nothing until they create one (`POST /families/registry`, which makes the caller its owner) or are added to an existing one by its owner. The user record itself is provisioned just-in-time on the first authorized request, from the verified token's claims.
 
-So "authorizing a person" means, in practice: give them a client/login in the realm whose access tokens carry `AUTH_OIDC_AUDIENCE`, then have a family owner add them to the family.
+Managing the allowlist is a `docker exec` into the running container — the image ships `scripts/` for exactly this reason:
+
+```bash
+# Authorize an e-mail (idempotent; normalized to lowercase)
+docker exec caramello-api python scripts/seed_allowed_email.py \
+    --database-url "$DATABASE_URL" --email pessoa@exemplo.com
+
+# Revoke access (idempotent; keeps the user record and its family history)
+docker exec caramello-api python scripts/remove_allowed_email.py \
+    --database-url "$DATABASE_URL" --email pessoa@exemplo.com
+
+# Inspect the current allowlist (any SQL client, sync DSN)
+psql "$DATABASE_URL_SYNC" -c 'SELECT email, created_at FROM allowed_emails ORDER BY email;'
+```
+
+`$DATABASE_URL` inside the container is already the async DSN the service uses, so `docker exec ... sh -c 'python scripts/seed_allowed_email.py --database-url "$DATABASE_URL" --email ...'` works without retyping it. Listing needs no script: any SQL client against the same database (a sync `postgresql://` DSN, hence `$DATABASE_URL_SYNC` above) answers it.
+
+So "authorizing a person" means, in practice: give them a client/login in the realm whose access tokens carry `AUTH_OIDC_AUDIENCE`, add their e-mail to the allowlist, then have a family owner add them to the family.
 
 ### MCP clients (Claude Desktop, agents)
 

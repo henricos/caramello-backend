@@ -1,7 +1,9 @@
 """Caramello api entry point.
 
-- Lifespan: warms the JWKS cache via `shared.auth.fetch_jwks`, best-effort
-- Routers: registered from the `users/`, `families/` and `finances/` domains
+- Lifespan: warms the JWKS cache via `shared.auth.fetch_jwks` (best-effort),
+  then seeds the idempotent reference data (the allowlist's default e-mail)
+- Routers: `shared/` (health, auth, OAuth discovery) plus the `users/`,
+  `families/` and `finances/` domains
 - MCP: mounted after every router, so all of them are visible as tools
 """
 
@@ -20,8 +22,11 @@ from fastapi_mcp import AuthConfig, FastApiMCP
 from caramello_api.core.config import get_settings
 from caramello_api.core.error_handlers import caramello_api_error_handler
 from caramello_api.core.exceptions import CaramelloApiError
-from caramello_api.shared import health
+from caramello_api.shared import health, oauth_discovery
 from caramello_api.shared.auth import fetch_jwks, http_bearer
+from caramello_api.shared.auth_router import router as auth_router
+from caramello_api.shared.database import engine
+from caramello_api.shared.seeds import seed_default_reference
 from caramello_api.users import operations as user_operations
 from caramello_api.users import router as user_router
 from caramello_api.families import operations as families_operations  # noqa: E402
@@ -51,7 +56,9 @@ def _resolve_version() -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Warm the JWKS cache, without making startup depend on the provider.
+    """Warm the JWKS cache and seed the reference data.
+
+    Neither step makes startup depend on the identity provider.
 
     The fetch is deliberately best-effort. `get_current_user` already fetches
     the JWKS on a cache miss (and re-fetches on an unknown `kid`, for key
@@ -72,6 +79,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "Could not warm the JWKS cache at startup; it will be fetched on first use.",
             exc_info=True,
         )
+
+    # Idempotent reference data (the operator's allowlist e-mail), AFTER the
+    # JWKS warm-up so a slow provider never delays the schema-dependent step.
+    # The table it writes to already exists: the container entrypoint runs
+    # `alembic upgrade head` before the process boots (and in development the
+    # operator runs `./bin/manage_db upgrade`).
+    await seed_default_reference(engine)
+
     yield
 
 
@@ -106,6 +121,14 @@ app.add_exception_handler(CaramelloApiError, caramello_api_error_handler)  # typ
 
 # Public, unversioned probe — registered first so it can never be shadowed.
 app.include_router(health.router)
+
+# Public, unversioned OAuth discovery (RFC 9728 / RFC 8414): `.well-known` URLs
+# are spec-defined, so they must stay stable across api version bumps.
+app.include_router(oauth_discovery.router)
+
+# Authentication surface, unversioned: `POST /auth/verify` is the route a
+# consumer calls on its OIDC callback. Static path, no {uuid} to shadow.
+app.include_router(auth_router)
 
 # Routers per domain
 # IMPORTANT: operations (static routes) are registered BEFORE router (CRUD with
