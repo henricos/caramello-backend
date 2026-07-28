@@ -1,64 +1,67 @@
 # dsl/entities/movement.yaml
-# Movimentação financeira bruta importada do banco.
-# Domain: finances (Phase 6, Plano 02)
+# Raw financial movement imported from the bank.
+# Domain: finances (Phase 6, Plan 02)
 
 name: Movement
 domain: finances
-description: "Movimentação financeira bruta importada do extrato bancário."
+description: "Raw financial movement imported from a bank statement."
 table_name: movement
+
+# No generic CRUD router — see dsl/entities/account.yaml.
+generate_router: false
 
 fields:
   - name: id
     type: int
     primary_key: true
-    description: "Chave primária interna (numérica)."
+    description: "Internal primary key (numeric)."
 
   - name: uuid
     type: UUID
     unique: true
     default_factory: uuid4
     nullable: false
-    description: "Identificador público único (UUID)."
+    description: "Unique public identifier (UUID)."
 
   - name: account_id
     type: int
     foreign_key: "account.id"
     nullable: false
-    description: "FK para conta bancária de origem da movimentação."
+    description: "FK to the bank account the movement came from."
 
   - name: date
     type: datetime
     nullable: false
-    description: "Data/hora da movimentação conforme extrato."
+    description: "Date/time of the movement as stated by the bank."
 
   - name: amount
     type: Decimal
     nullable: false
-    description: "Valor com sinal: positivo=crédito, negativo=débito. NUMERIC(15,2)."
+    description: "Signed amount: positive=credit, negative=debit. NUMERIC(15,2)."
 
   - name: description
     type: str
     max_length: 255
     nullable: false
-    description: "Descrição da movimentação conforme extrato bancário."
+    description: "Description of the movement as stated by the bank."
 
   - name: import_hash
     type: str
     unique: true
     nullable: true
-    description: "Hash SHA-256 do registro importado para deduplicação (D-10). Null quando entrada manual."
+    description: "SHA-256 hash of the imported record, for deduplication (D-10). Null for a manual entry."
 
   - name: created_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Data de criação do registro."
+    description: "Timestamp of the record's creation."
 
   - name: updated_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Data da última atualização do registro."
+    description: "Timestamp of the record's last update."
 
 filters:
   - fields: [account_id]

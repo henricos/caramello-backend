@@ -137,9 +137,17 @@ def client():
     return TestClient(app)
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def test_engine():
-    """Session-scoped async engine, shared by every test in the session."""
+    """Async engine, function-scoped on purpose.
+
+    pytest-asyncio gives each test its own event loop, and an asyncpg connection
+    belongs to the loop that opened it. A session-scoped engine would hand the
+    second test a pooled connection created in the first test's loop, which fails
+    with "attached to a different loop" — so the engine's lifetime matches the
+    loop's. Four integration tests do not make the extra connect worth
+    optimizing.
+    """
     engine = create_async_engine(TEST_DB_URL, echo=False, future=True)
     yield engine
     await engine.dispose()
@@ -151,10 +159,19 @@ async def db_session(test_engine):
 
     Uses join_transaction_mode="create_savepoint" to keep isolation working
     with asyncpg inside nested transactions.
+
+    `expire_on_commit=False` mirrors `shared.database.async_session_factory`: a
+    test double that expires attributes on commit would make an endpoint blow up
+    with MissingGreenlet on the very lines that read an already-loaded object
+    after committing — a failure the real session cannot produce.
     """
     async with test_engine.connect() as conn:
         await conn.begin()
-        session = AsyncSession(bind=conn, join_transaction_mode="create_savepoint")
+        session = AsyncSession(
+            bind=conn,
+            join_transaction_mode="create_savepoint",
+            expire_on_commit=False,
+        )
         yield session
         await session.close()
         await conn.rollback()
@@ -162,7 +179,14 @@ async def db_session(test_engine):
 
 @pytest_asyncio.fixture
 async def async_client(db_session):
-    """AsyncClient with get_session and get_current_user overridden."""
+    """AsyncClient with get_session and get_current_user overridden.
+
+    The authenticated user is PERSISTED (flushed, never committed — the fixture's
+    savepoint rolls it back): an integration test writes rows that reference
+    `user.id` through a real foreign key, so a user that exists only in memory
+    would make every one of those inserts fail. The id therefore comes from the
+    database, never from a literal.
+    """
     from datetime import datetime
     from uuid import uuid4
 
@@ -172,14 +196,15 @@ async def async_client(db_session):
     from caramello_api.users.models import User
 
     fake_user = User(
-        id=1,
         uuid=uuid4(),
-        idp_sub="test-sub",
-        email="teste@exemplo.com",
+        idp_sub=f"test-sub-{uuid4()}",
+        email=f"teste-{uuid4()}@exemplo.com",
         name="Test User",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
+    db_session.add(fake_user)
+    await db_session.flush()
 
     async def _session_override():
         yield db_session

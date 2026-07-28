@@ -1,35 +1,35 @@
 # dsl/operations/family.yaml
-# Operações de negócio do domínio families (Phase 4 — D-05, D-07).
-# Gera src/caramello_api/families/operations.py (stub que será implementado no plano 04-04).
+# Business operations of the families domain (Phase 4 — D-05, D-07).
+# Generates src/caramello_api/families/operations.py (the stub implemented in plan 04-04).
 
 domain: families
 operations:
   - name: registry_family
     method: POST
     path: /families/registry
-    description: "Cria família e registra o usuário autenticado como owner (role='owner')."
+    description: "Creates a family and registers the authenticated user as its owner (role='owner')."
 
   - name: list_my_families
     method: GET
     path: /families/families
-    description: "Lista famílias das quais o usuário autenticado é membro."
+    description: "Lists the families the authenticated user belongs to."
 
   - name: get_family_detail
     method: GET
     path: /families/families/{family_uuid}
-    description: "Retorna detalhes de uma família se o usuário for membro; 403 se não for."
+    description: "Returns a family's details when the user is a member; 403 otherwise."
 
   - name: pre_register_member
     method: POST
     path: /families/families/{family_uuid}/pre-register
-    description: "Owner pré-registra email para adesão automática. Não-owner recebe 403."
+    description: "The owner pre-registers an e-mail for automatic joining. A non-owner gets 403."
 
   - name: list_members
     method: GET
     path: /families/families/{family_uuid}/members
-    description: "Lista membros da família (qualquer membro pode ver)."
+    description: "Lists the members of the family (any member may read it)."
 
   - name: remove_member
     method: DELETE
     path: /families/families/{family_uuid}/members/{user_uuid}
-    description: "Remove membro da família (owner only). Não-owner recebe 403."
+    description: "Removes a member from the family (owner only). A non-owner gets 403."

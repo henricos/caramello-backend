@@ -29,7 +29,7 @@ fields:
     type: EmailStr
     unique: true
     nullable: false
-    description: "Endereço de e-mail único do usuário."
+    description: "Unique e-mail address of the user."
 
   - name: name
     type: str

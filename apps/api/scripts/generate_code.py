@@ -5,13 +5,23 @@ Reads `dsl/entities/*.yaml` and `dsl/operations/*.yaml`, emits code at
 
   - `models.py`   — SQLAlchemy 2 table classes only (`Mapped[...] = mapped_column(...)`)
   - `schemas.py`  — plain Pydantic DTOs only (`{X}Read`, `{X}Create`, `{X}Update`)
-  - `router.py`   — async CRUD routes guarded by `get_current_user`
+  - `router.py`   — async CRUD routes guarded by `get_current_user`, emitted
+                    only for the entities that did not opt out (see
+                    `generate_router` below)
   - `operations.py` — business-operation stubs (never overwritten once implemented)
 
 The table/schema split is deliberate and is the reason the module does not use
 SQLModel: the public schema must be free to diverge from the table, because
 integer foreign keys may never leak into the API (see `expose_as_uuid` below and
 the "Public identifiers are UUIDs" decision in the root `docs/architecture.md`).
+
+An entity may set `generate_router: false` to opt out of the CRUD router. The
+generic CRUD it emits is only publishable when the entity's `Read` schema is
+safe to expose as-is; a domain whose public contract is hand-written in
+`operations.py` (finances) opts out, and so does an entity whose lifecycle
+belongs to a business operation (FamilyInvitation). Opting out is what keeps
+the alternative — 400+ lines of generated routes nobody registers — from
+accumulating as dead code.
 
 See `docs/dsl-rules.md` for the normative DSL specification.
 """
@@ -84,7 +94,7 @@ _SA_TYPE_BY_DSL: dict[str, str] = {
 
 
 def load_yaml(file_path: Path) -> Any:
-    """Carrega um arquivo YAML de forma segura."""
+    """Load a YAML file, returning None instead of raising on failure."""
     try:
         with open(file_path, encoding="utf-8") as f:
             return yaml.safe_load(f)
@@ -134,8 +144,8 @@ def _table_annotation(field: dict[str, Any]) -> str:
     annotation = _TABLE_ANNOTATION_BY_DSL.get(dsl_type)
     if annotation is None:
         raise ValueError(
-            f"campo {field['name']!r}: tipo {field['type']!r} não é mapeável para uma coluna. "
-            f"Tipos aceitos: {sorted(_TABLE_ANNOTATION_BY_DSL)}"
+            f"field {field['name']!r}: type {field['type']!r} does not map to a column. "
+            f"Accepted types: {sorted(_TABLE_ANNOTATION_BY_DSL)}"
         )
     return annotation
 
@@ -149,7 +159,7 @@ def _sa_type_expr(field: dict[str, Any]) -> str:
     expr = _SA_TYPE_BY_DSL.get(dsl_type)
     if expr is None:
         raise ValueError(
-            f"campo {field['name']!r}: tipo {field['type']!r} não tem tipo SQLAlchemy mapeado."
+            f"field {field['name']!r}: type {field['type']!r} has no SQLAlchemy type mapped."
         )
     return expr
 
@@ -168,7 +178,7 @@ def _default_expr(field: dict[str, Any]) -> str | None:
     if factory == "now_utc":
         return "lambda: datetime.now(UTC)"
     if factory:
-        raise ValueError(f"campo {field['name']!r}: default_factory {factory!r} desconhecido.")
+        raise ValueError(f"field {field['name']!r}: unknown default_factory {factory!r}.")
     if "default" in field:
         value = field["default"]
         if value is None:
@@ -178,7 +188,7 @@ def _default_expr(field: dict[str, Any]) -> str | None:
 
 
 def get_column_definition(field: dict[str, Any], *, autoincrement: bool = False) -> str:
-    """Emite a linha `nome: Mapped[T] = mapped_column(...)` de uma coluna."""
+    """Emit the `name: Mapped[T] = mapped_column(...)` line of a column."""
     name = field["name"]
     is_pk = bool(field.get("primary_key"))
     # A primary key is never nullable, whatever the YAML says.
@@ -209,7 +219,7 @@ def generate_relationships(
     relationships: list[dict[str, Any]],
     entity_table: dict[str, str] | None = None,
 ) -> list[str]:
-    """Gera as linhas de `relationship()` para uma entidade.
+    """Emit the `relationship()` lines of an entity.
 
     M:M relationships pass the association table by NAME
     (`secondary="family_member"`), never the link-model class: SQLAlchemy
@@ -239,10 +249,10 @@ def generate_relationships(
 
 
 def _build_table_args(entity_data: dict[str, Any]) -> str | None:
-    """Gera o bloco __table_args__ a partir do campo filters: do YAML.
+    """Emit the __table_args__ block from the YAML `filters:` field.
 
-    Retorna None quando não há filters declarados. O bloco pertence à classe de
-    tabela — os schemas Pydantic nunca o recebem.
+    Returns None when no filter is declared. The block belongs to the table
+    class — the Pydantic schemas never receive it.
     """
     filters = entity_data.get("filters", [])
     if not filters:
@@ -258,7 +268,7 @@ def _build_table_args(entity_data: dict[str, Any]) -> str | None:
 
 
 def _docstring_block(description: str) -> str:
-    """Docstring de classe, quebrada em múltiplas linhas quando excederia E501."""
+    """Class docstring, split over several lines when one line would trip E501."""
     single_line = f'    """{description}"""'
     if len(single_line) <= 88:
         return f'    """{description}"""\n'
@@ -270,7 +280,7 @@ def generate_models(
     entity_domain: dict[str, str],
     entity_table: dict[str, str] | None = None,
 ) -> str:
-    """Gera imports + a classe de tabela SQLAlchemy de uma entidade.
+    """Emit the imports plus the SQLAlchemy table class of an entity.
 
     Only the table class: the `{X}Read/{X}Create/{X}Update` DTOs are emitted by
     `generate_schemas` into `{domain}/schemas.py`.
@@ -364,7 +374,7 @@ def generate_models(
 
 
 def _relationship_target(rel: dict[str, Any]) -> str:
-    """Nome da classe referenciada por um relacionamento (sem `list[...]`)."""
+    """Name of the class a relationship points at (with `list[...]` stripped)."""
     raw = rel["type"].strip()
     inner = raw[5:-1].strip().strip('"') if raw.lower().startswith("list[") else raw.strip('"')
     if not inner or inner in STANDARD_TYPES or inner in SPECIAL_TYPES:
@@ -373,12 +383,12 @@ def _relationship_target(rel: dict[str, Any]) -> str:
 
 
 def generate_schemas(entity_data: dict[str, Any]) -> str:
-    """Gera imports + os três DTOs Pydantic (`Read`, `Create`, `Update`) de uma entidade.
+    """Emit the imports plus an entity's three Pydantic DTOs (`Read`/`Create`/`Update`).
 
-    `expose_as_uuid: true` substitui a FK inteira (`x_id`) pelo seu equivalente
-    público (`x_uuid: UUID`) nos três schemas, enquanto a tabela mantém a coluna
-    inteira. Isso é uma invariante do projeto: um id inteiro nunca aparece na
-    API pública.
+    `expose_as_uuid: true` replaces the integer FK (`x_id`) with its public
+    equivalent (`x_uuid: UUID`) in all three schemas, while the table keeps the
+    integer column. That is a project invariant: an integer id never appears in
+    the public api.
     """
     name = entity_data["name"]
     fields = entity_data.get("fields", [])
@@ -478,7 +488,7 @@ def generate_schemas(entity_data: dict[str, Any]) -> str:
 
 
 def generate_router(entity_data: dict[str, Any]) -> str:
-    """Gera o router CRUD async com auth para uma entidade."""
+    """Emit the async CRUD router, guarded by auth, for one entity."""
     name = entity_data["name"]
     var_name = name.lower()
     table_name = entity_data["table_name"]
@@ -590,16 +600,16 @@ async def delete_{var_name}(
 
 
 def generate_operations(op_data: dict[str, Any]) -> str:
-    """Gera stub de operations.py a partir de dsl/operations/{domain}.yaml."""
+    """Emit the operations.py stub from dsl/operations/{domain}.yaml."""
     domain = op_data["domain"]
     operations = op_data.get("operations", [])
-    # Deriva o nome da classe canônica do domínio via mapeamento explícito.
-    # NÃO usar domain.title(): para "families" produziria "Families" (classe
-    # inexistente).
+    # Derive the domain's canonical class name from the explicit mapping.
+    # Do NOT use domain.title(): for "families" it would produce "Families",
+    # which is not a class.
     if domain not in DOMAIN_TO_ENTITY_NAME:
         raise ValueError(
-            f"domain {domain!r} não mapeado em DOMAIN_TO_ENTITY_NAME. "
-            f"Adicione a entrada para o domínio antes de gerar operations.py."
+            f"domain {domain!r} is not mapped in DOMAIN_TO_ENTITY_NAME. "
+            f"Add the entry for the domain before generating operations.py."
         )
     domain_class = DOMAIN_TO_ENTITY_NAME[domain]
 
@@ -620,7 +630,8 @@ router = APIRouter(prefix="/{domain}", tags=["{domain_class}"])
         name = op["name"]
         method = op["method"].lower()
         path = op["path"]
-        # Remove prefix do path para o decorator (prefix já está no APIRouter)
+        # Strip the prefix from the path for the decorator (the APIRouter
+        # already carries it).
         decorator_path = path
         if decorator_path.startswith(f"/{domain}"):
             decorator_path = decorator_path[len(f"/{domain}") :]
@@ -641,9 +652,9 @@ router = APIRouter(prefix="/{domain}", tags=["{domain_class}"])
 def _build_domain_fk_graph(
     all_entities: list[dict[str, Any]],
 ) -> dict[str, set[str]]:
-    """Constrói grafo de dependências reais entre domínios via FKs nos fields.
+    """Build the real dependency graph between domains from the fields' FKs.
 
-    Retorna: {domain_A: {domain_B}} — domain_A tem FK para domain_B.
+    Returns: {domain_A: {domain_B}} — domain_A has an FK into domain_B.
     """
     table_to_domain: dict[str, str] = {
         entity_data["table_name"]: entity_data["domain"] for entity_data in all_entities
@@ -664,7 +675,7 @@ def _build_domain_fk_graph(
 
 
 def _split_imports_and_classes(block: str, domain: str) -> tuple[list[str], list[str]]:
-    """Separa as linhas de import das linhas de classe em um bloco gerado."""
+    """Split the import lines from the class lines of a generated block."""
     import_lines: list[str] = []
     class_lines: list[str] = []
     in_classes = False
@@ -690,10 +701,11 @@ def _assemble_module(
     late_bind_imports: set[str],
     class_blocks: list[str],
 ) -> str:
-    """Monta um módulo a partir dos imports coletados e dos blocos de classe.
+    """Assemble a module from the collected imports and the class blocks.
 
-    Ruff (isort) reordena os imports depois; o que importa aqui é que cada
-    import apareça uma única vez e que o bloco `TYPE_CHECKING` fique separado.
+    Ruff (isort) reorders the imports afterwards; what matters here is that
+    each import appears exactly once and that the `TYPE_CHECKING` block stays
+    separate.
     """
     result = ""
     # Generated modules DO carry `from __future__ import annotations`.
@@ -724,14 +736,14 @@ def _consolidate_models(
     entity_domain: dict[str, str],
     all_entities: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Consolida as classes de tabela de todas as entidades de um domínio.
+    """Consolidate the table classes of every entity of one domain.
 
-    Detecta ciclos de import entre domínios pelo grafo real de FKs e coloca os
-    imports que fechariam o ciclo sob `TYPE_CHECKING`. Isso é seguro porque
-    SQLAlchemy só precisa do NOME da classe (resolvido pelo registry) e do nome
-    da tabela secundária (resolvido por `Base.metadata`) — nenhuma referência de
-    runtime é necessária, e a ordem em que as classes são definidas é
-    irrelevante.
+    Import cycles between domains are detected from the real FK graph, and the
+    imports that would close a cycle are emitted under `TYPE_CHECKING`. That is
+    safe because SQLAlchemy only needs the class NAME (resolved through its
+    registry) and the secondary table name (resolved through `Base.metadata`) —
+    no runtime reference is required, and the order in which the classes are
+    defined is irrelevant.
     """
     if not entities:
         return ""
@@ -740,7 +752,7 @@ def _consolidate_models(
     fk_graph = _build_domain_fk_graph(all_entities) if all_entities else {}
 
     def _would_create_cycle(import_domain: str) -> bool:
-        """True se importar de import_domain fecharia um ciclo com este domínio."""
+        """True when importing from import_domain would close a cycle with this one."""
         return domain in fk_graph.get(import_domain, set())
 
     entity_table: dict[str, str] = {e["name"]: e["table_name"] for e in (all_entities or entities)}
@@ -771,7 +783,7 @@ def _consolidate_models(
 
 
 def _consolidate_schemas(entities: list[dict[str, Any]]) -> str:
-    """Consolida os DTOs Pydantic de todas as entidades não-link de um domínio."""
+    """Consolidate the Pydantic DTOs of every non-link entity of one domain."""
     if not entities:
         return ""
     domain = entities[0].get("domain", "")
@@ -792,11 +804,11 @@ def _consolidate_routers(
     domain: str,
     non_link_entities: list[dict[str, Any]],
 ) -> str:
-    """Consolida os routers de todas as entidades não-link de um domínio."""
+    """Consolidate the routers of the entities of one domain into one module."""
     if not non_link_entities:
         return ""
 
-    # Coletar todos os imports únicos
+    # Collect every distinct import
     all_imports: set[str] = set()
     router_vars: list[str] = []
     endpoint_blocks: list[str] = []
@@ -818,14 +830,14 @@ def _consolidate_routers(
             if is_import and not in_endpoints:
                 import_lines.append(line)
             elif line.startswith("router = APIRouter"):
-                # Renomear o router para evitar conflito de nomes
+                # Rename the router so the names cannot collide
                 name = entity_data["name"]
                 var = f"{name.lower()}_router"
                 router_var = var
                 router_def_lines.append(line.replace("router = ", f"{var} = "))
             elif in_endpoints or (line.startswith("@") and not line.startswith("@router")):
                 in_endpoints = True
-                # Substituir @router. pelo nome específico
+                # Replace @router. with this entity's router name
                 if line.startswith("@router."):
                     line = line.replace("@router.", f"@{router_var}.")
                 endpoint_lines.append(line)
@@ -834,7 +846,7 @@ def _consolidate_routers(
                 line = line.replace("@router.", f"@{router_var}.")
                 endpoint_lines.append(line)
             elif router_def_lines:
-                # Estamos após a definição do router
+                # We are past the router definition
                 if line.startswith("@"):
                     in_endpoints = True
                     line = line.replace("@router.", f"@{router_var}.")
@@ -849,20 +861,20 @@ def _consolidate_routers(
         if router_var:
             router_vars.append(router_var)
             router_def = "\n".join(router_def_lines)
-            # Remover linhas vazias no final dos endpoints
+            # Drop the trailing blank lines of the endpoint block
             while endpoint_lines and not endpoint_lines[-1].strip():
                 endpoint_lines.pop()
             endpoint_block = "\n".join(endpoint_lines)
             endpoint_blocks.append(f"{router_def}\n\n{endpoint_block}")
 
-    # Montar arquivo final
+    # Assemble the final module
     result = "from __future__ import annotations\n\n"
     result += "\n".join(sorted(all_imports)) + "\n"
     result += "\n\n"
     result += "\n\n\n".join(endpoint_blocks)
     result += "\n\n\n"
 
-    # Router raiz que agrega todos
+    # Root router aggregating all of them
     result += "router = APIRouter()\n"
     for var in router_vars:
         result += f"router.include_router({var})\n"
@@ -872,7 +884,7 @@ def _consolidate_routers(
 
 
 def main() -> None:
-    """Ponto de entrada do generator DSL."""
+    """Entry point of the DSL generator."""
     print("Starting Code Generation...")
 
     manifest = load_yaml(DSL_DIR / "manifest.yaml")
@@ -880,7 +892,7 @@ def main() -> None:
         return
     entity_files: list[str] = manifest.get("x-caramello-entities", [])
 
-    # Passo 1: construir entity_domain antes de gerar nada
+    # Step 1: build entity_domain before generating anything
     entity_domain: dict[str, str] = {}
     entities_by_domain: dict[str, list[dict[str, Any]]] = {}
     for entity_file in entity_files:
@@ -893,12 +905,12 @@ def main() -> None:
         entity_domain[data["name"]] = domain
         entities_by_domain.setdefault(domain, []).append(data)
 
-    # Coletar todas as entidades em lista plana para análise de ciclos
+    # Flatten every entity into one list, for the cycle analysis
     all_entities_flat = [
         e for domain_entities in entities_by_domain.values() for e in domain_entities
     ]
 
-    # Passo 2: gerar models.py, schemas.py e router.py por domínio (passagem única)
+    # Step 2: emit models.py, schemas.py and router.py per domain (single pass)
     for domain, entities in entities_by_domain.items():
         domain_dir = SRC_DIR / domain
         domain_dir.mkdir(parents=True, exist_ok=True)
@@ -908,18 +920,28 @@ def main() -> None:
         (domain_dir / "models.py").write_text(models_code)
         print(f"  wrote {domain_dir}/models.py")
 
-        # schemas.py e router.py: apenas entidades não-link (link models não têm DTOs)
+        # schemas.py and router.py: non-link entities only (link models have no DTOs)
         non_link = [e for e in entities if not e.get("is_link_model")]
         if non_link:
             schemas_code = _consolidate_schemas(non_link)
             (domain_dir / "schemas.py").write_text(schemas_code)
             print(f"  wrote {domain_dir}/schemas.py")
 
-            router_code = _consolidate_routers(domain, non_link)
-            (domain_dir / "router.py").write_text(router_code)
-            print(f"  wrote {domain_dir}/router.py")
+        # router.py: only the entities that did not opt out via
+        # `generate_router: false`. When every entity of the domain opts out no
+        # module is written at all, and a file left over from a previous run is
+        # deleted — the generator, not history, decides what exists.
+        routable = [e for e in non_link if e.get("generate_router", True)]
+        router_path = domain_dir / "router.py"
+        if routable:
+            router_code = _consolidate_routers(domain, routable)
+            router_path.write_text(router_code)
+            print(f"  wrote {router_path}")
+        elif router_path.exists():
+            router_path.unlink()
+            print(f"  removed {router_path} (every entity opts out of the CRUD router)")
 
-    # Passo 3: gerar operations.py por domínio (respeitando anotação)
+    # Step 3: emit operations.py per domain (honouring the annotation)
     if OPERATIONS_DIR.exists():
         for op_file in sorted(OPERATIONS_DIR.glob("*.yaml")):
             op_data = load_yaml(op_file)
@@ -936,19 +958,19 @@ def main() -> None:
             ops_path.write_text(ops_code)
             print(f"  wrote {ops_path}")
 
-    # Passo 4: formatar código gerado com ruff (fix + format) para garantir conformidade
+    # Step 4: run ruff (fix + format) over the generated code to keep it conformant
     _run_ruff_fix(SRC_DIR)
 
     print("Generation Complete.")
 
 
 def _run_ruff_fix(src_dir: Path) -> None:
-    """Executa ruff --fix e ruff format nos arquivos gerados.
+    """Run ruff --fix and ruff format over the generated files.
 
-    Descobre dinamicamente os diretórios de domínio em src_dir,
-    excluindo diretórios internos (_*) e os que não contêm código gerado:
-    shared, core, i18n e migrations (as revisions do Alembic são histórico
-    imutável e não devem ser reformatadas).
+    Discovers the domain directories under src_dir dynamically, excluding the
+    internal ones (_*) and those holding no generated code: shared, core, i18n
+    and migrations (the Alembic revisions are immutable history and must never
+    be reformatted).
     """
     import subprocess
 
@@ -961,12 +983,12 @@ def _run_ruff_fix(src_dir: Path) -> None:
     ]
     if not dirs:
         return
-    # 1. Aplicar fixes automáticos (isort, UP037, etc.)
+    # 1. Apply the automatic fixes (isort, UP037, ...)
     subprocess.run(
         ["python", "-m", "ruff", "check", "--fix", "--unsafe-fixes", *dirs],
         capture_output=True,
     )
-    # 2. Formatar (line length)
+    # 2. Format (line length)
     subprocess.run(
         ["python", "-m", "ruff", "format", *dirs],
         capture_output=True,

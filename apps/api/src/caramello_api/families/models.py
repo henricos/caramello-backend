@@ -56,7 +56,7 @@ class FamilyMember(Base):
 
 
 class FamilyInvitation(Base):
-    """Pré-registro de membro de família por email (D-01)."""
+    """Pre-registration of a family member by e-mail (D-01)."""
 
     __tablename__ = "family_invitation"
 

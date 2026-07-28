@@ -2,8 +2,8 @@
 
 - Lifespan: warms the JWKS cache via `shared.auth.fetch_jwks` (best-effort),
   then seeds the idempotent reference data (the allowlist's default e-mail)
-- Routers: `shared/` (health, auth, OAuth discovery) plus the `users/`,
-  `families/` and `finances/` domains
+- Routers: `shared/` (health, auth, OAuth discovery), unversioned, plus the
+  `users/`, `families/` and `finances/` domains under `/api/v1`
 - MCP: mounted after every router, so all of them are visible as tools
 """
 
@@ -37,6 +37,10 @@ settings = get_settings()
 
 logging.basicConfig(level=settings.log_level.upper())
 logger = logging.getLogger(__name__)
+
+# Version prefix of the business surface. Declared once, applied at router
+# registration (never inside a router), so the routers stay version-agnostic.
+_API_V1 = "/api/v1"
 
 
 def _resolve_version() -> str:
@@ -130,15 +134,26 @@ app.include_router(oauth_discovery.router)
 # consumer calls on its OIDC callback. Static path, no {uuid} to shadow.
 app.include_router(auth_router)
 
-# Routers per domain
+# Business routers per domain, versioned under /api/v1.
+#
+# The version prefix is applied HERE, at registration; each router only declares
+# its own resource prefix (`/users`, `/families`, `/finances`). That split is
+# what makes a future `/api/v2` a change in this file alone.
+#
+# Only business routes are versioned. The probe (`GET /health`), the
+# `.well-known` discovery documents and `POST /auth/verify` above stay
+# unversioned on purpose: a monitor's URL and a spec-defined URL must survive an
+# api version bump untouched, and a consumer must not have to guess a version to
+# find out whether the service is alive.
+#
 # IMPORTANT: operations (static routes) are registered BEFORE router (CRUD with
 # {uuid}) so that /users/me, /families/registry and /families/families are not
 # interpreted as UUIDs. FastAPI matches in registration order.
-app.include_router(user_operations.router)
-app.include_router(user_router.router)
-app.include_router(families_operations.router)
-app.include_router(families_router.router)
-app.include_router(finances_operations.router)
+app.include_router(user_operations.router, prefix=_API_V1)
+app.include_router(user_router.router, prefix=_API_V1)
+app.include_router(families_operations.router, prefix=_API_V1)
+app.include_router(families_router.router, prefix=_API_V1)
+app.include_router(finances_operations.router, prefix=_API_V1)
 
 # MCP — mount AFTER every include_router. Routers registered after
 # mount_http() do not show up as tools.

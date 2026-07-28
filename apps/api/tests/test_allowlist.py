@@ -1,8 +1,8 @@
-"""Infraestrutura do allowlist: tabela, seed idempotente e PUBLIC_URL.
+"""Allowlist infrastructure: table, idempotent seed and PUBLIC_URL.
 
-A tabela `allowed_emails` é infraestrutura de autorização, não entidade de
-negócio: não vem do DSL, não tem schema público e não tem rota. Estes testes
-travam exatamente essas propriedades.
+The `allowed_emails` table is authorization infrastructure, not a business
+entity: it does not come from the DSL, has no public schema and has no route.
+These tests lock down exactly those properties.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import pytest
 
 
 def test_allowed_email_table_shape():
-    """Colunas mínimas e ausência deliberada de `uuid` (nunca é exposta)."""
+    """Minimum columns and the deliberate absence of `uuid` (it is never exposed)."""
     from caramello_api.shared.models import AllowedEmail
 
     table = AllowedEmail.__table__
@@ -25,20 +25,20 @@ def test_allowed_email_table_shape():
     assert email.type.length == 320
     assert email.unique is True
     assert email.nullable is False
-    # Default do servidor: as inserções são `text()` puro, fora do flush do ORM.
+    # Server-side default: inserts are plain `text()`, outside the ORM flush.
     assert table.columns["created_at"].server_default is not None
     assert table.columns["created_at"].type.timezone is True
 
 
 def test_allowed_email_is_declared_outside_the_generated_modules():
-    """O gerador do DSL reescreve `{domain}/models.py`; a tabela não pode morar lá."""
+    """The DSL generator rewrites `{domain}/models.py`; the table cannot live there."""
     from caramello_api.shared.models import AllowedEmail
 
     assert AllowedEmail.__module__ == "caramello_api.shared.models"
 
 
 def test_allowed_email_is_visible_to_alembic():
-    """`migrations/env.py` precisa ver a tabela em `Base.metadata`."""
+    """`migrations/env.py` needs to see the table in `Base.metadata`."""
     from caramello_api.shared.base import Base
     from caramello_api.shared.models import AllowedEmail  # noqa: F401
 
@@ -61,7 +61,7 @@ def test_the_migration_0005_creates_the_table_with_a_named_unique_constraint():
 
 @pytest.mark.asyncio
 async def test_seed_default_reference_is_idempotent_and_normalizes():
-    """O seed usa ON CONFLICT DO NOTHING e grava o e-mail normalizado."""
+    """The seed uses ON CONFLICT DO NOTHING and stores the normalized e-mail."""
     from caramello_api.shared.seeds import DEFAULT_ALLOWED_EMAILS, seed_default_reference
 
     executed = []
@@ -94,7 +94,7 @@ def test_public_url_defaults_outside_production():
 
 
 def test_public_url_is_required_in_production(monkeypatch):
-    """Sem PUBLIC_URL o metadata de discovery anunciaria localhost — falha alto."""
+    """Without PUBLIC_URL the discovery metadata would advertise localhost — fail loudly."""
     from pydantic import ValidationError
 
     from caramello_api.core.config import Settings

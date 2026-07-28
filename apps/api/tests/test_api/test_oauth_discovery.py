@@ -1,7 +1,7 @@
-"""Endpoints de OAuth discovery (RFC 9728 / RFC 8414) consumidos por clientes MCP.
+"""OAuth discovery endpoints (RFC 9728 / RFC 8414) consumed by MCP clients.
 
-São públicos e sem versão: a URL é definida pela especificação, então nem
-autenticação nem prefixo de versão podem aparecer aqui.
+They are public and unversioned: the URL is fixed by the specification, so
+neither authentication nor a version prefix may show up here.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import pytest
     ],
 )
 def test_protected_resource_metadata(client, path):
-    """RFC 9728: identifica o recurso e o authorization server que o protege."""
+    """RFC 9728: identifies the resource and the authorization server protecting it."""
     from caramello_api.core.config import get_settings
 
     settings = get_settings()
@@ -39,7 +39,7 @@ def test_protected_resource_metadata(client, path):
 
 
 def test_authorization_server_metadata_relays_the_provider_document(client):
-    """RFC 8414: o documento do provedor é repassado como está."""
+    """RFC 8414: the provider's document is relayed as-is."""
     from caramello_api.shared import oauth_discovery
 
     document = {
@@ -60,7 +60,7 @@ def test_authorization_server_metadata_relays_the_provider_document(client):
 
 
 def test_authorization_server_metadata_is_503_when_the_provider_is_unreachable(client):
-    """Provedor fora do ar é falha de dependência (503), nunca 500."""
+    """A provider that is down is a dependency failure (503), never a 500."""
     from caramello_api.shared import oauth_discovery
 
     with patch.object(
@@ -75,6 +75,6 @@ def test_authorization_server_metadata_is_503_when_the_provider_is_unreachable(c
 
 
 def test_discovery_endpoints_are_public_and_out_of_the_schema(client):
-    """Sem token e fora do OpenAPI: são URLs de infraestrutura, não da API."""
+    """No token and out of OpenAPI: these are infrastructure URLs, not API ones."""
     schema = client.get("/openapi.json").json()
     assert not [path for path in schema["paths"] if path.startswith("/.well-known")]

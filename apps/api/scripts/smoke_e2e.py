@@ -1,16 +1,19 @@
-"""Smoke test E2E para Phase 3 — Gap 2 (verificação humana).
+"""E2E smoke check for Phase 3 — Gap 2 (human verification).
 
-Pré-requisitos:
-- App rodando em http://localhost:8000 (uvicorn caramello_api.main:app --reload)
-- .env configurado com KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID, DB_*
-- Banco familia_dev com migrations aplicadas (bin/manage_db upgrade)
-- Token Keycloak válido exportado como SMOKE_TOKEN
+Prerequisites:
+- The app running on http://localhost:8000 (uvicorn caramello_api.main:app --reload)
+- The environment configured with AUTH_OIDC_ISSUER, AUTH_OIDC_AUDIENCE, DATABASE_URL
+- The caramello_dev database migrated (bin/manage_db upgrade)
+- A valid access token exported as SMOKE_TOKEN
 
-Uso:
-    export SMOKE_TOKEN=$(...obter token via fluxo de password grant...)
+Usage:
+    export SMOKE_TOKEN=$(...obtain a token through the password grant...)
     uv run python scripts/smoke_e2e.py
 
-Saída: imprime PASS/FAIL para cada verificação e exit code 0 se tudo passou.
+Output: prints PASS/FAIL per check and exits 0 when everything passed.
+
+The business paths carry the `/api/v1` prefix; `GET /health` and the
+`.well-known` documents deliberately do not (see `main.py`).
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ import httpx
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8000")
 TOKEN = os.environ.get("SMOKE_TOKEN", "")
 
+API_V1 = "/api/v1"
+
 
 def _print_result(label: str, passed: bool, detail: str = "") -> None:
     status = "PASS" if passed else "FAIL"
@@ -34,11 +39,11 @@ def _print_result(label: str, passed: bool, detail: str = "") -> None:
 
 
 def check_unauthenticated() -> bool:
-    """AUTH-01: GET /user/me sem token retorna 401 ou 403."""
-    r = httpx.get(f"{BASE_URL}/user/me")
+    """AUTH-01: GET /users/me with no token answers 401 or 403."""
+    r = httpx.get(f"{BASE_URL}{API_V1}/users/me")
     ok = r.status_code in (401, 403)
     _print_result(
-        "AUTH-01 (sem token -> 401/403)",
+        "AUTH-01 (no token -> 401/403)",
         ok,
         f"status={r.status_code} body={r.text[:80]}",
     )
@@ -46,12 +51,12 @@ def check_unauthenticated() -> bool:
 
 
 def check_authenticated_get_me() -> tuple[bool, dict[str, Any]]:
-    """USER-01: GET /user/me com Bearer token retorna 200 + uuid/email/name."""
+    """USER-01: GET /users/me with a Bearer token answers 200 + uuid/email/name."""
     if not TOKEN:
-        _print_result("USER-01 (com token)", False, "SMOKE_TOKEN não definido")
+        _print_result("USER-01 (with a token)", False, "SMOKE_TOKEN is not set")
         return False, {}
     r = httpx.get(
-        f"{BASE_URL}/user/me",
+        f"{BASE_URL}{API_V1}/users/me",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
     body: dict[str, Any] = {}
@@ -59,7 +64,7 @@ def check_authenticated_get_me() -> tuple[bool, dict[str, Any]]:
         body = r.json()
     has_fields = r.status_code == 200 and "uuid" in body and "email" in body and "name" in body
     _print_result(
-        "USER-01 (com token -> 200 + uuid/email/name)",
+        "USER-01 (with a token -> 200 + uuid/email/name)",
         has_fields,
         f"status={r.status_code} body_keys={list(body.keys()) if body else 'n/a'}",
     )
@@ -67,16 +72,16 @@ def check_authenticated_get_me() -> tuple[bool, dict[str, Any]]:
 
 
 def check_idempotent_jit() -> bool:
-    """AUTH-02: segunda chamada com mesmo token NÃO altera resposta nem causa erro."""
+    """AUTH-02: a second call with the same token changes neither the answer nor the state."""
     if not TOKEN:
-        _print_result("AUTH-02 (idempotência)", False, "SMOKE_TOKEN não definido")
+        _print_result("AUTH-02 (idempotency)", False, "SMOKE_TOKEN is not set")
         return False
     r1 = httpx.get(
-        f"{BASE_URL}/user/me",
+        f"{BASE_URL}{API_V1}/users/me",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
     r2 = httpx.get(
-        f"{BASE_URL}/user/me",
+        f"{BASE_URL}{API_V1}/users/me",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
     uuids_match: str
@@ -90,7 +95,7 @@ def check_idempotent_jit() -> bool:
         and r1.json().get("uuid") == r2.json().get("uuid")
     )
     _print_result(
-        "AUTH-02 (idempotência: duas chamadas retornam mesmo uuid)",
+        "AUTH-02 (idempotency: two calls answer the same uuid)",
         ok,
         (f"r1.status={r1.status_code} r2.status={r2.status_code} uuids_equal={uuids_match}"),
     )
@@ -98,22 +103,35 @@ def check_idempotent_jit() -> bool:
 
 
 def check_crud_requires_auth() -> bool:
-    """AUTH-01 D-11: endpoints CRUD sem token também rejeitam."""
-    endpoints = ["/user/", "/family/", "/family_invitation/"]
+    """AUTH-01 D-11: the generated CRUD endpoints reject an anonymous caller too."""
+    endpoints = [f"{API_V1}/users/user/", f"{API_V1}/families/family/"]
     results = []
     for ep in endpoints:
         r = httpx.get(f"{BASE_URL}{ep}")
         results.append((ep, r.status_code in (401, 403), r.status_code))
     ok = all(passed for _, passed, _ in results)
     detail = "; ".join(f"{ep}->{code}" for ep, _, code in results)
-    _print_result("AUTH-01 D-11 (CRUD sem token -> 401/403)", ok, detail)
+    _print_result("AUTH-01 D-11 (CRUD with no token -> 401/403)", ok, detail)
+    return ok
+
+
+def check_health_is_unversioned() -> bool:
+    """The probe answers on `/health`, with no version prefix and no token."""
+    r = httpx.get(f"{BASE_URL}/health")
+    versioned = httpx.get(f"{BASE_URL}{API_V1}/health")
+    ok = r.status_code == 200 and versioned.status_code == 404
+    _print_result(
+        "HEALTH (unversioned 200, versioned 404)",
+        ok,
+        f"/health->{r.status_code} {API_V1}/health->{versioned.status_code}",
+    )
     return ok
 
 
 def inspect_token_audience() -> None:
-    """D-02: inspecionar claim 'aud' do token para decisão sobre verify_aud."""
+    """D-02: inspect the token's 'aud' claim, to decide about verify_aud."""
     if not TOKEN:
-        print("[INFO] D-02 análise de 'aud' pulada — sem SMOKE_TOKEN")
+        print("[INFO] D-02 'aud' analysis skipped — no SMOKE_TOKEN")
         return
     try:
         import jwt
@@ -122,31 +140,32 @@ def inspect_token_audience() -> None:
         aud = payload.get("aud")
         iss = payload.get("iss")
         sub = payload.get("sub")
-        print("[INFO] D-02 análise do token:")
+        print("[INFO] D-02 token analysis:")
         print(f"       sub={sub}")
         print(f"       iss={iss}")
-        print(f"       aud={aud!r} (tipo: {type(aud).__name__})")
-        client_id = os.environ.get("KEYCLOAK_CLIENT_ID", "")
-        if client_id:
-            if isinstance(aud, str) and aud == client_id:
-                print("       RECOMENDAÇÃO: ativar verify_aud=True (aud == KEYCLOAK_CLIENT_ID)")
-            elif isinstance(aud, list) and client_id in aud:
-                print("       RECOMENDAÇÃO: ativar verify_aud=True (KEYCLOAK_CLIENT_ID in aud)")
+        print(f"       aud={aud!r} (type: {type(aud).__name__})")
+        audience = os.environ.get("AUTH_OIDC_AUDIENCE", "")
+        if audience:
+            if isinstance(aud, str) and aud == audience:
+                print("       RECOMMENDATION: keep verify_aud=True (aud == AUTH_OIDC_AUDIENCE)")
+            elif isinstance(aud, list) and audience in aud:
+                print("       RECOMMENDATION: keep verify_aud=True (AUTH_OIDC_AUDIENCE in aud)")
             else:
                 print(
-                    "       RECOMENDAÇÃO: manter verify_aud=False"
-                    " (aud não bate com KEYCLOAK_CLIENT_ID)"
+                    "       WARNING: aud does not match AUTH_OIDC_AUDIENCE —"
+                    " this token will be rejected"
                 )
-    except Exception as exc:
-        print(f"[WARN] D-02 análise falhou: {exc}")
+    except Exception as exc:  # noqa: BLE001 — a diagnostic must never abort the run
+        print(f"[WARN] D-02 analysis failed: {exc}")
 
 
 def main() -> int:
-    print(f"=== Smoke E2E Phase 3 — base_url={BASE_URL} ===")
-    print(f"Token presente: {bool(TOKEN)}")
+    print(f"=== E2E smoke, Phase 3 — base_url={BASE_URL} ===")
+    print(f"Token present: {bool(TOKEN)}")
     print()
 
     results: list[bool] = []
+    results.append(check_health_is_unversioned())
     results.append(check_unauthenticated())
     results.append(check_crud_requires_auth())
     ok_get_me, _body = check_authenticated_get_me()
@@ -158,7 +177,7 @@ def main() -> int:
 
     passed = sum(1 for r in results if r)
     total = len(results)
-    print(f"=== Resultado: {passed}/{total} checks passaram ===")
+    print(f"=== Result: {passed}/{total} checks passed ===")
     return 0 if passed == total else 1
 
 

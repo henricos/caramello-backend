@@ -1,8 +1,8 @@
-"""Contrato de `POST /auth/verify` — a rota que o módulo web chama no callback OIDC.
+"""Contract of `POST /auth/verify` — the route the web module calls on its OIDC callback.
 
-O contrato é consumido por outro módulo, então a forma da resposta (200) e a
-forma dos erros (401/403) são testadas explicitamente: mudar qualquer uma delas
-quebra o login do web.
+The contract is consumed by another module, so the shape of the success body
+(200) and the shape of the errors (401/403) are asserted explicitly: changing
+either of them breaks the web module's login.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def test_verify_returns_the_documented_shape(client):
 
 
 def test_verify_exposes_a_null_name_when_the_provider_sent_none(client):
-    """`name` vazio no banco é exposto como null, nunca como string vazia."""
+    """An empty `name` in the database is exposed as null, never as an empty string."""
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
 
@@ -71,9 +71,15 @@ def test_verify_without_token_is_401_missing_token(client):
 
 
 def test_verify_route_is_unversioned(client):
-    """A rota não carrega prefixo de versão — o callback do web não pode mudar."""
+    """The route carries no version prefix — the web callback URL must never move.
+
+    The business routes are versioned (`/api/v1/...`); `POST /auth/verify`, the
+    health probe and the `.well-known` documents deliberately are not.
+    """
     from caramello_api.main import app
 
     paths = {route.path for route in app.routes if hasattr(route, "path")}
     assert "/auth/verify" in paths
-    assert not any(path.startswith("/api/v1") for path in paths)
+    assert "/api/v1/auth/verify" not in paths
+    # The exception is meaningful only because the rule exists next to it.
+    assert "/api/v1/users/me" in paths

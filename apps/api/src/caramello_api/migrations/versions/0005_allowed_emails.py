@@ -1,13 +1,13 @@
 """allowed_emails
 
-Cria a tabela do allowlist de e-mails — a primeira camada de autorização
-(quem pode usar o sistema), complementar a family_member (quais dados a
-pessoa alcança). Sem coluna uuid: a tabela nunca é exposta pela API.
+Creates the e-mail allowlist table — the first authorization layer (who may use
+the system at all), complementing family_member (which data that person
+reaches). No uuid column: the table is never exposed by the api.
 
-Nome no plural por alinhamento com o template do portfólio; as tabelas
-anteriores usam singular (user, family, account, ...) pela convenção mais
-antiga deste projeto e não são renomeadas — renomear custaria uma migração
-destrutiva sem nenhum ganho funcional.
+The name is plural to align with the portfolio template; the earlier tables use
+the singular (user, family, account, ...) following this project's older
+convention and are NOT renamed — renaming would cost a destructive migration
+for no functional gain.
 
 Revision ID: 0005
 Revises: 0004

@@ -1,18 +1,18 @@
 # CARAMELLO-GENERATED: implemented
-"""Operações de negócio do domínio families — Phase 4.
+"""Business operations of the families domain — Phase 4.
 
-Cobre:
-  - FAMILY-01: POST /families/registry (criar família + tornar-se owner)
-  - FAMILY-02: GET  /families/families (listar minhas famílias)
-  - FAMILY-03: GET  /families/families/{uuid} (detalhe se membro, 403 senão)
-  - D-07:      POST /families/families/{uuid}/pre-register (owner pré-registra email)
-  - D-07:      GET  /families/families/{uuid}/members (lista membros se membro)
-  - FAMILY-07: DELETE /families/families/{uuid}/members/{user_uuid} (owner remove)
+Covers:
+  - FAMILY-01: POST /families/registry (create a family, become its owner)
+  - FAMILY-02: GET  /families/families (list my families)
+  - FAMILY-03: GET  /families/families/{uuid} (detail when member, 403 otherwise)
+  - D-07:      POST /families/families/{uuid}/pre-register (owner pre-registers an e-mail)
+  - D-07:      GET  /families/families/{uuid}/members (member list, members only)
+  - FAMILY-07: DELETE /families/families/{uuid}/members/{user_uuid} (owner removes)
 
-NÃO implementado nesta fase (D-04 — deferidos para M2):
-  - FAMILY-04: POST /families/families/{uuid}/invitations (código convite reutilizável)
-  - FAMILY-05: POST /families/invitations/{code}/join (solicitação de entrada)
-  - FAMILY-06: PATCH /families/invitations/{id} (aprovar/rejeitar)
+NOT implemented in this phase (D-04 — deferred to M2):
+  - FAMILY-04: POST /families/families/{uuid}/invitations (reusable invite code)
+  - FAMILY-05: POST /families/invitations/{code}/join (join request)
+  - FAMILY-06: PATCH /families/invitations/{id} (approve/reject)
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from caramello_api.families.schemas import (
     FamilyInvitationRead,
     FamilyRead,
 )
+from caramello_api.i18n import error_detail
 from caramello_api.shared.auth import get_current_user
 from caramello_api.shared.database import get_session
 from caramello_api.users.models import User
@@ -39,18 +40,18 @@ router = APIRouter(prefix="/families", tags=["Family"])
 
 
 # ---------------------------------------------------------------------------
-# Schemas locais (não fazem parte da geração DSL — específicos das operações)
+# Local schemas (outside DSL generation — specific to these operations)
 # ---------------------------------------------------------------------------
 
 
 class PreRegisterBody(BaseModel):
-    """Body de POST /families/{uuid}/pre-register — só precisa do email do convidado."""
+    """Body of POST /families/{uuid}/pre-register — the invitee's e-mail is all it takes."""
 
     email: EmailStr
 
 
 class FamilyMemberRead(BaseModel):
-    """Retorno de GET /families/{uuid}/members. Inclui user_uuid resolvido via JOIN."""
+    """Response of GET /families/{uuid}/members. Carries user_uuid resolved through a JOIN."""
 
     user_uuid: UUID
     role: str
@@ -58,7 +59,7 @@ class FamilyMemberRead(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Helpers de autorização (D-13 — verificação de role)
+# Authorization helpers (D-13 — role check)
 # ---------------------------------------------------------------------------
 
 
@@ -67,9 +68,9 @@ async def _require_owner(
     current_user: User,
     session: AsyncSession,
 ) -> tuple[Family, FamilyMember]:
-    """Garante que o usuário é OWNER da família com o uuid dado.
+    """Ensure the user is the OWNER of the family with the given uuid.
 
-    Retorna (family, member) se sim; raise 403 caso contrário.
+    Returns (family, member) when they are; raises 403 otherwise.
     """
     result = await session.execute(
         select(Family, FamilyMember)
@@ -84,7 +85,7 @@ async def _require_owner(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas owner pode realizar esta operação",
+            detail=error_detail("auth.not_owner"),
         )
     family, member = row
     return family, member
@@ -95,9 +96,9 @@ async def _require_member(
     current_user: User,
     session: AsyncSession,
 ) -> Family:
-    """Garante que o usuário é MEMBRO (qualquer role) da família com o uuid dado.
+    """Ensure the user is a MEMBER (any role) of the family with the given uuid.
 
-    Retorna Family se sim; raise 403 caso contrário.
+    Returns the Family when they are; raises 403 otherwise.
     """
     result = await session.execute(
         select(Family)
@@ -111,7 +112,7 @@ async def _require_member(
     if family is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Você não é membro desta família",
+            detail=error_detail("auth.not_family_member"),
         )
     return family
 
@@ -127,15 +128,17 @@ async def registry_family(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Family:
-    """FAMILY-01: cria família e registra o usuário autenticado como owner."""
-    # exclude_unset=True + exclude_none=True para não sobrescrever defaults do modelo
-    # (ex: status="active" default em Family, que seria None se omitido em FamilyCreate)
+    """FAMILY-01: create a family and register the authenticated user as its owner."""
+    # exclude_none=True so the model's own defaults are not overwritten (e.g.
+    # Family.status defaults to "active", and would be None if FamilyCreate
+    # omitted it).
     family_data = family_in.model_dump(exclude_none=True)
     db_family = Family(**family_data)
     session.add(db_family)
-    # flush para obter db_family.id sem commitar — necessário para o FK do FamilyMember.
-    # RESOLVED (Open Question 1 do 04-RESEARCH.md): session.flush() com SQLAlchemy+asyncpg
-    # é seguro para obter PK autoincrement antes do commit (padrão estabelecido).
+    # flush to obtain db_family.id without committing — needed for the
+    # FamilyMember FK. RESOLVED (Open Question 1 of 04-RESEARCH.md):
+    # session.flush() with SQLAlchemy+asyncpg is a safe way to get an
+    # autoincrement PK before the commit (established pattern).
     await session.flush()
 
     owner_member = FamilyMember(
@@ -163,7 +166,7 @@ async def list_my_families(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[Family]:
-    """FAMILY-02: lista famílias onde o usuário autenticado é membro."""
+    """FAMILY-02: list the families the authenticated user belongs to."""
     from caramello_api.families.services import list_my_families as svc
 
     return await svc(session, current_user)
@@ -180,7 +183,7 @@ async def get_family_detail(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Family:
-    """FAMILY-03: retorna detalhes da família se o usuário é membro; 403 senão."""
+    """FAMILY-03: return the family's details when the user is a member; 403 otherwise."""
     return await _require_member(family_uuid, current_user, session)
 
 
@@ -199,8 +202,8 @@ async def pre_register_member(
     body: PreRegisterBody,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
-) -> FamilyInvitation:
-    """D-07: owner pré-registra um email para adesão automática (D-02 auto-join)."""
+) -> FamilyInvitationRead:
+    """D-07: the owner pre-registers an e-mail for automatic joining (D-02 auto-join)."""
     family, _ = await _require_owner(family_uuid, current_user, session)
 
     invitation = FamilyInvitation(
@@ -212,7 +215,19 @@ async def pre_register_member(
     session.add(invitation)
     await session.commit()
     await session.refresh(invitation)
-    return invitation
+
+    # The response is built field by field instead of being validated straight
+    # from the ORM instance: `FamilyInvitationRead` exposes the two foreign keys
+    # as UUIDs (`expose_as_uuid` in the DSL), and those attributes exist only
+    # here — the table itself keeps the integer columns.
+    return FamilyInvitationRead(
+        uuid=invitation.uuid,
+        family_uuid=family.uuid,
+        inviter_uuid=current_user.uuid,
+        email=invitation.email,
+        status=invitation.status,
+        created_at=invitation.created_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +244,7 @@ async def list_members(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[FamilyMemberRead]:
-    """D-07: lista todos os membros se o requisitante é membro da família."""
+    """D-07: list every member, provided the caller is a member of the family."""
     family = await _require_member(family_uuid, current_user, session)
 
     result = await session.execute(
@@ -263,16 +278,16 @@ async def remove_member(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
-    """FAMILY-07: owner remove membro da família; 403 caso contrário."""
+    """FAMILY-07: the owner removes a member from the family; 403 otherwise."""
     family, _ = await _require_owner(family_uuid, current_user, session)
 
-    # Localizar o user-alvo
+    # Locate the target user
     target_result = await session.execute(select(User).where(User.uuid == user_uuid))
     target_user = target_result.scalars().first()
     if target_user is None:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        raise HTTPException(status_code=404, detail=error_detail("families.user_not_found"))
 
-    # Localizar o membership
+    # Locate the membership
     member_result = await session.execute(
         select(FamilyMember).where(
             FamilyMember.family_id == family.id,
@@ -281,7 +296,10 @@ async def remove_member(
     )
     target_member = member_result.scalars().first()
     if target_member is None:
-        raise HTTPException(status_code=404, detail="Usuário não é membro desta família")
+        raise HTTPException(
+            status_code=404,
+            detail=error_detail("families.user_not_family_member"),
+        )
 
     await session.delete(target_member)
     await session.commit()

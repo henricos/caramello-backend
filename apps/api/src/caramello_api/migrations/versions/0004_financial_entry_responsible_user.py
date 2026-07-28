@@ -1,6 +1,6 @@
 """0004_financial_entry_responsible_user
 
-Adiciona campo responsible_user_id em financial_entry.
+Adds the responsible_user_id field to financial_entry.
 
 Revision ID: 0004
 Revises: 0003

@@ -21,12 +21,38 @@ _CATALOGS: dict[str, dict[str, str]] = {
 }
 
 
-def translate(key: str, locale: str = DEFAULT_LOCALE) -> str:
+def translate(key: str, locale: str = DEFAULT_LOCALE, **params: object) -> str:
     """Resolve `key` in the catalog for `locale`.
 
     Falls back to the default locale's catalog, and to the key itself when no
     entry exists — a missing translation must degrade to a readable code on
     the user's screen, never crash a request path.
+
+    `params` are interpolated with `str.format`, so a catalog entry may carry
+    placeholders (`"Linha {line}: ..."`). A placeholder the caller did not
+    supply degrades to the raw template for the same reason: a broken message
+    must not turn into a broken request. (A message may therefore not use
+    `{locale}` as a placeholder name.)
     """
     catalog = _CATALOGS.get(locale) or _CATALOGS[DEFAULT_LOCALE]
-    return catalog.get(key, key)
+    message = catalog.get(key, key)
+    if not params:
+        return message
+    try:
+        return message.format(**params)
+    except (KeyError, IndexError, ValueError):
+        return message
+
+
+def error_detail(key: str, **params: object) -> dict[str, str]:
+    """Build an error detail pairing a stable code with its localized text.
+
+    `key` is the fully namespaced catalog key (`families.user_not_found`); the
+    `reason` consumers branch on is its last segment, which keeps the wire
+    contract free of the catalog's internal layout. `message` is display text
+    and may change without breaking anyone.
+
+    This mirrors `shared.auth._error_detail`, which predates it and hardcodes
+    the `auth.` namespace of the only surface it serves.
+    """
+    return {"reason": key.rsplit(".", 1)[-1], "message": translate(key, **params)}

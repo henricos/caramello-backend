@@ -1,11 +1,11 @@
 """0002_finances_schema
 
-Schema financeiro do domínio finances — 5 tabelas:
-- category: categorias de classificação financeira (nível 1)
-- subcategory: subcategorias (nível 2, FK → category)
-- account: contas bancárias/cartões da família
-- movement: movimentações brutas do extrato (amount: NUMERIC(15,2))
-- financial_entry: lançamentos classificados (1:1 com movement via movement_id UNIQUE)
+Schema of the finances domain — 5 tables:
+- category: financial classification categories (level 1)
+- subcategory: subcategories (level 2, FK -> category)
+- account: the family's bank accounts/cards
+- movement: raw statement movements (amount: NUMERIC(15,2))
+- financial_entry: classified entries (1:1 with movement, through movement_id UNIQUE)
 
 Revision ID: 0002
 Revises: 0001
@@ -24,7 +24,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Tabelas sem dependências internas ao domínio finances primeiro
+    # The tables with no dependency inside the finances domain come first
     op.create_table(
         "category",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -64,7 +64,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_account_family_id", "account", ["family_id"], unique=False)
 
-    # Subcategory depende de category
+    # Subcategory depends on category
     op.create_table(
         "subcategory",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -83,7 +83,7 @@ def upgrade() -> None:
         "ix_subcategory_category_id", "subcategory", ["category_id"], unique=False
     )
 
-    # Movement depende de account; amount usa NUMERIC(15,2) — sem float (D-02)
+    # Movement depends on account; amount is NUMERIC(15,2) — never a float (D-02)
     op.create_table(
         "movement",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -103,15 +103,15 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["account_id"], ["account.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("import_hash"),  # deduplicação de extrato (D-10)
+        sa.UniqueConstraint("import_hash"),  # statement deduplication (D-10)
         sa.UniqueConstraint("uuid"),
     )
     op.create_index(
         "ix_movement_account_id", "movement", ["account_id"], unique=False
     )
 
-    # FinancialEntry depende de movement e subcategory; movement_id UNIQUE → 1:1 (D-05)
-    # Sem coluna amount ou type próprios (D-05)
+    # FinancialEntry depends on movement and subcategory; movement_id UNIQUE -> 1:1
+    # (D-05). It carries no amount or type column of its own (D-05).
     op.create_table(
         "financial_entry",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -129,7 +129,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["movement_id"], ["movement.id"]),
         sa.ForeignKeyConstraint(["subcategory_id"], ["subcategory.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("movement_id"),  # garante relação 1:1 com movement (D-05)
+        sa.UniqueConstraint("movement_id"),  # guarantees the 1:1 with movement (D-05)
         sa.UniqueConstraint("uuid"),
     )
     op.create_index(
@@ -147,7 +147,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop em ordem reversa de FK (financial_entry → movement → subcategory → account → category)
+    # Drop in reverse FK order
+    # (financial_entry -> movement -> subcategory -> account -> category)
     op.drop_index(
         "ix_financial_entry_subcategory_id", table_name="financial_entry"
     )

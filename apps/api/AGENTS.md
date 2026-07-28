@@ -7,10 +7,26 @@ O DSL em `dsl/` é **sempre a origem do código**. Nunca escreva código gerado 
 ### Entidades (`dsl/entities/*.yaml`)
 
 Os arquivos abaixo são **gerados automaticamente** — nunca edite:
-- `src/caramello/{domain}/models.py`
-- `src/caramello/{domain}/router.py`
+- `src/caramello_api/{domain}/models.py`
+- `src/caramello_api/{domain}/schemas.py`
+- `src/caramello_api/{domain}/router.py`
 
 Fluxo obrigatório: editar YAML → `bin/generate_code` → validar com `bin/validate_generation`.
+
+### CRUD gerado é opt-out por entidade
+
+Uma entidade pode declarar `generate_router: false` para **não** receber o router CRUD genérico. Quando todas as entidades de um domínio recusam, o generator não escreve `router.py` — e apaga o arquivo se ele existir de uma geração anterior. O generator é a fonte da verdade sobre o que existe; não apague nem crie esses arquivos à mão.
+
+Recuse o router quando o CRUD genérico não puder ser publicado como está:
+
+- **`finances` (todas as entidades)** — o contrato público do domínio é escrito à mão em `finances/operations.py`, com schemas `*Public` que resolvem UUID → id interno e checam pertencimento à família. O CRUD gerado publicaria `AccountRead`, `MovementRead` etc., que carregam as FKs inteiras internas.
+- **`FamilyInvitation`** — o ciclo de vida do convite pertence à operação `POST /families/families/{family_uuid}/pre-register`, que é onde mora a checagem de owner.
+
+Limitação conhecida do CRUD gerado: ele não sabe lidar com `expose_as_uuid`. O `Read` gerado passa a ter um campo `x_uuid` que não existe como atributo na tabela, e o `Create` gerado passaria `x_uuid` para o construtor do modelo. Ou seja: **entidade com `expose_as_uuid` precisa de `generate_router: false`** e de uma operação de negócio que monte o schema campo a campo (ver `pre_register_member`).
+
+### Rotas de negócio são versionadas
+
+O prefixo de versão (`/api/v1`) é aplicado **no registro**, em `main.py`; cada router declara apenas seu prefixo de recurso (`/users`, `/families`, `/finances`). Nunca coloque `/api/v1` dentro de um router nem em um path do DSL. `GET /health`, `POST /auth/verify`, os documentos `.well-known/*` e `GET /` ficam **sem versão** de propósito: URL de monitoração e URL definida por especificação não podem mudar quando a api sobe de versão.
 
 ### Operações de negócio (`dsl/operations/{domain}.yaml`)
 
@@ -23,7 +39,7 @@ Fluxo obrigatório para qualquer novo endpoint:
 
 Nunca adicione endpoints diretamente em `operations.py` sem passar pelo DSL. Se `operations.py` estiver marcado `# CARAMELLO-GENERATED: implemented`, isso não é licença para adicionar rotas sem DSL — apenas autoriza editar implementações já declaradas.
 
-Regras detalhadas: `docs/dsl_rules.md`.
+Regras detalhadas: `docs/dsl-rules.md`.
 
 ---
 
@@ -31,7 +47,10 @@ Regras detalhadas: `docs/dsl_rules.md`.
 
 - Toda entidade expõe `id` (int, PK interna) e `uuid` (UUID, identificador público).
 - URLs e respostas de API usam **sempre `uuid`**, nunca `id`.
-- A flag `expose_as_uuid` no DSL controla esse comportamento nas referências de entidade.
+- A flag `expose_as_uuid` no DSL controla esse comportamento nas referências de entidade: a tabela mantém a coluna inteira e os três schemas (`Read`/`Create`/`Update`) passam a expor `x_uuid: UUID`. É uma troca de campo entre schemas — **não** é mudança de banco, e portanto não gera migração.
+- Toda FK que apareça em um schema público precisa da flag. Isso inclui `FamilyInvitation.family_id` e `FamilyInvitation.inviter_id`, porque `FamilyInvitationRead` é a resposta de `POST /families/families/{family_uuid}/pre-register`.
+- As FKs inteiras que **sobram** nos schemas gerados de `finances` (`AccountRead.family_id`, `MovementRead.account_id`, `FinancialEntryRead.movement_id`/`subcategory_id`, `CategoryRead.family_id`, `SubcategoryRead.category_id`) não vazam porque nenhuma rota as serve: o domínio recusa o CRUD gerado e responde apenas com os schemas `*Public`. Se algum dia esses schemas forem publicados, cada FK precisa da flag primeiro.
+- Ao usar a flag, monte a resposta campo a campo na operação: o atributo `x_uuid` não existe na instância ORM, então `model_validate(orm_obj)` falharia.
 
 ---
 

@@ -7,9 +7,14 @@
  * diff. Public identifiers are UUIDs — the api never exposes integer ids (see
  * "Public identifiers are UUIDs" in the root `docs/architecture.md`).
  *
- * Routes carry NO version prefix: the api mounts its routers at `/users`,
- * `/families`, `/finances`, and `APP_BASE_PATH` (when set) is applied by the
- * api itself through `root_path`, so it is already part of `API_URL`.
+ * The api's business routes are versioned: it mounts `/users`, `/families` and
+ * `/finances` under `/api/v1`, so every path below carries that prefix through
+ * `API_V1`. The exception is `POST /auth/verify`, which stays unversioned — same
+ * as `GET /health` and the `.well-known` documents — because it is the URL the
+ * OIDC callback hits and it must not move with an api version bump.
+ *
+ * `APP_BASE_PATH` (when set) is applied by the api itself through `root_path`,
+ * so it is already part of `API_URL` and never appears here.
  *
  * Every exported function runs in `apps/web`'s Node process, never in the
  * browser: the access token is read server-side by `getAccessToken` and never
@@ -29,6 +34,9 @@ import { env } from "./env";
  * request for the runtime's multi-minute default.
  */
 const API_TIMEOUT_MS = 10_000;
+
+/** Version prefix of the api's business surface (see the module docstring). */
+const API_V1 = "/api/v1";
 
 /** Local `JWT` extension with only the field read here (see `src/auth.ts`). */
 interface OidcJWT extends JWT {
@@ -127,12 +135,12 @@ async function readErrorDetail(response: Response): Promise<string | undefined> 
   }
 }
 
-/** `GET /users/me` — the authenticated user's own profile. */
+/** `GET /api/v1/users/me` — the authenticated user's own profile. */
 export async function getMe(): Promise<UserRead> {
-  return await apiFetch<UserRead>("/users/me");
+  return await apiFetch<UserRead>(`${API_V1}/users/me`);
 }
 
-/** `GET /families/families` — the families the caller belongs to. */
+/** `GET /api/v1/families/families` — the families the caller belongs to. */
 export async function listMyFamilies(): Promise<FamilyRead[]> {
-  return await apiFetch<FamilyRead[]>("/families/families");
+  return await apiFetch<FamilyRead[]>(`${API_V1}/families/families`);
 }

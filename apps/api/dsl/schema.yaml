@@ -8,13 +8,19 @@ properties:
     description: "The name of the entity (e.g., User)."
   domain:
     type: string
-    description: "Domínio de negócio para output do generator (ex: user, family)."
+    description: "Business domain the generator writes the output to (e.g. users, families)."
   description:
     type: string
     description: "A brief description of the entity."
   table_name:
     type: string
     description: "The table name in the database."
+  is_link_model:
+    type: boolean
+    description: "True for an M:M association table: no id, no uuid, no DTOs, no router."
+  generate_router:
+    type: boolean
+    description: "False opts the entity out of the generated CRUD router (default: true)."
 
   fields:
     type: array
@@ -49,6 +55,12 @@ properties:
         max_length:
           type: integer
           description: "Maximum length for string type fields."
+        foreign_key:
+          type: string
+          description: "Referenced column, as `table.column` (e.g. user.id)."
+        expose_as_uuid:
+          type: boolean
+          description: "Replaces the integer FK with its `_uuid` counterpart in the public schemas."
       required:
         - name
         - type
@@ -80,13 +92,13 @@ properties:
 
   filters:
     type: array
-    description: "Filtros naturais da entidade — geram Index no banco via __table_args__."
+    description: "Natural filters of the entity — emitted as an Index through __table_args__."
     items:
       type: object
       properties:
         fields:
           type: array
-          description: "Campos que compõem o filtro (índice simples ou composto)."
+          description: "Fields making up the filter (single-column or composite index)."
           items:
             type: string
       required:

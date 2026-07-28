@@ -1,17 +1,17 @@
-"""Testes para src/caramello_api/finances/operations.py — ACC-01, ACC-02, ACC-03,
+"""Tests for src/caramello_api/finances/operations.py — ACC-01, ACC-02, ACC-03,
 CAT-01, CAT-02, CAT-03, CAT-04, AUTH-FIN-01, AUTH-FIN-02.
 
-Estes testes começam skipados (módulo finances/operations ainda não implementado).
-Cada teste usa pytest.importorskip para falhar limpo até a implementação
-chegar (planos 07-02 e 07-03). Quando operations.py for marcado como
-`# CARAMELLO-GENERATED: implemented`, os testes passam a executar automaticamente.
+These tests start out skipped (the finances/operations module is not implemented
+yet). Each test uses pytest.importorskip so it fails cleanly until the
+implementation lands (plans 07-02 and 07-03). Once operations.py is marked as
+`# CARAMELLO-GENERATED: implemented`, the tests start running automatically.
 
-Estratégia (igual a tests/test_family_operations.py):
+Strategy (same as tests/test_family_operations.py):
 - app.dependency_overrides[get_current_user] = lambda: fake_user
-- AsyncMock para get_session, com `session.execute` montado por `execute_mock`
-  (ver tests/conftest.py): o handler de entidade responde aos selects de uma
-  única entidade (`.scalars()`), o handler de rows às queries multi-entidade
-- TestClient(app) sem context manager (evita disparar lifespan/fetch_jwks)
+- AsyncMock for get_session, with `session.execute` wired up by `execute_mock`
+  (see tests/conftest.py): the entity handler answers single-entity selects
+  (`.scalars()`), the row handler answers multi-entity queries
+- TestClient(app) without a context manager (avoids triggering lifespan/fetch_jwks)
 """
 
 from __future__ import annotations
@@ -28,35 +28,24 @@ from tests.conftest import apply_column_defaults, constant, execute_mock, refres
 
 
 def _skip_if_stub() -> None:
-    """Salta o teste se finances/operations.py ainda está marcado como stub.
+    """Skip the test if finances/operations.py is still marked as a stub.
 
-    Mecanismo: importorskip tenta importar o módulo; se importar, verifica
-    a anotação na primeira linha. Se for 'stub', emite skip explícito.
-    Quando operations.py tiver '# CARAMELLO-GENERATED: implemented', a
-    verificação passa e os testes executam normalmente.
+    How it works: importorskip tries to import the module; if the import
+    succeeds, the annotation on the first line is checked. If it says 'stub',
+    an explicit skip is emitted. Once operations.py carries
+    '# CARAMELLO-GENERATED: implemented', the check passes and the tests run
+    normally.
     """
     pytest.importorskip("caramello_api.finances.operations")
     ops_path = Path(__file__).resolve().parents[1] / "src/caramello_api/finances/operations.py"
     if ops_path.exists():
         first_line = ops_path.read_text().splitlines()[0].strip()
         if "stub" in first_line:
-            pytest.skip("finances/operations.py ainda é stub — aguardando plano 07-02")
-
-
-def _skip_if_phase9_missing() -> None:
-    """Salta o teste se os endpoints da fase 9 ainda não foram implementados.
-
-    Verifica se o router de finances tem o endpoint reconcile registrado.
-    Plano 09-04 Task 3 remove este guard quando todos os endpoints chegarem.
-    """
-    ops_mod = pytest.importorskip("caramello_api.finances.operations")
-    paths = {getattr(r, "path", None) for r in ops_mod.router.routes}
-    if "/finances/movements/{movement_uuid}/reconcile" not in paths:
-        pytest.skip("Fase 9 endpoints ainda não implementados — aguardando plano 09-03/09-04")
+            pytest.skip("finances/operations.py is still a stub — waiting on plan 07-02")
 
 
 def _make_fake_user(user_id: int = 42):
-    """Constrói User válido — importa lazy (suporta users/ e user/ modules)."""
+    """Build a valid User — lazy import (supports both users/ and user/ modules)."""
     try:
         from caramello_api.users.models import User  # type: ignore[import-not-found]
     except ModuleNotFoundError:
@@ -73,27 +62,27 @@ def _make_fake_user(user_id: int = 42):
 
 
 def test_finances_module_exists():
-    """Plano 07-02/07-03: módulo src/caramello_api/finances/operations.py existe."""
+    """Plan 07-02/07-03: the src/caramello_api/finances/operations.py module exists."""
     pytest.importorskip("caramello_api.finances.operations")
 
 
 def test_finances_operations_annotation_is_implemented():
-    """Plano 07-02: primeira linha == # CARAMELLO-GENERATED: implemented."""
+    """Plan 07-02: first line == # CARAMELLO-GENERATED: implemented."""
     _skip_if_stub()
     ops_path = Path(__file__).resolve().parents[1] / "src/caramello_api/finances/operations.py"
     if not ops_path.exists():
-        pytest.skip("finances/operations.py ainda não foi gerado/implementado")
+        pytest.skip("finances/operations.py has not been generated/implemented yet")
     first_line = ops_path.read_text().splitlines()[0].strip()
     assert first_line == "# CARAMELLO-GENERATED: implemented", (
-        f"Anotação deve ser 'implemented' após plano 07-02; foi: {first_line!r}"
+        f"Annotation must be 'implemented' after plan 07-02; got: {first_line!r}"
     )
 
 
 def test_finances_router_paths():
-    """CAT-03: router tem os paths esperados (fases 7-8).
+    """CAT-03: the router exposes the expected paths (phases 7-8).
 
-    Fase 9 paths são verificados em test_finances_router_paths_phase9 (guarded)
-    e serão habilitados pelo plano 09-04 Task 3 quando os endpoints chegarem.
+    Phase 9 paths are checked in test_finances_router_paths_phase9 (guarded) and
+    get enabled by plan 09-04 Task 3 once the endpoints land.
     """
     _skip_if_stub()
     ops_mod = pytest.importorskip("caramello_api.finances.operations")
@@ -112,16 +101,16 @@ def test_finances_router_paths():
     }
     missing = expected - paths
     assert not missing, (
-        f"Sub-paths faltando em finances.operations.router: {missing}. "
-        f"Encontrados: {paths}. Prefix do router: {router.prefix!r}"
+        f"Sub-paths missing from finances.operations.router: {missing}. "
+        f"Found: {paths}. Router prefix: {router.prefix!r}"
     )
 
 
 def test_finances_router_paths_phase9():
-    """Valida os 8 paths da fase 9 — todos implementados pelo plano 09-03/09-04.
+    """Validates the 8 Phase 9 paths — all implemented by plan 09-03/09-04.
 
-    Plano 09-04 Task 3: guard _skip_if_phase9_missing removido — endpoints agora
-    são assertados diretamente sem condição de skip.
+    Plan 09-04 Task 3: the phase-9 skip guard is gone (helper deleted) — the
+    endpoints are now asserted directly, with no skip condition.
     """
     _skip_if_stub()
     ops_mod = pytest.importorskip("caramello_api.finances.operations")
@@ -139,14 +128,14 @@ def test_finances_router_paths_phase9():
     }
     missing = phase9_expected - paths
     assert not missing, (
-        f"Fase 9 paths ausentes em finances.operations.router: {missing}. Encontrados: {paths}"
+        f"Phase 9 paths missing from finances.operations.router: {missing}. Found: {paths}"
     )
 
 
 def test_create_account_returns_uuid():
-    """ACC-01: POST /finances/accounts retorna uuid sem id/family_id internos.
+    """ACC-01: POST /finances/accounts returns uuid without the internal id/family_id.
 
-    T-07-01: resposta pública NÃO expõe `id` nem `family_id`.
+    T-07-01: the public response does NOT expose `id` or `family_id`.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -186,10 +175,10 @@ def test_create_account_returns_uuid():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Primeiro exec: busca Family por uuid
+            # First exec: look up Family by uuid
             r.first.return_value = fake_family
         elif call_count[0] == 2:
-            # Segundo exec: busca FamilyMember (membership check) — retorna membro válido
+            # Second exec: look up FamilyMember (membership check) — returns a valid member
             r.first.return_value = MagicMock()
         else:
             r.first.return_value = None
@@ -216,7 +205,7 @@ def test_create_account_returns_uuid():
     try:
         client = TestClient(app)
         response = client.post(
-            "/finances/accounts",
+            "/api/v1/finances/accounts",
             json={
                 "family_uuid": str(family_uuid),
                 "name": "Conta Corrente",
@@ -226,17 +215,17 @@ def test_create_account_returns_uuid():
         )
         assert response.status_code == 201, response.text
         body = response.json()
-        assert "uuid" in body, f"Resposta deve conter 'uuid'; body: {body}"
-        assert "family_uuid" in body, f"Resposta deve conter 'family_uuid'; body: {body}"
-        # T-07-01: resposta NÃO deve expor chaves internas
-        assert "id" not in body, f"Resposta NÃO deve expor 'id'; body: {body}"
-        assert "family_id" not in body, f"Resposta NÃO deve expor 'family_id'; body: {body}"
+        assert "uuid" in body, f"Response must contain 'uuid'; body: {body}"
+        assert "family_uuid" in body, f"Response must contain 'family_uuid'; body: {body}"
+        # T-07-01: the response must NOT expose internal keys
+        assert "id" not in body, f"Response must NOT expose 'id'; body: {body}"
+        assert "family_id" not in body, f"Response must NOT expose 'family_id'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_list_accounts_scoped_to_family():
-    """ACC-02: GET /finances/accounts?family_uuid=xxx retorna apenas contas da família."""
+    """ACC-02: GET /finances/accounts?family_uuid=xxx returns only that family's accounts."""
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
@@ -275,15 +264,15 @@ def test_list_accounts_scoped_to_family():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Primeiro exec: busca Family por uuid
+            # First exec: look up Family by uuid
             r.first.return_value = fake_family
             r.all.return_value = [fake_family]
         elif call_count[0] == 2:
-            # Segundo exec: busca FamilyMember (membership check)
+            # Second exec: look up FamilyMember (membership check)
             r.first.return_value = MagicMock()
             r.all.return_value = []
         else:
-            # Terceiro exec: lista contas da família
+            # Third exec: list the family's accounts
             r.first.return_value = None
             r.all.return_value = [fake_account]
         return r
@@ -299,18 +288,18 @@ def test_list_accounts_scoped_to_family():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts?family_uuid={family_uuid}")
+        response = client.get(f"/api/v1/finances/accounts?family_uuid={family_uuid}")
         assert response.status_code == 200, response.text
         body = response.json()
-        assert isinstance(body, list), f"Resposta deve ser lista; foi: {type(body)}"
+        assert isinstance(body, list), f"Response must be a list; got: {type(body)}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_accounts_require_auth():
-    """AUTH-FIN-01: sem override de get_current_user, /finances/accounts retorna 401.
+    """AUTH-FIN-01: without a get_current_user override, /finances/accounts returns 401.
 
-    _HTTPBearer401 retorna 401 para token ausente (RFC 7235 §3.1).
+    _HTTPBearer401 returns 401 when the token is missing (RFC 7235 §3.1).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -330,13 +319,13 @@ def test_accounts_require_auth():
     def _session_override():
         yield mock_session
 
-    # Não sobrescreve get_current_user — _HTTPBearer401 levanta 401
+    # Does not override get_current_user — _HTTPBearer401 raises 401
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts?family_uuid={uuid4()}")
+        response = client.get(f"/api/v1/finances/accounts?family_uuid={uuid4()}")
         assert response.status_code == 401, (
-            f"Esperado 401 para requisição sem autenticação; recebido: {response.status_code}. "
+            f"Expected 401 for an unauthenticated request; got: {response.status_code}. "
             f"Body: {response.text}"
         )
     finally:
@@ -344,10 +333,10 @@ def test_accounts_require_auth():
 
 
 def test_accounts_403_non_member():
-    """AUTH-FIN-02: usuário autenticado mas não-membro recebe 403.
+    """AUTH-FIN-02: an authenticated but non-member user gets 403.
 
-    Mock retorna Family existente porém FamilyMember ausente (first()=None
-    na query de membership).
+    The mock returns an existing Family but no FamilyMember (first()=None on the
+    membership query).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -375,10 +364,10 @@ def test_accounts_403_non_member():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Primeiro exec: busca Family por uuid — encontra
+            # First exec: look up Family by uuid — found
             r.first.return_value = fake_family
         else:
-            # Segundo exec: busca FamilyMember — não encontra (non-member)
+            # Second exec: look up FamilyMember — not found (non-member)
             r.first.return_value = None
         r.all.return_value = []
         return r
@@ -394,18 +383,19 @@ def test_accounts_403_non_member():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts?family_uuid={family_uuid}")
+        response = client.get(f"/api/v1/finances/accounts?family_uuid={family_uuid}")
         assert response.status_code == 403, (
-            f"Esperado 403 para não-membro; recebido: {response.status_code}. Body: {response.text}"
+            f"Expected 403 for a non-member; got: {response.status_code}. Body: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()
 
 
 def test_archive_account():
-    """ACC-03: PATCH /finances/accounts/{uuid} com is_active=false arquiva sem deletar.
+    """ACC-03: PATCH /finances/accounts/{uuid} with is_active=false archives without deleting.
 
-    Verifica que resposta retorna is_active=False e session.delete não foi chamado.
+    Checks that the response returns is_active=False and that session.delete was
+    never called.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
@@ -446,13 +436,13 @@ def test_archive_account():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Primeiro exec: busca Account por uuid
+            # First exec: look up Account by uuid
             r.first.return_value = fake_account
         elif call_count[0] == 2:
-            # Segundo exec: busca Family por id
+            # Second exec: look up Family by id
             r.first.return_value = fake_family
         else:
-            # Terceiro exec: busca FamilyMember (membership check)
+            # Third exec: look up FamilyMember (membership check)
             r.first.return_value = MagicMock()
         r.all.return_value = []
         return r
@@ -472,20 +462,20 @@ def test_archive_account():
     try:
         client = TestClient(app)
         response = client.patch(
-            f"/finances/accounts/{account_uuid}",
+            f"/api/v1/finances/accounts/{account_uuid}",
             json={"is_active": False},
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body.get("is_active") is False, f"Resposta deve ter is_active=False; body: {body}"
-        # ACC-03: arquivamento nunca deleta — session.delete não deve ter sido chamado
+        assert body.get("is_active") is False, f"Response must have is_active=False; body: {body}"
+        # ACC-03: archiving never deletes — session.delete must not have been called
         mock_session.delete.assert_not_called()
     finally:
         app.dependency_overrides.clear()
 
 
 def test_create_category():
-    """CAT-01: POST /finances/categories cria categoria pai scoped por família."""
+    """CAT-01: POST /finances/categories creates a parent category scoped to a family."""
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
@@ -521,10 +511,10 @@ def test_create_category():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Primeiro exec: busca Family por uuid
+            # First exec: look up Family by uuid
             r.first.return_value = fake_family
         elif call_count[0] == 2:
-            # Segundo exec: busca FamilyMember (membership check)
+            # Second exec: look up FamilyMember (membership check)
             r.first.return_value = MagicMock()
         else:
             r.first.return_value = None
@@ -551,7 +541,7 @@ def test_create_category():
     try:
         client = TestClient(app)
         response = client.post(
-            "/finances/categories",
+            "/api/v1/finances/categories",
             json={
                 "family_uuid": str(family_uuid),
                 "name": "Transporte",
@@ -559,13 +549,15 @@ def test_create_category():
         )
         assert response.status_code == 201, response.text
         body = response.json()
-        assert "uuid" in body, f"Resposta deve conter 'uuid'; body: {body}"
+        assert "uuid" in body, f"Response must contain 'uuid'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_list_update_categories():
-    """CAT-04: GET /finances/categories?family_uuid=xxx (200) e PATCH /finances/categories/{uuid} (200)."""
+    """CAT-04: GET /finances/categories?family_uuid=xxx (200) and
+    PATCH /finances/categories/{uuid} (200).
+    """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
@@ -596,7 +588,7 @@ def test_list_update_categories():
         updated_at=datetime.now(UTC),
     )
 
-    # --- Teste GET ---
+    # --- GET test ---
     call_count = [0]
 
     def _exec_list(_stmt):
@@ -624,26 +616,26 @@ def test_list_update_categories():
     app.dependency_overrides[get_session] = _session_override_list
     try:
         client = TestClient(app)
-        response_list = client.get(f"/finances/categories?family_uuid={family_uuid}")
+        response_list = client.get(f"/api/v1/finances/categories?family_uuid={family_uuid}")
         assert response_list.status_code == 200, response_list.text
         assert isinstance(response_list.json(), list)
     finally:
         app.dependency_overrides.clear()
 
-    # --- Teste PATCH ---
+    # --- PATCH test ---
     call_count_patch = [0]
 
     def _exec_patch(_stmt):
         r = MagicMock()
         call_count_patch[0] += 1
         if call_count_patch[0] == 1:
-            # Busca Category por uuid
+            # Look up Category by uuid
             r.first.return_value = fake_category
         elif call_count_patch[0] == 2:
-            # Busca Family por id
+            # Look up Family by id
             r.first.return_value = fake_family
         else:
-            # Busca FamilyMember (membership check)
+            # Look up FamilyMember (membership check)
             r.first.return_value = MagicMock()
         r.all.return_value = []
         return r
@@ -662,7 +654,7 @@ def test_list_update_categories():
     try:
         client = TestClient(app)
         response_patch = client.patch(
-            f"/finances/categories/{category_uuid}",
+            f"/api/v1/finances/categories/{category_uuid}",
             json={"name": "Transporte Atualizado"},
         )
         assert response_patch.status_code == 200, response_patch.text
@@ -671,7 +663,7 @@ def test_list_update_categories():
 
 
 def test_create_subcategory():
-    """CAT-02: POST /finances/subcategory cria subcategoria via category_uuid."""
+    """CAT-02: POST /finances/subcategory creates a subcategory via category_uuid."""
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
@@ -719,13 +711,13 @@ def test_create_subcategory():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Primeiro exec: busca Category por uuid
+            # First exec: look up Category by uuid
             r.first.return_value = fake_category
         elif call_count[0] == 2:
-            # Segundo exec: busca Family por id
+            # Second exec: look up Family by id
             r.first.return_value = fake_family
         elif call_count[0] == 3:
-            # Terceiro exec: busca FamilyMember (membership check)
+            # Third exec: look up FamilyMember (membership check)
             r.first.return_value = MagicMock()
         else:
             r.first.return_value = None
@@ -752,7 +744,7 @@ def test_create_subcategory():
     try:
         client = TestClient(app)
         response = client.post(
-            "/finances/subcategory",
+            "/api/v1/finances/subcategory",
             json={
                 "category_uuid": str(category_uuid),
                 "name": "Gasolina",
@@ -760,26 +752,25 @@ def test_create_subcategory():
         )
         assert response.status_code == 201, response.text
         body = response.json()
-        assert "uuid" in body, f"Resposta deve conter 'uuid'; body: {body}"
+        assert "uuid" in body, f"Response must contain 'uuid'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 # =============================================================================
 # Phase 8: Movement endpoints — MOV-01..05, D-15, AUTH-FIN-01/02
-# Stubs Nyquist — red/skipados até planos 08-02/08-03/08-04 entregarem implementação
+# Nyquist stubs — red/skipped until plans 08-02/08-03/08-04 deliver the implementation
 # =============================================================================
 
 
 def test_create_movement():
-    """MOV-01: POST /finances/accounts/{uuid}/movements cria movimentação, retorna 201 + uuid.
+    """MOV-01: POST /finances/accounts/{uuid}/movements creates a movement, returns 201 + uuid.
 
-    Stub Nyquist — red/skip até operations.py ter o endpoint implementado (plano 08-02).
+    Nyquist stub — red/skip until operations.py implements the endpoint (plan 08-02).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -787,17 +778,7 @@ def test_create_movement():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
     movement_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -816,18 +797,18 @@ def test_create_movement():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Resolve Account por uuid
+            # Resolve Account by uuid
             r.first.return_value = fake_account
         elif call_count[0] == 2:
-            # Membership check — membro válido
+            # Membership check — valid member
             r.first.return_value = MagicMock()
         else:
-            # Hash pre-check: nenhum hash existente (nova movimentação)
+            # Hash pre-check: no existing hash (new movement)
             r.first.return_value = None
         r.all.return_value = []
         return r
 
-    # Resultado das queries multi-entidade: pre-check de hash em lote
+    # Result of the multi-entity queries: batched hash pre-check
     mock_execute_result = MagicMock()
     mock_execute_result.fetchall.return_value = []
 
@@ -850,7 +831,7 @@ def test_create_movement():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/accounts/{account_uuid}/movements",
+            f"/api/v1/finances/accounts/{account_uuid}/movements",
             json={
                 "date": "2026-01-15",
                 "amount": "-150.00",
@@ -859,20 +840,19 @@ def test_create_movement():
         )
         assert response.status_code == 201, response.text
         body = response.json()
-        assert "uuid" in body, f"Resposta deve conter 'uuid'; body: {body}"
+        assert "uuid" in body, f"Response must contain 'uuid'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_create_movement_409_duplicate():
-    """MOV-01 + D-17: POST com hash já existente retorna 409 + existing_uuid.
+    """MOV-01 + D-17: POST with an already existing hash returns 409 + existing_uuid.
 
-    Stub Nyquist — red/skip até operations.py implementar verificação de hash (plano 08-02).
+    Nyquist stub — red/skip until operations.py implements the hash check (plan 08-02).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account, Movement  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -880,17 +860,7 @@ def test_create_movement_409_duplicate():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
     existing_movement_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -920,13 +890,13 @@ def test_create_movement_409_duplicate():
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # Resolve Account por uuid
+            # Resolve Account by uuid
             r.first.return_value = fake_account
         elif call_count[0] == 2:
-            # Membership check — membro válido
+            # Membership check — valid member
             r.first.return_value = MagicMock()
         else:
-            # Hash pre-check: retorna movimentação existente com mesmo hash (D-17)
+            # Hash pre-check: returns an existing movement with the same hash (D-17)
             r.first.return_value = existing_movement
         r.all.return_value = []
         return r
@@ -944,7 +914,7 @@ def test_create_movement_409_duplicate():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/accounts/{account_uuid}/movements",
+            f"/api/v1/finances/accounts/{account_uuid}/movements",
             json={
                 "date": "2026-01-15",
                 "amount": "-150.00",
@@ -952,25 +922,23 @@ def test_create_movement_409_duplicate():
             },
         )
         assert response.status_code == 409, (
-            f"Esperado 409 para hash duplicado; recebido: {response.status_code}. "
-            f"Body: {response.text}"
+            f"Expected 409 for a duplicate hash; got: {response.status_code}. Body: {response.text}"
         )
         body = response.json()
         detail = body.get("detail", {})
-        assert "existing_uuid" in detail, f"409 deve conter 'existing_uuid' no detail; body: {body}"
+        assert "existing_uuid" in detail, f"409 must carry 'existing_uuid' in detail; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_import_csv():
-    """MOV-02: POST /accounts/{uuid}/movements/import?format=csv retorna inserted + movements[].
+    """MOV-02: POST /accounts/{uuid}/movements/import?format=csv returns inserted + movements[].
 
-    Stub Nyquist — red/skip até operations.py implementar endpoint de importação (plano 08-03).
+    Nyquist stub — red/skip until operations.py implements the import endpoint (plan 08-03).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -978,16 +946,6 @@ def test_import_csv():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -1018,7 +976,7 @@ def test_import_csv():
         r.all.return_value = []
         return r
 
-    # session.execute para hash pre-check em lote — retorna nenhum hash existente
+    # session.execute for the batched hash pre-check — returns no existing hash
     mock_execute_result = MagicMock()
     mock_execute_result.fetchall.return_value = []
 
@@ -1036,26 +994,25 @@ def test_import_csv():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/accounts/{account_uuid}/movements/import?format=csv",
+            f"/api/v1/finances/accounts/{account_uuid}/movements/import?format=csv",
             files={"file": ("test.csv", io.BytesIO(csv_content), "text/csv")},
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert "inserted" in body, f"Resposta deve conter 'inserted'; body: {body}"
-        assert "movements" in body, f"Resposta deve conter 'movements'; body: {body}"
+        assert "inserted" in body, f"Response must contain 'inserted'; body: {body}"
+        assert "movements" in body, f"Response must contain 'movements'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_import_ofx():
-    """MOV-03: POST /accounts/{uuid}/movements/import?format=ofx funciona com sample OFX.
+    """MOV-03: POST /accounts/{uuid}/movements/import?format=ofx works with a sample OFX.
 
-    Stub Nyquist — red/skip até operations.py implementar endpoint OFX (plano 08-03).
+    Nyquist stub — red/skip until operations.py implements the OFX endpoint (plan 08-03).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -1063,16 +1020,6 @@ def test_import_ofx():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -1085,7 +1032,7 @@ def test_import_ofx():
         updated_at=datetime.now(UTC),
     )
 
-    # Sample OFX mínimo válido
+    # Minimal valid OFX sample
     ofx_content = b"""OFXHEADER:100
 DATA:OFXSGML
 VERSION:102
@@ -1155,26 +1102,25 @@ NEWFILEUID:NONE
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/accounts/{account_uuid}/movements/import?format=ofx",
+            f"/api/v1/finances/accounts/{account_uuid}/movements/import?format=ofx",
             files={"file": ("test.ofx", io.BytesIO(ofx_content), "application/x-ofx")},
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert "inserted" in body, f"Resposta deve conter 'inserted'; body: {body}"
+        assert "inserted" in body, f"Response must contain 'inserted'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_import_xlsx():
-    """MOV-03: POST /accounts/{uuid}/movements/import?format=xlsx funciona com BytesIO XLSX.
+    """MOV-03: POST /accounts/{uuid}/movements/import?format=xlsx works with a BytesIO XLSX.
 
-    Stub Nyquist — red/skip até operations.py implementar endpoint XLSX (plano 08-03).
+    Nyquist stub — red/skip until operations.py implements the XLSX endpoint (plan 08-03).
     """
     _skip_if_stub()
     import openpyxl
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -1182,16 +1128,6 @@ def test_import_xlsx():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -1204,7 +1140,7 @@ def test_import_xlsx():
         updated_at=datetime.now(UTC),
     )
 
-    # Gera um XLSX mínimo em memória para o teste
+    # Build a minimal in-memory XLSX for the test
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["date", "amount", "description"])
@@ -1245,7 +1181,7 @@ def test_import_xlsx():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/accounts/{account_uuid}/movements/import?format=xlsx",
+            f"/api/v1/finances/accounts/{account_uuid}/movements/import?format=xlsx",
             files={
                 "file": (
                     "test.xlsx",
@@ -1256,21 +1192,20 @@ def test_import_xlsx():
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert "inserted" in body, f"Resposta deve conter 'inserted'; body: {body}"
+        assert "inserted" in body, f"Response must contain 'inserted'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_import_deduplication():
-    """MOV-04: reimportar mesmo arquivo não duplica movimentações.
+    """MOV-04: re-importing the same file does not duplicate movements.
 
-    Stub Nyquist — red/skip até operations.py implementar deduplicação por hash (plano 08-03).
-    Simula pre-check retornando hashes já existentes → inserted=0.
+    Nyquist stub — red/skip until operations.py implements hash-based dedup (plan 08-03).
+    Simulates the pre-check returning already existing hashes → inserted=0.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -1278,16 +1213,6 @@ def test_import_deduplication():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -1302,7 +1227,7 @@ def test_import_deduplication():
 
     csv_content = b"date,amount,description\n2026-01-15,-150.00,PIX FULANO\n"
 
-    # WR-05: calcular o hash real para que o pre-check mock rejeite a linha corretamente
+    # WR-05: compute the real hash so the mocked pre-check rejects the row correctly
     from decimal import Decimal
 
     from caramello_api.finances.services import (  # type: ignore[import-not-found]
@@ -1332,12 +1257,12 @@ def test_import_deduplication():
         r.all.return_value = []
         return r
 
-    # Mocks para session.execute: 2 chamadas distintas (WR-05)
-    # 1ª chamada: pre-check de hashes existentes (retorna real_hash como já presente)
+    # Mocks for session.execute: 2 distinct calls (WR-05)
+    # 1st call: pre-check of existing hashes (returns real_hash as already present)
     mock_precheck_result = MagicMock()
     mock_precheck_result.fetchall.return_value = [(real_hash,)]
 
-    # 2ª chamada: busca UUID das duplicatas CSV/XLSX (hash → uuid da movimentação existente)
+    # 2nd call: look up the UUID of CSV/XLSX duplicates (hash → uuid of the existing movement)
     existing_movement_uuid = uuid4()
     mock_uuid_result = MagicMock()
     mock_uuid_result.fetchall.return_value = [(real_hash, existing_movement_uuid)]
@@ -1363,30 +1288,30 @@ def test_import_deduplication():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/accounts/{account_uuid}/movements/import?format=csv",
+            f"/api/v1/finances/accounts/{account_uuid}/movements/import?format=csv",
             files={"file": ("test.csv", io.BytesIO(csv_content), "text/csv")},
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        # Reimportação CSV: hash já existe → potential_duplicates[] (não duplicates_skipped, pois sem fitid)
+        # CSV re-import: the hash already exists → potential_duplicates[]
+        # (not duplicates_skipped, since there is no fitid)
         assert body.get("potential_duplicates") or body.get("duplicates_skipped", 0) > 0, (
-            f"Reimportação não deve inserir duplicatas; body: {body}"
+            f"A re-import must not insert duplicates; body: {body}"
         )
     finally:
         app.dependency_overrides.clear()
 
 
 def test_import_potential_duplicates():
-    """MOV-05 + D-05: CSV/XLSX com hash match retorna potential_duplicates[].
+    """MOV-05 + D-05: CSV/XLSX with a hash match returns potential_duplicates[].
 
-    Stub Nyquist — red/skip até operations.py implementar retorno de potential_duplicates
-    para CSV/XLSX (plano 08-03). OFX usa deduplicação definitiva; CSV/XLSX retornam
-    potential_duplicates[] para confirmação pelo usuário.
+    Nyquist stub — red/skip until operations.py implements returning
+    potential_duplicates for CSV/XLSX (plan 08-03). OFX uses definitive dedup;
+    CSV/XLSX return potential_duplicates[] for the user to confirm.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -1394,16 +1319,6 @@ def test_import_potential_duplicates():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -1432,7 +1347,7 @@ def test_import_potential_duplicates():
         r.all.return_value = []
         return r
 
-    # Pre-check encontra um hash que coincide (duplicata suspeita para CSV)
+    # The pre-check finds a matching hash (suspected duplicate for CSV)
     known_hash = "suspect_hash_from_csv"
     mock_execute_result = MagicMock()
     mock_execute_result.fetchall.return_value = [(known_hash,)]
@@ -1450,31 +1365,30 @@ def test_import_potential_duplicates():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/accounts/{account_uuid}/movements/import?format=csv",
+            f"/api/v1/finances/accounts/{account_uuid}/movements/import?format=csv",
             files={"file": ("test.csv", io.BytesIO(csv_content), "text/csv")},
         )
         assert response.status_code == 200, response.text
         body = response.json()
         assert "potential_duplicates" in body, (
-            f"Resposta deve conter 'potential_duplicates'; body: {body}"
+            f"Response must contain 'potential_duplicates'; body: {body}"
         )
         assert isinstance(body["potential_duplicates"], list), (
-            f"'potential_duplicates' deve ser lista; body: {body}"
+            f"'potential_duplicates' must be a list; body: {body}"
         )
     finally:
         app.dependency_overrides.clear()
 
 
 def test_import_confirm():
-    """MOV-05 + D-08: POST /import/confirm insere confirmadas sem colisão de hash.
+    """MOV-05 + D-08: POST /import/confirm inserts confirmed rows without hash collision.
 
-    Stub Nyquist — red/skip até operations.py implementar endpoint /import/confirm
-    (plano 08-03). Confirmadas são inseridas com import_hash=None (D-08).
+    Nyquist stub — red/skip until operations.py implements the /import/confirm
+    endpoint (plan 08-03). Confirmed rows are inserted with import_hash=None (D-08).
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -1482,16 +1396,6 @@ def test_import_confirm():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -1534,7 +1438,7 @@ def test_import_confirm():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        # Payload: lista de movimentações confirmadas pelo usuário (D-08)
+        # Payload: list of movements confirmed by the user (D-08)
         payload = {
             "account_uuid": str(account_uuid),
             "movements": [
@@ -1546,29 +1450,28 @@ def test_import_confirm():
             ],
         }
         response = client.post(
-            "/finances/import/confirm",
+            "/api/v1/finances/import/confirm",
             json=payload,
         )
         assert response.status_code in (200, 201), (
-            f"Esperado 200/201 para /import/confirm; recebido: {response.status_code}. "
+            f"Expected 200/201 for /import/confirm; got: {response.status_code}. "
             f"Body: {response.text}"
         )
         body = response.json()
-        assert "inserted" in body, f"Resposta deve conter 'inserted'; body: {body}"
+        assert "inserted" in body, f"Response must contain 'inserted'; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_list_movements():
-    """D-15: GET /finances/accounts/{uuid}/movements retorna lista paginada.
+    """D-15: GET /finances/accounts/{uuid}/movements returns a paginated list.
 
-    Stub Nyquist — red/skip até operations.py implementar endpoint GET movements
-    (plano 08-02). Suporte a ?limit=50&offset=0&date_from=&date_to=.
+    Nyquist stub — red/skip until operations.py implements the GET movements
+    endpoint (plan 08-02). Supports ?limit=50&offset=0&date_from=&date_to=.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account, Movement  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
@@ -1576,16 +1479,6 @@ def test_list_movements():
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-    family_uuid = uuid4()
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
     fake_account = Account(
         id=10,
         uuid=account_uuid,
@@ -1636,33 +1529,33 @@ def test_list_movements():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts/{account_uuid}/movements?limit=50&offset=0")
+        response = client.get(
+            f"/api/v1/finances/accounts/{account_uuid}/movements?limit=50&offset=0"
+        )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert isinstance(body, list), f"Resposta deve ser lista paginada; body: {body}"
+        assert isinstance(body, list), f"Response must be a paginated list; body: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_movements_require_auth():
-    """AUTH-FIN-01/02: 401 sem token, 403 para família alheia em endpoints de Movement.
+    """AUTH-FIN-01/02: 401 without a token, 403 for another family on Movement endpoints.
 
-    Stub Nyquist — red/skip até operations.py implementar endpoints de Movement (plano 08-02).
-    Replica o padrão de test_accounts_require_auth e test_accounts_403_non_member.
+    Nyquist stub — red/skip until operations.py implements the Movement endpoints (plan 08-02).
+    Mirrors the pattern of test_accounts_require_auth and test_accounts_403_non_member.
     """
     _skip_if_stub()
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
 
     account_uuid = uuid4()
-    family_uuid = uuid4()
 
-    # --- Parte 1: 401 sem autenticação ---
+    # --- Part 1: 401 without authentication ---
     def _exec_401(_stmt):
         r = MagicMock()
         r.first.return_value = None
@@ -1675,19 +1568,19 @@ def test_movements_require_auth():
     def _session_override_401():
         yield mock_session_401
 
-    # Não sobrescreve get_current_user
+    # Does not override get_current_user
     app.dependency_overrides[get_session] = _session_override_401
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts/{account_uuid}/movements")
+        response = client.get(f"/api/v1/finances/accounts/{account_uuid}/movements")
         assert response.status_code == 401, (
-            f"Esperado 401 sem autenticação; recebido: {response.status_code}. "
+            f"Expected 401 without authentication; got: {response.status_code}. "
             f"Body: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()
 
-    # --- Parte 2: 403 para família alheia ---
+    # --- Part 2: 403 for another family ---
     fake_user = _make_fake_user()
     fake_account = Account(
         id=10,
@@ -1700,15 +1593,6 @@ def test_movements_require_auth():
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
-    fake_family_other = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Alheia",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
 
     call_count_403 = [0]
 
@@ -1716,10 +1600,10 @@ def test_movements_require_auth():
         r = MagicMock()
         call_count_403[0] += 1
         if call_count_403[0] == 1:
-            # Resolve Account por uuid
+            # Resolve Account by uuid
             r.first.return_value = fake_account
         else:
-            # Membership check: não-membro (FamilyMember ausente → 403)
+            # Membership check: non-member (no FamilyMember → 403)
             r.first.return_value = None
         r.all.return_value = []
         return r
@@ -1734,25 +1618,25 @@ def test_movements_require_auth():
     app.dependency_overrides[get_session] = _session_override_403
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts/{account_uuid}/movements")
+        response = client.get(f"/api/v1/finances/accounts/{account_uuid}/movements")
         assert response.status_code == 403, (
-            f"Esperado 403 para não-membro; recebido: {response.status_code}. Body: {response.text}"
+            f"Expected 403 for a non-member; got: {response.status_code}. Body: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
-# Stubs dos endpoints de conciliação — LAN-01, LAN-02, LAN-03
+# Reconciliation endpoint stubs — LAN-01, LAN-02, LAN-03
 # ---------------------------------------------------------------------------
 
 
 def test_reconcile_movement():
-    """LAN-01, LAN-04, D-REC-02: POST /finances/movements/{uuid}/reconcile retorna 201.
+    """LAN-01, LAN-04, D-REC-02: POST /finances/movements/{uuid}/reconcile returns 201.
 
-    Resposta deve incluir schema rico: uuid, movement, subcategory_uuid,
+    The response must include the rich schema: uuid, movement, subcategory_uuid,
     competencia_year, is_recorrente.
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
     """
     from decimal import Decimal
 
@@ -1819,23 +1703,10 @@ def test_reconcile_movement():
         role="member",
         joined_at=datetime.now(UTC),
     )
-    fake_entry = FinancialEntry(
-        id=1,
-        uuid=entry_uuid,
-        movement_id=1,
-        subcategory_id=1,
-        competencia_year=2026,
-        competencia_month=5,
-        notes=None,
-        is_recorrente=False,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-
     added = []
 
-    # CR-05 fix: mock com contador — responde na ordem dos selects de UMA
-    # entidade (session.execute + .scalars()): 1=Movement, 2=Account,
+    # CR-05 fix: counter-based mock — answers in the order of the SINGLE-entity
+    # selects (session.execute + .scalars()): 1=Movement, 2=Account,
     # 3=FamilyMember(_require_family_access), 4=Subcategory(fallback), 5=Category
     exec_call_count = [0]
 
@@ -1860,7 +1731,7 @@ def test_reconcile_movement():
 
     def _row(stmt):
         r = MagicMock()
-        r.fetchone.return_value = None  # faz cair no fallback individual de Subcategory+Category
+        r.fetchone.return_value = None  # forces the per-row Subcategory+Category fallback
         r.fetchall.return_value = []
         r.scalar_one_or_none.return_value = None
         return r
@@ -1882,7 +1753,7 @@ def test_reconcile_movement():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/movements/{movement_uuid}/reconcile",
+            f"/api/v1/finances/movements/{movement_uuid}/reconcile",
             json={
                 "subcategory_uuid": str(sub_uuid),
                 "competencia_year": 2026,
@@ -1892,19 +1763,36 @@ def test_reconcile_movement():
         )
         assert response.status_code == 201, response.text
         body = response.json()
-        assert "uuid" in body, f"Resposta deve conter 'uuid'; foi: {body}"
-        assert "movement" in body, "Resposta deve conter objeto 'movement' embutido (D-REC-02)"
-        assert "competencia_year" in body, "Resposta deve conter 'competencia_year'"
+        # The whole rich schema is asserted by VALUE, not by key presence: the
+        # entry uuid comes from the refresh, and the subcategory/category/movement
+        # uuids prove the endpoint resolved the chain it was given instead of
+        # echoing the request.
+        assert body["uuid"] == str(entry_uuid), body
+        assert body["movement"]["uuid"] == str(movement_uuid), body
+        assert body["movement"]["description"] == "Supermercado", body
+        assert body["subcategory_uuid"] == str(sub_uuid), body
+        assert body["subcategory_name"] == "Supermercado", body
+        assert body["category_uuid"] == str(cat_uuid), body
+        assert body["category_name"] == "Alimentação", body
+        assert body["competencia_year"] == 2026, body
+        assert body["competencia_month"] == 5, body
+        assert body["is_recorrente"] is False, body
+        assert body["responsible_user_uuid"] is None, body
+        # LAN-01: exactly one FinancialEntry was handed to the session
+        entries = [o for o in added if isinstance(o, FinancialEntry)]
+        assert len(entries) == 1, added
+        assert entries[0].movement_id == fake_movement.id
+        assert entries[0].subcategory_id == fake_subcategory.id
     finally:
         app.dependency_overrides.clear()
 
 
 def test_reconcile_409_duplicate():
-    """LAN-02: POST /finances/movements/{uuid}/reconcile retorna 409 se já conciliado.
+    """LAN-02: POST /finances/movements/{uuid}/reconcile returns 409 if already reconciled.
 
-    Quando session.commit levanta IntegrityError, o endpoint deve fazer
-    rollback e retornar 409 com mensagem de erro (D-REC-01).
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
+    When session.commit raises IntegrityError, the endpoint must roll back and
+    return 409 with an error message (D-REC-01).
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
     """
     from decimal import Decimal
 
@@ -1945,9 +1833,9 @@ def test_reconcile_409_duplicate():
         updated_at=datetime.now(UTC),
     )
 
-    # Ordem dos selects de UMA entidade: 1=Movement, 2=Account, depois o
-    # membership e a subcategoria — o commit falha antes de qualquer leitura
-    # relevante depois disso.
+    # Order of the SINGLE-entity selects: 1=Movement, 2=Account, then the
+    # membership and the subcategory — the commit fails before any read that
+    # matters after that point.
     exec_call_count = [0]
 
     def _exec(stmt):
@@ -1981,7 +1869,7 @@ def test_reconcile_409_duplicate():
     try:
         client = TestClient(app)
         response = client.post(
-            f"/finances/movements/{movement_uuid}/reconcile",
+            f"/api/v1/finances/movements/{movement_uuid}/reconcile",
             json={
                 "subcategory_uuid": str(sub_uuid),
                 "competencia_year": 2026,
@@ -1989,7 +1877,7 @@ def test_reconcile_409_duplicate():
             },
         )
         assert response.status_code == 409, (
-            f"Duplicata deve retornar 409; foi {response.status_code}: {response.text}"
+            f"A duplicate must return 409; got {response.status_code}: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()
@@ -1998,9 +1886,9 @@ def test_reconcile_409_duplicate():
 def test_suggest_category():
     """LAN-03, D-CAT-01/02: GET /finances/movements/{uuid}/suggest-category.
 
-    Retorna lista ordenada por score desc. Cada item deve ter:
+    Returns a list ordered by score desc. Every item must have:
     subcategory_uuid, subcategory_name, category_uuid, category_name, score.
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
     """
     from fastapi.testclient import TestClient
 
@@ -2025,28 +1913,28 @@ def test_suggest_category():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/movements/{movement_uuid}/suggest-category")
-        # 200 (lista vazia OK — D-CAT-03) ou 404 se movimento não existe
+        response = client.get(f"/api/v1/finances/movements/{movement_uuid}/suggest-category")
+        # 200 (empty list is fine — D-CAT-03) or 404 if the movement does not exist
         assert response.status_code in (200, 404), (
-            f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
+            f"Expected 200 or 404; got {response.status_code}: {response.text}"
         )
         if response.status_code == 200:
             body = response.json()
-            assert isinstance(body, list), f"Resposta deve ser lista; foi {type(body)}"
+            assert isinstance(body, list), f"Response must be a list; got {type(body)}"
     finally:
         app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
-# Stubs de atualização de lançamento — LAN-05, D-ATTR
+# Entry update stubs — LAN-05, D-ATTR
 # ---------------------------------------------------------------------------
 
 
 def test_update_entry():
-    """LAN-05, D-REC-04: PATCH /finances/entries/{uuid} atualiza lançamento.
+    """LAN-05, D-REC-04: PATCH /finances/entries/{uuid} updates a financial entry.
 
-    Atualiza subcategory_uuid, competencia_year, notes e retorna schema rico.
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
+    Updates subcategory_uuid, competencia_year and notes, and returns the rich schema.
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
     """
     from decimal import Decimal
 
@@ -2125,9 +2013,9 @@ def test_update_entry():
         joined_at=datetime.now(UTC),
     )
 
-    # WR-06: mock com contador — retorna o objeto correto por ordem de select de entidade
-    # Ordem: 1=FinancialEntry, 2=Movement(auth), 3=Account, 4=FamilyMember(_require_family_access),
-    #        5=Subcategory(update), 6=Subcategory(reload pós-commit), 7=Category(reload pós-commit)
+    # WR-06: counter-based mock — returns the right object per entity-select order
+    # Order: 1=FinancialEntry, 2=Movement(auth), 3=Account, 4=FamilyMember(_require_family_access),
+    #        5=Subcategory(update), 6=Subcategory(reload after commit), 7=Category(reload)
     exec_call_count = [0]
 
     def _exec(stmt):
@@ -2166,30 +2054,30 @@ def test_update_entry():
     try:
         client = TestClient(app)
         response = client.patch(
-            f"/finances/entries/{entry_uuid}",
+            f"/api/v1/finances/entries/{entry_uuid}",
             json={
                 "subcategory_uuid": str(sub_uuid),
                 "competencia_year": 2026,
                 "notes": "Nota atualizada",
             },
         )
-        # WR-06: asserta apenas 200 e valida shape do body (não aceita 404 como sucesso)
+        # WR-06: asserts 200 only and validates the body shape (404 is not a success)
         assert response.status_code == 200, (
-            f"Esperado 200; foi {response.status_code}: {response.text}"
+            f"Expected 200; got {response.status_code}: {response.text}"
         )
         body = response.json()
-        assert "uuid" in body, "Resposta deve conter 'uuid'"
-        assert "subcategory_uuid" in body, "Resposta deve conter 'subcategory_uuid'"
-        assert "category_uuid" in body, "Resposta deve conter 'category_uuid'"
+        assert "uuid" in body, "Response must contain 'uuid'"
+        assert "subcategory_uuid" in body, "Response must contain 'subcategory_uuid'"
+        assert "category_uuid" in body, "Response must contain 'category_uuid'"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_entry_responsible_user_uuid():
-    """D-ATTR, D-REC-04: PATCH entries/{uuid} com responsible_user_uuid atribui responsável.
+    """D-ATTR, D-REC-04: PATCH entries/{uuid} with responsible_user_uuid assigns an owner.
 
-    PATCH com responsible_user_uuid: null deve limpar o campo (sentinela model_fields_set).
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03.
+    PATCH with responsible_user_uuid: null must clear the field (model_fields_set sentinel).
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
     """
     from fastapi.testclient import TestClient
 
@@ -2217,37 +2105,37 @@ def test_entry_responsible_user_uuid():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        # PATCH com responsável explícito
+        # PATCH with an explicit responsible user
         response = client.patch(
-            f"/finances/entries/{entry_uuid}",
+            f"/api/v1/finances/entries/{entry_uuid}",
             json={"responsible_user_uuid": str(responsible_uuid)},
         )
-        # 200, 404, ou 422 (UUID inválido no mock) — desde que a rota exista
+        # 200, 404 or 422 (invalid UUID in the mock) — as long as the route exists
         assert response.status_code in (200, 404, 422), (
-            f"Esperado 200/404/422; foi {response.status_code}: {response.text}"
+            f"Expected 200/404/422; got {response.status_code}: {response.text}"
         )
-        # PATCH com null — limpar responsável
+        # PATCH with null — clears the responsible user
         response_null = client.patch(
-            f"/finances/entries/{entry_uuid}",
+            f"/api/v1/finances/entries/{entry_uuid}",
             json={"responsible_user_uuid": None},
         )
         assert response_null.status_code in (200, 404, 422), (
-            f"Esperado 200/404/422 com null; foi {response_null.status_code}: {response_null.text}"
+            f"Expected 200/404/422 with null; got {response_null.status_code}: {response_null.text}"
         )
     finally:
         app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
-# Stubs de saldo — REL-01, REL-02
+# Balance stubs — REL-01, REL-02
 # ---------------------------------------------------------------------------
 
 
 def test_account_balance():
-    """REL-01, D-BAL-01: GET /finances/accounts/{uuid}/balance retorna saldo.
+    """REL-01, D-BAL-01: GET /finances/accounts/{uuid}/balance returns the balance.
 
-    Resposta: {account_uuid, balance (string), currency}.
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
+    Response: {account_uuid, balance (string), currency}.
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
     """
     from decimal import Decimal
 
@@ -2291,25 +2179,25 @@ def test_account_balance():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts/{account_uuid}/balance")
+        response = client.get(f"/api/v1/finances/accounts/{account_uuid}/balance")
         assert response.status_code in (200, 404), (
-            f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
+            f"Expected 200 or 404; got {response.status_code}: {response.text}"
         )
         if response.status_code == 200:
             body = response.json()
-            assert "balance" in body, f"Resposta deve conter 'balance'; foi: {body}"
+            assert "balance" in body, f"Response must contain 'balance'; got: {body}"
             assert "account_uuid" in body or "uuid" in body, (
-                "Resposta deve conter account_uuid (D-BAL-01)"
+                "Response must contain account_uuid (D-BAL-01)"
             )
     finally:
         app.dependency_overrides.clear()
 
 
 def test_family_balance():
-    """REL-02, D-BAL-02: GET /finances/families/{uuid}/balance retorna saldo consolidado.
+    """REL-02, D-BAL-02: GET /finances/families/{uuid}/balance returns the consolidated balance.
 
-    Resposta: {family_uuid, total_balance, accounts: [...]}.
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
+    Response: {family_uuid, total_balance, accounts: [...]}.
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
     """
     from decimal import Decimal
 
@@ -2353,30 +2241,30 @@ def test_family_balance():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/families/{family_uuid}/balance")
+        response = client.get(f"/api/v1/finances/families/{family_uuid}/balance")
         assert response.status_code in (200, 404), (
-            f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
+            f"Expected 200 or 404; got {response.status_code}: {response.text}"
         )
         if response.status_code == 200:
             body = response.json()
             assert "total_balance" in body, (
-                f"Resposta deve conter 'total_balance' (D-BAL-02); foi: {body}"
+                f"Response must contain 'total_balance' (D-BAL-02); got: {body}"
             )
     finally:
         app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
-# Stubs de relatórios — REL-03, REL-04, REL-05
+# Report stubs — REL-03, REL-04, REL-05
 # ---------------------------------------------------------------------------
 
 
 def test_monthly_report():
-    """REL-03/04, D-REP-01: GET /finances/reports/monthly retorna breakdown.
+    """REL-03/04, D-REP-01: GET /finances/reports/monthly returns the breakdown.
 
-    Resposta: {period, total, rows} onde cada row tem category_uuid,
-    subcategory_uuid e total.
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
+    Response: {period, total, rows} where each row has category_uuid,
+    subcategory_uuid and total.
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
     """
 
     from fastapi.testclient import TestClient
@@ -2417,26 +2305,26 @@ def test_monthly_report():
     try:
         client = TestClient(app)
         response = client.get(
-            "/finances/reports/monthly",
+            "/api/v1/finances/reports/monthly",
             params={"family_uuid": str(family_uuid), "year": 2026, "month": 5},
         )
         assert response.status_code in (200, 404), (
-            f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
+            f"Expected 200 or 404; got {response.status_code}: {response.text}"
         )
         if response.status_code == 200:
             body = response.json()
-            assert "period" in body, f"Resposta deve conter 'period' (D-REP-01); foi: {body}"
-            assert "rows" in body, f"Resposta deve conter 'rows'; foi: {body}"
+            assert "period" in body, f"Response must contain 'period' (D-REP-01); got: {body}"
+            assert "rows" in body, f"Response must contain 'rows'; got: {body}"
     finally:
         app.dependency_overrides.clear()
 
 
 def test_report_uses_competencia():
-    """REL-05, D-REP-03: relatório aceita query params year/month (competência).
+    """REL-05, D-REP-03: the report accepts year/month query params (accrual period).
 
-    Verifica que a rota existe e aceita os parâmetros corretos.
-    O relatório opera sobre competencia_year/month — não sobre Movement.date.
-    Plano 09-04 Task 3: guard removido — endpoint implementado em 09-03/09-04.
+    Checks that the route exists and accepts the right parameters.
+    The report works over competencia_year/month — not over Movement.date.
+    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
     """
     from fastapi.testclient import TestClient
 
@@ -2475,32 +2363,32 @@ def test_report_uses_competencia():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        # Parametros de competência (year/month) — não parametros de data de movimentação
+        # Accrual-period params (year/month) — not movement-date params
         response = client.get(
-            "/finances/reports/monthly",
+            "/api/v1/finances/reports/monthly",
             params={"family_uuid": str(family_uuid), "year": 2026, "month": 3},
         )
-        # 200 ou 404 (família não encontrada no mock) são válidos
-        # 422 indica que os params não foram aceitos — falha
+        # 200 or 404 (family not found in the mock) are both valid
+        # 422 means the params were not accepted — failure
         assert response.status_code != 422, (
-            f"Endpoint não deve retornar 422 para params year/month válidos; "
-            f"foi: {response.status_code}: {response.text}"
+            f"The endpoint must not return 422 for valid year/month params; "
+            f"got: {response.status_code}: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
-# Stubs de movimento — D-MOV-01, D-MOV-02
+# Movement stubs — D-MOV-01, D-MOV-02
 # ---------------------------------------------------------------------------
 
 
 def test_movement_entry_uuid_field():
-    """D-MOV-01: GET movements inclui campo entry_uuid em cada item.
+    """D-MOV-01: GET movements includes an entry_uuid field on every item.
 
-    entry_uuid: UUID | None — null para movimentações pendentes de conciliação.
-    Implementado via LEFT JOIN com FinancialEntry.
-    Plano 09-04 Task 3: guard removido — campo e LEFT JOIN implementados em 09-04.
+    entry_uuid: UUID | None — null for movements pending reconciliation.
+    Implemented through a LEFT JOIN with FinancialEntry.
+    Plan 09-04 Task 3: guard removed — field and LEFT JOIN implemented in 09-04.
     """
     from decimal import Decimal
 
@@ -2531,7 +2419,7 @@ def test_movement_entry_uuid_field():
         r.all.return_value = []
         return r
 
-    # Simula um movimento sem entry (pendente)
+    # Simulates a movement without an entry (pending)
     mock_movement_row = (
         MagicMock(
             uuid=uuid4(),
@@ -2542,7 +2430,7 @@ def test_movement_entry_uuid_field():
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         ),
-        None,  # entry_uuid = None (pendente)
+        None,  # entry_uuid = None (pending)
     )
 
     mock_execute_result = MagicMock()
@@ -2559,27 +2447,27 @@ def test_movement_entry_uuid_field():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(f"/finances/accounts/{account_uuid}/movements")
+        response = client.get(f"/api/v1/finances/accounts/{account_uuid}/movements")
         assert response.status_code in (200, 404), (
-            f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
+            f"Expected 200 or 404; got {response.status_code}: {response.text}"
         )
         if response.status_code == 200:
             body = response.json()
             if isinstance(body, list) and body:
                 item = body[0]
                 assert "entry_uuid" in item, (
-                    f"D-MOV-01: cada movimento deve ter 'entry_uuid'; chaves: {list(item.keys())}"
+                    f"D-MOV-01: every movement must have 'entry_uuid'; keys: {list(item.keys())}"
                 )
     finally:
         app.dependency_overrides.clear()
 
 
 def test_movement_reconciled_filter():
-    """D-MOV-02: GET /finances/accounts/{uuid}/movements?reconciled=false retorna pendentes.
+    """D-MOV-02: GET /finances/accounts/{uuid}/movements?reconciled=false returns pending ones.
 
-    Filtro opcional: reconciled=false retorna apenas movimentos sem lançamento;
-    reconciled=true retorna apenas conciliados. Implementado via LEFT JOIN + IS NULL.
-    Plano 09-04 Task 3: guard removido — filtro implementado em 09-04.
+    Optional filter: reconciled=false returns only movements without an entry;
+    reconciled=true returns only reconciled ones. Implemented through LEFT JOIN + IS NULL.
+    Plan 09-04 Task 3: guard removed — filter implemented in 09-04.
     """
 
     from fastapi.testclient import TestClient
@@ -2623,13 +2511,13 @@ def test_movement_reconciled_filter():
     try:
         client = TestClient(app)
         response = client.get(
-            f"/finances/accounts/{account_uuid}/movements",
+            f"/api/v1/finances/accounts/{account_uuid}/movements",
             params={"reconciled": "false"},
         )
-        # 200 (lista vazia OK) ou 404 (conta não encontrada no mock)
-        # 422 indica que o parâmetro reconciled não é aceito — falha
+        # 200 (empty list is fine) or 404 (account not found in the mock)
+        # 422 means the reconciled parameter is not accepted — failure
         assert response.status_code in (200, 404), (
-            f"Esperado 200 ou 404; foi {response.status_code}: {response.text}"
+            f"Expected 200 or 404; got {response.status_code}: {response.text}"
         )
     finally:
         app.dependency_overrides.clear()

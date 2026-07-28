@@ -1,11 +1,20 @@
 # dsl/entities/family_invitation.yaml
 # Definition of the FamilyInvitation entity.
-# Redesenhada na Phase 4 (D-01): de "convite por email com expiração" para "pré-registro de membro".
+# Redesigned in Phase 4 (D-01): from "e-mail invitation with expiry" to
+# "member pre-registration".
 
 name: FamilyInvitation
 domain: families
-description: "Pré-registro de membro de família por email (D-01)."
+description: "Pre-registration of a family member by e-mail (D-01)."
 table_name: family_invitation
+
+# The generic CRUD router is not emitted for this entity: an invitation is
+# created exclusively by the owner, through the business operation
+# POST /families/families/{family_uuid}/pre-register, which is where the
+# ownership check lives. A public CRUD would also have to accept a family
+# reference from the caller, and the only safe public reference is a UUID, which
+# a generated route cannot resolve back to the integer FK the table stores.
+generate_router: false
 
 fields:
   - name: id
@@ -24,25 +33,30 @@ fields:
     type: int
     foreign_key: "family.id"
     nullable: false
-    description: "ID of the family to which the invitation was sent."
+    # FamilyInvitationRead is returned by the pre-register operation, so this FK
+    # is part of a PUBLIC response and must be a UUID there (table keeps the int).
+    expose_as_uuid: true
+    description: "Family the invitation belongs to. Public schemas: family_uuid."
 
   - name: inviter_id
     type: int
     foreign_key: "user.id"
     nullable: false
-    description: "ID of the user who sent the invitation."
+    # Points at `user`: always exposed as a UUID (see docs/dsl-rules.md).
+    expose_as_uuid: true
+    description: "User who sent the invitation. Public schemas: inviter_uuid."
 
   - name: email
     type: str
     nullable: false
-    description: "Email para matching automático no login (pré-registro D-01)."
+    description: "E-mail matched automatically at login (pre-registration, D-01)."
 
   - name: status
     type: str
     max_length: 20
     default: "pending_login"
     nullable: false
-    description: "Status do pré-registro: pending_login ou joined (D-01)."
+    description: "Pre-registration status: pending_login or joined (D-01)."
 
   - name: created_at
     type: datetime

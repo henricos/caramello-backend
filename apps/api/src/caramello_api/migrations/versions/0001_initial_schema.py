@@ -1,10 +1,10 @@
 """initial_schema
 
-Schema inicial do domínio família — 4 tabelas base consolidadas:
-- user: usuários provisionados via Keycloak (idp_sub, email, name)
-- family: grupos familiares
-- family_member: associação M:M entre user e family (role, joined_at)
-- family_invitation: pré-registro de membro por email (D-01)
+Initial schema of the family domain — the 4 consolidated base tables:
+- user: users provisioned through Keycloak (idp_sub, email, name)
+- family: family groups
+- family_member: M:M association between user and family (role, joined_at)
+- family_invitation: member pre-registration by e-mail (D-01)
 
 Revision ID: 0001
 Revises:

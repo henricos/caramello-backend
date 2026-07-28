@@ -1,7 +1,7 @@
-"""Smoke tests do endpoint MCP — verifica auth e descoberta de ferramentas.
+"""Smoke tests for the MCP endpoint — checks auth and tool discovery.
 
-Estes testes NÃO são marcados como integration — não precisam de caramello_dev.
-Verificam apenas que /mcp existe, exige auth, e retorna estrutura MCP válida.
+These tests are NOT marked as integration — they do not need caramello_dev.
+They only check that /mcp exists, requires auth, and returns a valid MCP structure.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from datetime import UTC
 
 
 def test_mcp_requires_auth(client):
-    """MCP-02: POST /mcp sem Bearer token retorna 401 ou 403."""
+    """MCP-02: POST /mcp without a Bearer token returns 401 or 403."""
     response = client.post(
         "/mcp",
         json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
@@ -23,7 +23,7 @@ def test_mcp_requires_auth(client):
 
 
 def test_mcp_with_valid_token_returns_tools(client):
-    """MCP-01: POST /mcp com token Bearer retorna estrutura MCP válida com ferramentas."""
+    """MCP-01: POST /mcp with a Bearer token returns a valid MCP structure with tools."""
     from datetime import datetime
     from uuid import uuid4
 
@@ -42,7 +42,7 @@ def test_mcp_with_valid_token_returns_tools(client):
     )
     app.dependency_overrides[get_current_user] = lambda: fake_user
     try:
-        # MCP HTTP transport usa POST com Accept: application/json, text/event-stream
+        # The MCP HTTP transport uses POST with Accept: application/json, text/event-stream
         response = client.post(
             "/mcp",
             json={
@@ -61,7 +61,7 @@ def test_mcp_with_valid_token_returns_tools(client):
                 "Accept": "application/json, text/event-stream",
             },
         )
-        # /mcp com fastapi-mcp retorna 200 com resposta JSON-RPC
+        # With fastapi-mcp, /mcp returns 200 along with a JSON-RPC response
         assert response.status_code == 200
         data = response.json()
         assert data.get("jsonrpc") == "2.0"

@@ -1,78 +1,81 @@
 # dsl/entities/financial_entry.yaml
-# Lançamento financeiro classificado — herda amount/type de Movement (D-05).
-# Domain: finances (Phase 6, Plano 02)
+# Classified financial entry — inherits amount/type from Movement (D-05).
+# Domain: finances (Phase 6, Plan 02)
 
 name: FinancialEntry
 domain: finances
-description: "Lançamento financeiro classificado. Herda valor e tipo de Movement via relação 1:1 (D-05)."
+description: "Classified financial entry. Inherits amount and type from Movement (1:1 relation, D-05)."
 table_name: financial_entry
+
+# No generic CRUD router — see dsl/entities/account.yaml.
+generate_router: false
 
 fields:
   - name: id
     type: int
     primary_key: true
-    description: "Chave primária interna (numérica)."
+    description: "Internal primary key (numeric)."
 
   - name: uuid
     type: UUID
     unique: true
     default_factory: uuid4
     nullable: false
-    description: "Identificador público único (UUID)."
+    description: "Unique public identifier (UUID)."
 
   - name: movement_id
     type: int
     foreign_key: "movement.id"
     unique: true
     nullable: false
-    description: "FK para Movement (relação 1:1 — cada movement tem no máximo 1 entry). D-05."
+    description: "FK to Movement (1:1 relation — a movement has at most one entry). D-05."
 
   - name: subcategory_id
     type: int
     foreign_key: "subcategory.id"
     nullable: false
-    description: "FK para subcategoria de classificação do lançamento (D-08)."
+    description: "FK to the subcategory classifying the entry (D-08)."
 
   - name: competencia_year
     type: int
     nullable: false
-    description: "Ano de competência do lançamento (ex: 2024). D-04."
+    description: "Accrual year (competencia) of the entry (e.g. 2024). D-04."
 
   - name: competencia_month
     type: int
     nullable: false
-    description: "Mês de competência do lançamento (1-12). D-04."
+    description: "Accrual month (competencia) of the entry (1-12). D-04."
 
   - name: notes
     type: str
     max_length: 500
     nullable: true
-    description: "Observações adicionais sobre o lançamento (opcional)."
+    description: "Additional notes about the entry (optional)."
 
   - name: is_recorrente
     type: bool
     default: false
     nullable: false
-    description: "Indica se o lançamento é recorrente (LAN-04)."
+    description: "Whether the entry is recurring (LAN-04)."
 
   - name: responsible_user_id
     type: int
     foreign_key: "user.id"
     nullable: true
     expose_as_uuid: true
-    description: "FK nullable para User — atribuição de responsável pelo lançamento (D-SCHEMA-01/02, D-ATTR-03). Exposto como responsible_user_uuid (UUID) nos schemas públicos."
+    description: "Nullable FK to User — who is responsible for the entry (D-SCHEMA-01/02, D-ATTR-03). Exposed as responsible_user_uuid (UUID) in the public schemas."
 
   - name: created_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Data de criação do registro."
+    description: "Timestamp of the record's creation."
 
   - name: updated_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Data da última atualização do registro."
+    description: "Timestamp of the record's last update."
 
 filters:
   - fields: [competencia_year, competencia_month]

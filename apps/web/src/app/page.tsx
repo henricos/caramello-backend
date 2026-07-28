@@ -4,8 +4,8 @@ import { getMe, listMyFamilies, type FamilyRead, type UserRead } from "@/lib/api
 
 /**
  * Home page. Proves the login → web → api → database path end to end: who is
- * logged in (`GET /users/me`) and which families that person belongs to
- * (`GET /families/families`, scoped by family membership in the api).
+ * logged in (`GET /api/v1/users/me`) and which families that person belongs to
+ * (`GET /api/v1/families/families`, scoped by family membership in the api).
  *
  * An async Server Component: both calls happen in the Node process, with the
  * access token read from the encrypted cookie — nothing authenticated is
@@ -81,7 +81,7 @@ export default async function HomePage() {
               {/* The endpoint is a code identifier, not prose: it stays a
                   literal on purpose, and every word around it comes from the
                   catalog (which is why the sentence ends in a colon). */}
-              {t("home.families.source")} <code>GET /families/families</code>
+              {t("home.families.source")} <code>GET /api/v1/families/families</code>
             </p>
             {families && families.length > 0 ? (
               <ul className="mt-4 divide-y divide-border">

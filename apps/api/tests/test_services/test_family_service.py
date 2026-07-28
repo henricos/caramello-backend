@@ -1,6 +1,6 @@
-"""Testes unitários de src/caramello_api/families/services.py.
+"""Unit tests for src/caramello_api/families/services.py.
 
-Usa AsyncMock para simular session — não requer banco real.
+Uses AsyncMock to simulate the session — no real database required.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from caramello_api.users.models import User
 
 
 def _make_fake_user(user_id: int = 42) -> User:
-    """Constrói User válido para uso nos testes."""
+    """Build a valid User for use in the tests."""
     return User(
         id=user_id,
         uuid=uuid4(),
@@ -29,7 +29,7 @@ def _make_fake_user(user_id: int = 42) -> User:
 
 
 def _make_fake_family(family_id: int = 10, name: str = "Familia Teste") -> Family:
-    """Constrói Family válida para uso nos testes."""
+    """Build a valid Family for use in the tests."""
     return Family(
         id=family_id,
         uuid=uuid4(),
@@ -43,10 +43,10 @@ def _make_fake_family(family_id: int = 10, name: str = "Familia Teste") -> Famil
 
 @pytest.mark.asyncio
 async def test_list_my_families_returns_two_families():
-    """list_my_families(session, user) retorna lista de famílias do usuário.
+    """list_my_families(session, user) returns the list of the user's families.
 
-    Verifica que o service retorna exatamente as famílias que o mock de
-    session.execute devolve — sem dependência de banco real.
+    Checks that the service returns exactly the families handed back by the
+    session.execute mock — with no dependency on a real database.
     """
     from caramello_api.families.services import list_my_families
 
@@ -69,7 +69,7 @@ async def test_list_my_families_returns_two_families():
 
 @pytest.mark.asyncio
 async def test_list_my_families_returns_empty_when_no_families():
-    """list_my_families retorna lista vazia quando usuário não é membro de nenhuma família."""
+    """list_my_families returns an empty list when the user belongs to no family."""
     from caramello_api.families.services import list_my_families
 
     fake_user = _make_fake_user()
@@ -87,7 +87,7 @@ async def test_list_my_families_returns_empty_when_no_families():
 
 @pytest.mark.asyncio
 async def test_list_my_families_passes_user_id_to_query():
-    """list_my_families usa user.id como filtro na query (não user.uuid)."""
+    """list_my_families uses user.id as the query filter (not user.uuid)."""
     from caramello_api.families.services import list_my_families
 
     fake_user = _make_fake_user(user_id=99)
@@ -100,5 +100,5 @@ async def test_list_my_families_passes_user_id_to_query():
 
     await list_my_families(mock_session, fake_user)
 
-    # Verifica que execute foi chamado (a query foi executada)
+    # Checks that execute was called (the query did run)
     mock_session.execute.assert_called_once()

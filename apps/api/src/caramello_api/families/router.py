@@ -6,15 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from caramello_api.families.models import Family, FamilyInvitation
-from caramello_api.families.schemas import (
-    FamilyCreate,
-    FamilyInvitationCreate,
-    FamilyInvitationRead,
-    FamilyInvitationUpdate,
-    FamilyRead,
-    FamilyUpdate,
-)
+from caramello_api.families.models import Family
+from caramello_api.families.schemas import FamilyCreate, FamilyRead, FamilyUpdate
 from caramello_api.shared.auth import get_current_user
 from caramello_api.shared.database import get_session
 from caramello_api.users.models import User
@@ -97,84 +90,5 @@ async def delete_family(
     return {"ok": True}
 
 
-familyinvitation_router = APIRouter(prefix="/families/family-invitation", tags=["FamilyInvitation"])
-
-
-@familyinvitation_router.post("/", response_model=FamilyInvitationRead)
-async def create_familyinvitation(
-    familyinvitation_in: FamilyInvitationCreate,
-    session: AsyncSession = Depends(get_session),
-    _: User = Depends(get_current_user),
-) -> FamilyInvitation:
-    db_obj = FamilyInvitation(**familyinvitation_in.model_dump(exclude_unset=True))
-    session.add(db_obj)
-    await session.commit()
-    await session.refresh(db_obj)
-    return db_obj
-
-
-@familyinvitation_router.get("/", response_model=list[FamilyInvitationRead])
-async def read_familyinvitations(
-    session: AsyncSession = Depends(get_session),
-    _: User = Depends(get_current_user),
-    offset: int = 0,
-    limit: int = Query(default=100, le=100),
-) -> list[FamilyInvitation]:
-    result = await session.execute(select(FamilyInvitation).offset(offset).limit(limit))
-    return list(result.scalars().all())
-
-
-@familyinvitation_router.get("/{uuid}", response_model=FamilyInvitationRead)
-async def read_familyinvitation(
-    uuid: UUID,
-    session: AsyncSession = Depends(get_session),
-    _: User = Depends(get_current_user),
-) -> FamilyInvitation:
-    statement = select(FamilyInvitation).where(FamilyInvitation.uuid == uuid)
-    result = await session.execute(statement)
-    familyinvitation = result.scalars().first()
-    if not familyinvitation:
-        raise HTTPException(status_code=404, detail="FamilyInvitation not found")
-    return familyinvitation
-
-
-@familyinvitation_router.patch("/{uuid}", response_model=FamilyInvitationRead)
-async def update_familyinvitation(
-    uuid: UUID,
-    familyinvitation_in: FamilyInvitationUpdate,
-    session: AsyncSession = Depends(get_session),
-    _: User = Depends(get_current_user),
-) -> FamilyInvitation:
-    statement = select(FamilyInvitation).where(FamilyInvitation.uuid == uuid)
-    result = await session.execute(statement)
-    db_obj = result.scalars().first()
-    if not db_obj:
-        raise HTTPException(status_code=404, detail="FamilyInvitation not found")
-    update_data = familyinvitation_in.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_obj, key, value)
-    session.add(db_obj)
-    await session.commit()
-    await session.refresh(db_obj)
-    return db_obj
-
-
-@familyinvitation_router.delete("/{uuid}")
-async def delete_familyinvitation(
-    uuid: UUID,
-    session: AsyncSession = Depends(get_session),
-    _: User = Depends(get_current_user),
-) -> dict[str, bool]:
-    statement = select(FamilyInvitation).where(FamilyInvitation.uuid == uuid)
-    result = await session.execute(statement)
-    db_obj = result.scalars().first()
-    if not db_obj:
-        raise HTTPException(status_code=404, detail="FamilyInvitation not found")
-    await session.delete(db_obj)
-    await session.commit()
-    return {"ok": True}
-
-
 router = APIRouter()
 router.include_router(family_router)
-router.include_router(familyinvitation_router)

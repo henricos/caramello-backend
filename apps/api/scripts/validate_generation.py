@@ -1,58 +1,66 @@
-import subprocess
+"""Check that what the DSL declares is what actually exists in `src/`.
+
+Run through `bin/validate_generation`, right after `bin/generate_code`. It is a
+consistency check over the generated tree, not a test suite: the behaviour of the
+generated code is covered by `tests/test_generator.py`.
+
+For every entity in `dsl/entities/`:
+  - `models.py` holds the table class
+  - `schemas.py` holds the `Read` DTO (unless the entity is a link model)
+  - `router.py` holds the CRUD router, or must NOT exist for the domain when
+    every entity of that domain declared `generate_router: false`
+"""
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
+ROOT_DIR = Path(__file__).parent.parent
+ENTITIES_DIR = ROOT_DIR / "dsl" / "entities"
+SRC_DIR = ROOT_DIR / "src" / "caramello_api"
+MIGRATIONS_DIR = SRC_DIR / "migrations" / "versions"
 
-def run_command(command):
+
+def check_file_content(file_path: Path, search_string: str) -> bool:
+    """Report whether `search_string` occurs in `file_path`."""
     try:
-        result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-        print(f"✅ Command passed: {command}")
+        content = file_path.read_text()
+    except FileNotFoundError:
+        print(f"[FAIL] file not found: {file_path}")
+        return False
+    if search_string in content:
+        print(f"[ OK ] found {search_string!r} in {file_path}")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Command failed: {command}")
-        print(e.stderr)
-        return False
+    print(f"[FAIL] {search_string!r} NOT found in {file_path}")
+    return False
 
 
-def check_file_content(file_path, search_string):
+def load_yaml(file_path: Path) -> Any:
+    """Load a YAML file, returning None instead of raising on failure."""
     try:
-        with open(file_path) as f:
-            content = f.read()
-            if search_string in content:
-                print(f"✅ Found '{search_string}' in {file_path}")
-                return True
-            else:
-                print(f"❌ '{search_string}' NOT found in {file_path}")
-                return False
+        return yaml.safe_load(file_path.read_text())
     except FileNotFoundError:
-        print(f"❌ File not found: {file_path}")
-        return False
-
-
-def load_yaml(file_path):
-    try:
-        with open(file_path) as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        print(f"❌ File not found: {file_path}")
+        print(f"[FAIL] file not found: {file_path}")
         return None
 
 
-def main():
-    print("🚀 Starting Validation Flow...")
+def main() -> None:
+    print("Starting validation flow...")
 
-    # 1. Check Generated Files based on DSL Directory
-    dsl_dir = Path("dsl/entities")
-    if not dsl_dir.exists():
-        print(f"❌ DSL directory not found: {dsl_dir}")
+    if not ENTITIES_DIR.exists():
+        print(f"[FAIL] DSL directory not found: {ENTITIES_DIR}")
         sys.exit(1)
 
-    entity_files = list(dsl_dir.glob("*.yaml"))
+    entity_files = sorted(ENTITIES_DIR.glob("*.yaml"))
     all_passed = True
+    # Per domain: does at least one entity still want the CRUD router?
+    router_expected: dict[str, bool] = {}
 
-    print(f"🔍 Checking {len(entity_files)} entities from {dsl_dir}...")
+    print(f"Checking {len(entity_files)} entities from {ENTITIES_DIR}...")
 
     for entity_path in entity_files:
         entity_data = load_yaml(entity_path)
@@ -61,50 +69,48 @@ def main():
             continue
 
         entity_name = entity_data["name"]
-        table_name = entity_data.get("table_name", entity_name.lower())
         domain = entity_data["domain"]
+        is_link_model = bool(entity_data.get("is_link_model"))
+        wants_router = not is_link_model and entity_data.get("generate_router", True)
+        router_expected[domain] = router_expected.get(domain, False) or bool(wants_router)
 
-        # Check the table class (models.py) and the Read DTO (schemas.py):
-        # the generator emits them into two separate files per domain.
-        models_file = Path(f"src/caramello_api/{domain}/models.py")
-        if not check_file_content(models_file, f"class {entity_name}(Base):"):
-            print(f"❌ Missing table class in {models_file}")
+        # The table class and the Read DTO live in two separate files per domain.
+        if not check_file_content(SRC_DIR / domain / "models.py", f"class {entity_name}(Base):"):
             all_passed = False
 
-        if not entity_data.get("is_link_model"):
-            schemas_file = Path(f"src/caramello_api/{domain}/schemas.py")
+        if not is_link_model:
+            schemas_file = SRC_DIR / domain / "schemas.py"
             if not check_file_content(schemas_file, f"class {entity_name}Read(BaseModel):"):
-                print(f"❌ Missing Read DTO in {schemas_file}")
                 all_passed = False
 
-        # Check Test File (if not link model)
-        if not entity_data.get("is_link_model"):
-            test_file = Path(f"tests/generated/test_{entity_name.lower()}.py")
-            if not test_file.exists():
-                print(f"❌ Missing generated test file: {test_file}")
+        if wants_router:
+            router_file = SRC_DIR / domain / "router.py"
+            if not check_file_content(router_file, f'tags=["{entity_name}"]'):
                 all_passed = False
+
+    # A domain where every entity opted out must have no router module at all —
+    # otherwise the tree is carrying dead code the generator no longer maintains.
+    for domain, expected in sorted(router_expected.items()):
+        router_file = SRC_DIR / domain / "router.py"
+        if expected:
+            continue
+        if router_file.exists():
+            print(f"[FAIL] {router_file} exists although every {domain} entity opts out")
+            all_passed = False
+        else:
+            print(f"[ OK ] no router module for {domain} (every entity opts out)")
 
     if not all_passed:
-        print("❌ Entity validation failed.")
+        print("[FAIL] entity validation failed.")
         sys.exit(1)
 
-    # 2. Check Migrations exist
-    versions_dir = Path("alembic/versions")
-    migrations = list(versions_dir.glob("*.py"))
+    migrations = sorted(MIGRATIONS_DIR.glob("*.py"))
     if not migrations:
-        print(
-            "⚠️ No migrations found in alembic/versions (Did you run 'alembic revision --autogenerate'?)"
-        )
-        # Warn but maybe not fail if we just cleaned it
+        print(f"[WARN] no migration found in {MIGRATIONS_DIR}")
     else:
-        print(f"✅ Found {len(migrations)} migration(s)")
+        print(f"[ OK ] found {len(migrations)} migration(s)")
 
-    # 3. Run Tests
-    print("Running generated tests...")
-    if not run_command("uv run pytest tests/generated"):
-        sys.exit(1)
-
-    print("🎉 Validation Successful!")
+    print("Validation successful.")
 
 
 if __name__ == "__main__":

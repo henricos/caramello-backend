@@ -11,7 +11,7 @@ from caramello_api.shared.base import Base
 
 
 class Account(Base):
-    """Conta bancária, cartão, poupança ou investimento de um membro da família."""
+    """Bank account, card, savings or investment account of a family member."""
 
     __tablename__ = "account"
 
@@ -33,7 +33,7 @@ class Account(Base):
 
 
 class Movement(Base):
-    """Movimentação financeira bruta importada do extrato bancário."""
+    """Raw financial movement imported from a bank statement."""
 
     __tablename__ = "movement"
 
@@ -56,7 +56,7 @@ class Movement(Base):
 
 class FinancialEntry(Base):
     """
-    Lançamento financeiro classificado. Herda valor e tipo de Movement via relação 1:1 (D-05).
+    Classified financial entry. Inherits amount and type from Movement (1:1 relation, D-05).
     """
 
     __tablename__ = "financial_entry"
@@ -95,7 +95,7 @@ class FinancialEntry(Base):
 
 class Category(Base):
     """
-    Categoria de classificação financeira — nível 1 da hierarquia (D-06). Filha: Subcategory.
+    Financial classification category — level 1 of the hierarchy (D-06). Child: Subcategory.
     """
 
     __tablename__ = "category"
@@ -116,7 +116,7 @@ class Category(Base):
 
 class Subcategory(Base):
     """
-    Subcategoria de classificação financeira — nível 2 da hierarquia (D-06). Pai: Category.
+    Financial classification subcategory — level 2 of the hierarchy (D-06). Parent: Category.
     """
 
     __tablename__ = "subcategory"

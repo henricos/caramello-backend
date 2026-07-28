@@ -33,22 +33,22 @@ class FamilyInvitationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     uuid: UUID
-    family_id: int
-    inviter_id: int
+    family_uuid: UUID
+    inviter_uuid: UUID
     email: str
     status: str
     created_at: datetime
 
 
 class FamilyInvitationCreate(BaseModel):
-    family_id: int
-    inviter_id: int
+    family_uuid: UUID
+    inviter_uuid: UUID
     email: str
     status: str | None = None
 
 
 class FamilyInvitationUpdate(BaseModel):
-    family_id: int | None = None
-    inviter_id: int | None = None
+    family_uuid: UUID | None = None
+    inviter_uuid: UUID | None = None
     email: str | None = None
     status: str | None = None

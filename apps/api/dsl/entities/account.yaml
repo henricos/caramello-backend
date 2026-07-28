@@ -1,67 +1,72 @@
 # dsl/entities/account.yaml
-# Conta bancária, cartão, poupança ou investimento de um membro da família.
-# Domain: finances (Phase 6, Plano 02)
+# Bank account, card, savings or investment account of a family member.
+# Domain: finances (Phase 6, Plan 02)
 
 name: Account
 domain: finances
-description: "Conta bancária, cartão, poupança ou investimento de um membro da família."
+description: "Bank account, card, savings or investment account of a family member."
 table_name: account
+
+# No generic CRUD router: the whole public surface of `finances` is hand-written
+# in `finances/operations.py`, where every route resolves a public UUID to the
+# internal id and checks family membership first.
+generate_router: false
 
 fields:
   - name: id
     type: int
     primary_key: true
-    description: "Chave primária interna (numérica)."
+    description: "Internal primary key (numeric)."
 
   - name: uuid
     type: UUID
     unique: true
     default_factory: uuid4
     nullable: false
-    description: "Identificador público único (UUID)."
+    description: "Unique public identifier (UUID)."
 
   - name: family_id
     type: int
     foreign_key: "family.id"
     nullable: false
-    description: "FK para família dona da conta."
+    description: "FK to the family that owns the account."
 
   - name: name
     type: str
     max_length: 100
     nullable: false
-    description: "Nome descritivo da conta (ex: Nubank PF, Caixa Poupança)."
+    description: "Descriptive name of the account (e.g. Nubank PF, Caixa Poupança)."
 
   - name: type
     type: str
     max_length: 20
     nullable: false
-    description: "Tipo: corrente, poupanca, cartao, investimento."
+    description: "Type: corrente, poupanca, cartao, investimento."
 
   - name: currency
     type: str
     max_length: 3
     default: "BRL"
     nullable: false
-    description: "Código ISO 4217 da moeda (ex: BRL, USD)."
+    description: "ISO 4217 currency code (e.g. BRL, USD)."
 
   - name: is_active
     type: bool
     default: true
     nullable: false
-    description: "Conta ativa (false = arquivada)."
+    description: "Account is active (false = archived)."
 
   - name: created_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Data de criação do registro."
+    description: "Timestamp of the record's creation."
 
   - name: updated_at
     type: datetime
     default_factory: now_utc
     nullable: false
-    description: "Data da última atualização do registro."
+    description: "Timestamp of the record's last update."
 
 filters:
   - fields: [family_id]
