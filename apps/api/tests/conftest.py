@@ -86,6 +86,34 @@ def constant(value):
     return lambda _stmt: value
 
 
+def entity_sequence(*answers):
+    """Handler for `execute_mock` answering the entity selects in order.
+
+    A business endpoint resolves its public UUIDs one `select()` at a time
+    (movement -> account -> FamilyMember, ...), so a test states what each step
+    finds by listing the objects in that order. A list answers a select the
+    endpoint reads through `.all()`; anything past the end of the sequence
+    answers None, which is how a test mocks a row the database does not have —
+    the 404 of an unknown UUID, or the missing FamilyMember behind a 403.
+    """
+    calls = [0]
+
+    def _handler(_stmt):
+        result = MagicMock()
+        index = calls[0]
+        calls[0] += 1
+        answer = answers[index] if index < len(answers) else None
+        if isinstance(answer, list):
+            result.first.return_value = answer[0] if answer else None
+            result.all.return_value = answer
+        else:
+            result.first.return_value = answer
+            result.all.return_value = []
+        return result
+
+    return _handler
+
+
 def apply_column_defaults(obj):
     """Fill in the Python-side column defaults of an ORM instance.
 

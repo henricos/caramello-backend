@@ -51,61 +51,72 @@ def test_parse_csv():
 
 
 def test_parse_csv_error_lines():
-    """MOV-02 + D-13: a row with an invalid amount goes to error_lines[], batch not aborted.
+    """MOV-02 + D-13: a CSV mixing valid and invalid rows parses the valid ones.
 
-    Nyquist stub — red until services.py implements the handling of invalid rows.
-    A row holding the value 'R$ 100' is not a valid Decimal — it must show up in
-    error_lines[], without preventing the valid rows from being processed.
+    Pins ONE contract for a batch of 5 data rows, 2 of them broken (40% — below
+    the abort threshold of test_parse_csv_abort_threshold):
+
+      - `_parse_csv_with_errors` returns (rows, error_lines): the three valid rows
+        in file order, and one error_lines entry per broken row carrying its
+        1-based line number in the file and the reason from the i18n catalog.
+      - `_parse_csv` is the rows-only view of that same batch — the invalid rows
+        are dropped silently, never turned into a ParsedRow with a bogus amount.
+
+    The reasons are compared against `translate(...)`: they are display text owned
+    by the catalog, so hardcoding the pt-BR wording here would pin the wrong file.
     """
-    services = pytest.importorskip("caramello_api.finances.services")
-    _parse_csv = getattr(services, "_parse_csv", None)
-    if _parse_csv is None:
-        pytest.skip("_parse_csv is not implemented yet in caramello.finances.services")
+    from datetime import datetime
 
-    # Row 2 is valid, row 3 has an invalid amount
+    from caramello_api.finances.services import _parse_csv, _parse_csv_with_errors
+    from caramello_api.i18n import translate
+
     csv_content = (
         b"date,amount,description\n"
-        b"2026-01-15,-150.00,PIX VALIDO\n"
-        b"2026-01-16,R$ 100,VALOR INVALIDO\n"
+        b"2026-01-15,-150.00,PIX VALIDO\n"  # line 2 — valid
+        b"2026-01-16,R$ 100,VALOR INVALIDO\n"  # line 3 — amount is not a Decimal
+        b"2026-01-17,200.00,SALARIO\n"  # line 4 — valid
+        b"2026-31-99,50.00,DATA INVALIDA\n"  # line 5 — date matches no format
+        b"2026-01-18,-75.50,ALUGUEL\n"  # line 6 — valid
     )
 
-    # _parse_csv must return (rows, error_lines) or raise ValueError only above 50%
-    # Since 1 of 2 rows fails (50%), it may or may not raise — exercise the case
-    # below the threshold: call it and check that a 50% failure rate does not raise.
-    try:
-        result = _parse_csv(csv_content)
-        # If it returns rows only, check that the invalid row is not included
-        if isinstance(result, list):
-            amounts = [r.amount for r in result]
-            assert Decimal("-150.00") in amounts, (
-                f"The valid row must be in the result; amounts: {amounts}"
-            )
-            # The invalid row must not produce a ParsedRow with a wrong amount
-            for row in result:
-                assert isinstance(row.amount, Decimal), (
-                    f"Amount must be Decimal, not {type(row.amount)}: {row.amount!r}"
-                )
-        # If it returns (rows, error_lines), check both
-        elif isinstance(result, tuple) and len(result) == 2:
-            rows, error_lines = result
-            assert len(error_lines) >= 1, (
-                f"The invalid row must be in error_lines; error_lines: {error_lines}"
-            )
-    except ValueError:
-        # ValueError is only acceptable when more than 50% of the rows failed (D-13 threshold)
-        pass
+    rows, error_lines = _parse_csv_with_errors(csv_content)
+
+    assert [row.description for row in rows] == ["PIX VALIDO", "SALARIO", "ALUGUEL"]
+    assert [row.amount for row in rows] == [
+        Decimal("-150.00"),
+        Decimal("200.00"),
+        Decimal("-75.50"),
+    ]
+    assert [row.date for row in rows] == [
+        datetime(2026, 1, 15, tzinfo=UTC),
+        datetime(2026, 1, 17, tzinfo=UTC),
+        datetime(2026, 1, 18, tzinfo=UTC),
+    ]
+    assert all(row.fitid is None for row in rows), "a CSV row has no FITID (D-07)"
+
+    assert error_lines == [
+        {
+            "line_number": 3,
+            "reason": translate("finances.parse_invalid_amount", value="R$ 100"),
+        },
+        {
+            "line_number": 5,
+            "reason": translate("finances.parse_invalid_date", line=5, value="2026-31-99"),
+        },
+    ]
+
+    # D-13: the public parser exposes the same batch without the error report
+    assert _parse_csv(csv_content) == rows
 
 
 def test_parse_csv_abort_threshold():
-    """MOV-02 + D-13: more than 50% invalid rows raises ValueError.
+    """MOV-02 + D-13: 50% or more invalid rows aborts the batch with ValueError.
 
-    Nyquist stub — red until services.py implements the abort threshold (plan 08-03).
-    With 3 of 3 rows invalid (100% > 50%), _parse_csv must raise ValueError.
+    With 3 of 3 rows invalid, _parse_csv must raise, and the message must be the
+    catalog's — it is what the endpoint turns into the 422's `message`.
     """
-    services = pytest.importorskip("caramello_api.finances.services")
-    _parse_csv = getattr(services, "_parse_csv", None)
-    if _parse_csv is None:
-        pytest.skip("_parse_csv is not implemented yet in caramello.finances.services")
+    from caramello_api.finances.services import _parse_csv
+    from caramello_api.i18n import translate
 
     # 3 data rows, all with an invalid amount (100% failure > 50%)
     csv_content = (
@@ -115,8 +126,11 @@ def test_parse_csv_abort_threshold():
         b"2026-01-17,abc,INVALIDO C\n"
     )
 
-    with pytest.raises(ValueError, match=r"50%|limiar|threshold|falharam"):
+    with pytest.raises(ValueError) as excinfo:
         _parse_csv(csv_content)
+    assert str(excinfo.value) == translate("finances.parse_too_many_errors", failed=3, total=3), (
+        str(excinfo.value)
+    )
 
 
 def test_compute_hash():

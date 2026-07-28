@@ -24,7 +24,13 @@ from uuid import uuid4
 
 import pytest
 
-from tests.conftest import apply_column_defaults, constant, execute_mock, refresh_mock
+from tests.conftest import (
+    apply_column_defaults,
+    constant,
+    entity_sequence,
+    execute_mock,
+    refresh_mock,
+)
 
 
 def _skip_if_stub() -> None:
@@ -59,6 +65,19 @@ def _make_fake_user(user_id: int = 42):
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
+
+
+def _assert_not_family_member(response) -> None:
+    """AUTH-FIN-02: assert the exact 403 `require_family_access` raises.
+
+    The status alone is not enough: 403 is also what an unrelated policy could
+    answer, and the machine-readable `reason` is the part of the contract a
+    consumer branches on.
+    """
+    assert response.status_code == 403, (
+        f"Expected 403 for a non-member; got {response.status_code}: {response.text}"
+    )
+    assert response.json()["detail"]["reason"] == "not_family_member", response.text
 
 
 def test_finances_module_exists():
@@ -1293,11 +1312,24 @@ def test_import_deduplication():
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        # CSV re-import: the hash already exists → potential_duplicates[]
-        # (not duplicates_skipped, since there is no fitid)
-        assert body.get("potential_duplicates") or body.get("duplicates_skipped", 0) > 0, (
-            f"A re-import must not insert duplicates; body: {body}"
-        )
+        # D-05: a CSV row has no FITID, so a known hash is a SUSPECTED duplicate
+        # handed back for confirmation — never a silent duplicates_skipped (D-04,
+        # which is the OFX path) and never an insert
+        assert body["inserted"] == 0, body
+        assert body["movements"] == [], body
+        assert body["duplicates_skipped"] == 0, body
+        assert body["error_lines"] == [], body
+        assert body["potential_duplicates"] == [
+            {
+                "new_row": {
+                    "date": "2026-01-15",
+                    "amount": "-150.00",
+                    "description": "PIX FULANO",
+                },
+                "existing_movement_uuid": str(existing_movement_uuid),
+                "hash": real_hash,
+            }
+        ], body
     finally:
         app.dependency_overrides.clear()
 
@@ -1453,12 +1485,15 @@ def test_import_confirm():
             "/api/v1/finances/import/confirm",
             json=payload,
         )
-        assert response.status_code in (200, 201), (
-            f"Expected 200/201 for /import/confirm; got: {response.status_code}. "
-            f"Body: {response.text}"
+        assert response.status_code == 200, (
+            f"Expected 200 for /import/confirm; got: {response.status_code}. Body: {response.text}"
         )
         body = response.json()
-        assert "inserted" in body, f"Response must contain 'inserted'; body: {body}"
+        assert body["inserted"] == 1, body
+        assert [m["description"] for m in body["movements"]] == ["PIX FULANO"], body
+        # D-08/P4: a confirmed row is inserted with no hash, so the UNIQUE
+        # constraint cannot fire on the duplicate the user just accepted
+        assert body["movements"][0]["import_hash"] is None, body
     finally:
         app.dependency_overrides.clear()
 
@@ -1619,9 +1654,9 @@ def test_movements_require_auth():
     try:
         client = TestClient(app)
         response = client.get(f"/api/v1/finances/accounts/{account_uuid}/movements")
-        assert response.status_code == 403, (
-            f"Expected 403 for a non-member; got: {response.status_code}. Body: {response.text}"
-        )
+        # This is the authorization boundary of GET /accounts/{uuid}/movements,
+        # shared by test_movement_entry_uuid_field and test_movement_reconciled_filter
+        _assert_not_family_member(response)
     finally:
         app.dependency_overrides.clear()
 
@@ -1886,23 +1921,94 @@ def test_reconcile_409_duplicate():
 def test_suggest_category():
     """LAN-03, D-CAT-01/02: GET /finances/movements/{uuid}/suggest-category.
 
-    Returns a list ordered by score desc. Every item must have:
-    subcategory_uuid, subcategory_name, category_uuid, category_name, score.
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
+    The mocks answer the whole chain the endpoint resolves (movement -> account ->
+    membership) plus the two queries the service runs, so the request reaches the
+    fuzzy matching instead of bailing out at the first lookup. The suggestions are
+    asserted by value: one entry per subcategory (only its best score survives),
+    ordered by score descending, and the history row whose description is
+    identical to the movement's scores 100.
     """
+    from decimal import Decimal
+
     from fastapi.testclient import TestClient
 
+    from caramello_api.families.models import FamilyMember  # type: ignore[import-not-found]
+    from caramello_api.finances.models import (  # type: ignore[import-not-found]
+        Account,
+        Movement,
+    )
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
 
     fake_user = _make_fake_user()
     movement_uuid = uuid4()
+    market_sub_uuid = uuid4()
+    ride_sub_uuid = uuid4()
+    food_cat_uuid = uuid4()
+    transport_cat_uuid = uuid4()
+    target_description = "Supermercado Pão de Açúcar"
+
+    fake_movement = Movement(
+        id=1,
+        uuid=movement_uuid,
+        account_id=1,
+        date=datetime(2026, 5, 10, tzinfo=UTC),
+        amount=Decimal("-320.00"),
+        description=target_description,
+        import_hash="hash-alvo",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    fake_account = Account(
+        id=1,
+        uuid=uuid4(),
+        family_id=1,
+        name="Conta Corrente",
+        type="corrente",
+        currency="BRL",
+        is_active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    fake_member = FamilyMember(
+        family_id=1,
+        user_id=fake_user.id,
+        role="member",
+        joined_at=datetime.now(UTC),
+    )
+
+    # The family history, in the column order the service's JOIN selects:
+    # description, subcategory_id, subcategory_uuid, subcategory_name,
+    # category_uuid, category_name. Subcategory 10 shows up twice on purpose —
+    # only its highest score may reach the response.
+    history = [
+        ("Mercado da esquina", 10, market_sub_uuid, "Supermercado", food_cat_uuid, "Alimentação"),
+        (target_description, 10, market_sub_uuid, "Supermercado", food_cat_uuid, "Alimentação"),
+        (
+            "Uber para o aeroporto",
+            20,
+            ride_sub_uuid,
+            "Aplicativo",
+            transport_cat_uuid,
+            "Transporte",
+        ),
+    ]
+
+    row_calls = [0]
+
+    def _row(_stmt):
+        r = MagicMock()
+        row_calls[0] += 1
+        # 1st row-group query: the target Movement, read with fetchone()
+        # 2nd row-group query: the family history, read with fetchall()
+        r.fetchone.return_value = (fake_movement,) if row_calls[0] == 1 else None
+        r.fetchall.return_value = history if row_calls[0] == 2 else []
+        return r
 
     mock_session = AsyncMock()
     mock_session.execute.side_effect = execute_mock(
-        constant(MagicMock(first=lambda: None, all=lambda: [])),
-        constant(MagicMock(fetchone=lambda: None, fetchall=lambda: [])),
+        entity_sequence(fake_movement, fake_account, fake_member), _row
     )
     mock_session.rollback = AsyncMock()
 
@@ -1914,13 +2020,84 @@ def test_suggest_category():
     try:
         client = TestClient(app)
         response = client.get(f"/api/v1/finances/movements/{movement_uuid}/suggest-category")
-        # 200 (empty list is fine — D-CAT-03) or 404 if the movement does not exist
-        assert response.status_code in (200, 404), (
-            f"Expected 200 or 404; got {response.status_code}: {response.text}"
-        )
-        if response.status_code == 200:
-            body = response.json()
-            assert isinstance(body, list), f"Response must be a list; got {type(body)}"
+        assert response.status_code == 200, response.text
+        body = response.json()
+        # One suggestion per subcategory, never one per history row
+        assert len(body) == 2, body
+        assert body[0]["subcategory_uuid"] == str(market_sub_uuid), body
+        assert body[0]["subcategory_name"] == "Supermercado", body
+        assert body[0]["category_uuid"] == str(food_cat_uuid), body
+        assert body[0]["category_name"] == "Alimentação", body
+        # D-CAT-02: an identical description scores 100, as an int
+        assert body[0]["score"] == 100, body
+        assert isinstance(body[0]["score"], int), body
+        assert body[1]["subcategory_uuid"] == str(ride_sub_uuid), body
+        assert body[1]["subcategory_name"] == "Aplicativo", body
+        assert body[1]["category_uuid"] == str(transport_cat_uuid), body
+        # D-CAT-01: ordered by score descending
+        assert body[0]["score"] > body[1]["score"], body
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_suggest_category_403_non_member():
+    """AUTH-FIN-02, T-09-04: suggest-category answers 403 to a non-member (IDOR).
+
+    The movement and its account resolve; the FamilyMember lookup finds nothing,
+    which is the only difference from test_suggest_category.
+    """
+    from decimal import Decimal
+
+    from fastapi.testclient import TestClient
+
+    from caramello_api.finances.models import (  # type: ignore[import-not-found]
+        Account,
+        Movement,
+    )
+    from caramello_api.main import app
+    from caramello_api.shared.auth import get_current_user
+    from caramello_api.shared.database import get_session
+
+    fake_user = _make_fake_user()
+    movement_uuid = uuid4()
+
+    fake_movement = Movement(
+        id=1,
+        uuid=movement_uuid,
+        account_id=1,
+        date=datetime(2026, 5, 10, tzinfo=UTC),
+        amount=Decimal("-320.00"),
+        description="Supermercado alheio",
+        import_hash="hash-alheio",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    fake_account = Account(
+        id=1,
+        uuid=uuid4(),
+        family_id=99,
+        name="Conta Alheia",
+        type="corrente",
+        currency="BRL",
+        is_active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    mock_session = AsyncMock()
+    # No FamilyMember after the account: require_family_access raises 403
+    mock_session.execute.side_effect = execute_mock(entity_sequence(fake_movement, fake_account))
+    mock_session.rollback = AsyncMock()
+
+    def _session_override():
+        yield mock_session
+
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    app.dependency_overrides[get_session] = _session_override
+    try:
+        client = TestClient(app)
+        response = client.get(f"/api/v1/finances/movements/{movement_uuid}/suggest-category")
+        _assert_not_family_member(response)
     finally:
         app.dependency_overrides.clear()
 
@@ -2066,18 +2243,106 @@ def test_update_entry():
             f"Expected 200; got {response.status_code}: {response.text}"
         )
         body = response.json()
-        assert "uuid" in body, "Response must contain 'uuid'"
-        assert "subcategory_uuid" in body, "Response must contain 'subcategory_uuid'"
-        assert "category_uuid" in body, "Response must contain 'category_uuid'"
+        assert body["uuid"] == str(entry_uuid), body
+        assert body["subcategory_uuid"] == str(sub_uuid), body
+        assert body["subcategory_name"] == "Sub Teste", body
+        assert body["category_uuid"] == str(cat_uuid), body
+        assert body["category_name"] == "Cat Teste", body
+        assert body["competencia_year"] == 2026, body
+        # The patched fields reached both the ORM object and the response
+        assert body["notes"] == "Nota atualizada", body
+        assert fake_entry.notes == "Nota atualizada"
     finally:
         app.dependency_overrides.clear()
 
 
-def test_entry_responsible_user_uuid():
-    """D-ATTR, D-REC-04: PATCH entries/{uuid} with responsible_user_uuid assigns an owner.
+def _entry_patch_fixtures(fake_user, responsible_user=None):
+    """Build the entry -> movement -> account -> subcategory -> category chain.
 
-    PATCH with responsible_user_uuid: null must clear the field (model_fields_set sentinel).
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03.
+    Shared by the PATCH /entries tests: they differ only in what they send and in
+    which step of the chain is missing, never in how the chain is shaped.
+    `responsible_user` pins the entry's current owner (None = unassigned).
+    """
+    from decimal import Decimal
+
+    from caramello_api.families.models import FamilyMember  # type: ignore[import-not-found]
+    from caramello_api.finances.models import (  # type: ignore[import-not-found]
+        Account,
+        Category,
+        FinancialEntry,
+        Movement,
+        Subcategory,
+    )
+
+    entry = FinancialEntry(
+        id=1,
+        uuid=uuid4(),
+        movement_id=1,
+        subcategory_id=1,
+        competencia_year=2026,
+        competencia_month=5,
+        notes=None,
+        is_recorrente=False,
+        responsible_user_id=None if responsible_user is None else responsible_user.id,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    movement = Movement(
+        id=1,
+        uuid=uuid4(),
+        account_id=1,
+        date=datetime(2026, 5, 4, tzinfo=UTC),
+        amount=Decimal("-89.90"),
+        description="Farmácia",
+        import_hash="hash-lancamento",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    account = Account(
+        id=1,
+        uuid=uuid4(),
+        family_id=1,
+        name="Conta Corrente",
+        type="corrente",
+        currency="BRL",
+        is_active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    subcategory = Subcategory(
+        id=1,
+        uuid=uuid4(),
+        category_id=1,
+        name="Medicamentos",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    category = Category(
+        id=1,
+        uuid=uuid4(),
+        family_id=1,
+        name="Saúde",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    member = FamilyMember(
+        family_id=1,
+        user_id=fake_user.id,
+        role="member",
+        joined_at=datetime.now(UTC),
+    )
+    return entry, movement, account, subcategory, category, member
+
+
+def test_entry_responsible_user_uuid():
+    """D-ATTR-01/02, D-REC-04: PATCH entries/{uuid} round-trips responsible_user_uuid.
+
+    Two requests, one mocked session each, both reaching the endpoint's logic:
+
+      - responsible_user_uuid=<uuid> assigns the owner — the response carries the
+        member's public UUID and the ORM object received the internal id.
+      - responsible_user_uuid=null clears it (the model_fields_set sentinel of
+        pitfall P2) — the response carries null and the internal id is gone.
     """
     from fastapi.testclient import TestClient
 
@@ -2086,12 +2351,27 @@ def test_entry_responsible_user_uuid():
     from caramello_api.shared.database import get_session
 
     fake_user = _make_fake_user()
-    entry_uuid = uuid4()
-    responsible_uuid = uuid4()
+    responsible_user = _make_fake_user(user_id=77)
+
+    # --- Part 1: assigning a responsible member ---
+    entry, movement, account, subcategory, category, member = _entry_patch_fixtures(fake_user)
 
     mock_session = AsyncMock()
+    # Entity selects, in order: entry, movement (auth), account, FamilyMember
+    # (require_family_access), the responsible User, its FamilyMember (D-ATTR-02),
+    # then the subcategory/category/User reloaded for the rich schema.
     mock_session.execute.side_effect = execute_mock(
-        constant(MagicMock(first=lambda: None, all=lambda: []))
+        entity_sequence(
+            entry,
+            movement,
+            account,
+            member,
+            responsible_user,
+            member,
+            subcategory,
+            category,
+            responsible_user,
+        )
     )
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
@@ -2105,23 +2385,94 @@ def test_entry_responsible_user_uuid():
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        # PATCH with an explicit responsible user
         response = client.patch(
-            f"/api/v1/finances/entries/{entry_uuid}",
-            json={"responsible_user_uuid": str(responsible_uuid)},
+            f"/api/v1/finances/entries/{entry.uuid}",
+            json={"responsible_user_uuid": str(responsible_user.uuid)},
         )
-        # 200, 404 or 422 (invalid UUID in the mock) — as long as the route exists
-        assert response.status_code in (200, 404, 422), (
-            f"Expected 200/404/422; got {response.status_code}: {response.text}"
-        )
-        # PATCH with null — clears the responsible user
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["uuid"] == str(entry.uuid), body
+        assert body["responsible_user_uuid"] == str(responsible_user.uuid), body
+        # D-ATTR-01: the UUID was resolved to the internal id on the way in
+        assert entry.responsible_user_id == responsible_user.id
+        # The rest of the rich schema still describes the entry it patched
+        assert body["movement"]["uuid"] == str(movement.uuid), body
+        assert body["subcategory_uuid"] == str(subcategory.uuid), body
+        assert body["category_uuid"] == str(category.uuid), body
+    finally:
+        app.dependency_overrides.clear()
+
+    # --- Part 2: clearing it with an explicit null ---
+    owned_entry, movement, account, subcategory, category, member = _entry_patch_fixtures(
+        fake_user, responsible_user=responsible_user
+    )
+    assert owned_entry.responsible_user_id == responsible_user.id, "precondition"
+
+    mock_session_null = AsyncMock()
+    # No User lookup this time: null clears the field without resolving anything
+    mock_session_null.execute.side_effect = execute_mock(
+        entity_sequence(owned_entry, movement, account, member, subcategory, category)
+    )
+    mock_session_null.add = MagicMock()
+    mock_session_null.commit = AsyncMock()
+    mock_session_null.refresh = AsyncMock(side_effect=refresh_mock())
+    mock_session_null.rollback = AsyncMock()
+
+    def _session_override_null():
+        yield mock_session_null
+
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    app.dependency_overrides[get_session] = _session_override_null
+    try:
+        client = TestClient(app)
         response_null = client.patch(
-            f"/api/v1/finances/entries/{entry_uuid}",
+            f"/api/v1/finances/entries/{owned_entry.uuid}",
             json={"responsible_user_uuid": None},
         )
-        assert response_null.status_code in (200, 404, 422), (
-            f"Expected 200/404/422 with null; got {response_null.status_code}: {response_null.text}"
+        assert response_null.status_code == 200, response_null.text
+        body_null = response_null.json()
+        assert body_null["responsible_user_uuid"] is None, body_null
+        assert owned_entry.responsible_user_id is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_entry_403_non_member():
+    """AUTH-FIN-02, T-09-04: PATCH /finances/entries/{uuid} answers 403 to a non-member.
+
+    The entry, its movement and its account resolve (CR-01's chain); the
+    FamilyMember lookup finds nothing.
+    """
+    from fastapi.testclient import TestClient
+
+    from caramello_api.main import app
+    from caramello_api.shared.auth import get_current_user
+    from caramello_api.shared.database import get_session
+
+    fake_user = _make_fake_user()
+    entry, movement, account, _sub, _cat, _member = _entry_patch_fixtures(fake_user)
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = execute_mock(entity_sequence(entry, movement, account))
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
+    mock_session.rollback = AsyncMock()
+
+    def _session_override():
+        yield mock_session
+
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    app.dependency_overrides[get_session] = _session_override
+    try:
+        client = TestClient(app)
+        response = client.patch(
+            f"/api/v1/finances/entries/{entry.uuid}",
+            json={"notes": "Tentativa de outra família"},
         )
+        _assert_not_family_member(response)
+        # A rejected request must not have written anything
+        mock_session.commit.assert_not_called()
     finally:
         app.dependency_overrides.clear()
 
@@ -2131,11 +2482,65 @@ def test_entry_responsible_user_uuid():
 # ---------------------------------------------------------------------------
 
 
+def _fake_family(family_uuid, family_id: int = 1, name: str = "Familia Teste"):
+    """Build a Family the balance and report tests resolve their UUID to."""
+    from caramello_api.families.models import Family  # type: ignore[import-not-found]
+
+    return Family(
+        id=family_id,
+        uuid=family_uuid,
+        name=name,
+        description=None,
+        status="active",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+
+def _fake_member(fake_user, family_id: int = 1):
+    """Build the FamilyMember that makes require_family_access let the caller in."""
+    from caramello_api.families.models import FamilyMember  # type: ignore[import-not-found]
+
+    return FamilyMember(
+        family_id=family_id,
+        user_id=fake_user.id,
+        role="member",
+        joined_at=datetime.now(UTC),
+    )
+
+
+def _sum_for_account(balances):
+    """Row handler answering each SUM(movement.amount) with its account's figure.
+
+    The account being summed is read back out of the compiled WHERE, so a handler
+    that mixed the accounts up — or an endpoint that summed the wrong one — shows
+    up as a wrong balance instead of a passing test. An account absent from
+    `balances` answers None, which is the empty SUM of pitfall P6.
+    """
+
+    def _row(stmt):
+        sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        total = next(
+            (
+                value
+                for acc_id, value in balances.items()
+                if f"movement.account_id = {acc_id}" in sql
+            ),
+            None,
+        )
+        r = MagicMock()
+        r.scalar_one_or_none.return_value = total
+        return r
+
+    return _row
+
+
 def test_account_balance():
     """REL-01, D-BAL-01: GET /finances/accounts/{uuid}/balance returns the balance.
 
-    Response: {account_uuid, balance (string), currency}.
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
+    The mocked SUM answers only for account 7, which is the account the URL
+    resolves to, so the asserted figure proves the endpoint summed that account
+    and returned what the service computed.
     """
     from decimal import Decimal
 
@@ -2150,26 +2555,22 @@ def test_account_balance():
     account_uuid = uuid4()
 
     fake_account = Account(
-        id=1,
+        id=7,
         uuid=account_uuid,
         family_id=1,
         name="Conta Corrente",
+        type="corrente",
         currency="BRL",
         is_active=True,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
 
-    def _exec(stmt):
-        r = MagicMock()
-        r.first.return_value = fake_account
-        return r
-
-    mock_balance_result = MagicMock()
-    mock_balance_result.scalar_one_or_none.return_value = Decimal("250.00")
-
     mock_session = AsyncMock()
-    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_balance_result))
+    mock_session.execute.side_effect = execute_mock(
+        entity_sequence(fake_account, _fake_member(fake_user)),
+        _sum_for_account({7: Decimal("1234.56")}),
+    )
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2180,57 +2581,107 @@ def test_account_balance():
     try:
         client = TestClient(app)
         response = client.get(f"/api/v1/finances/accounts/{account_uuid}/balance")
-        assert response.status_code in (200, 404), (
-            f"Expected 200 or 404; got {response.status_code}: {response.text}"
-        )
-        if response.status_code == 200:
-            body = response.json()
-            assert "balance" in body, f"Response must contain 'balance'; got: {body}"
-            assert "account_uuid" in body or "uuid" in body, (
-                "Response must contain account_uuid (D-BAL-01)"
-            )
+        assert response.status_code == 200, response.text
+        # D-BAL-01: the whole body, by value — money crosses the wire as a string
+        assert response.json() == {
+            "account_uuid": str(account_uuid),
+            "balance": "1234.56",
+            "currency": "BRL",
+        }, response.text
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_account_balance_403_non_member():
+    """AUTH-FIN-02, T-09-04: the account balance answers 403 to a non-member."""
+    from fastapi.testclient import TestClient
+
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
+    from caramello_api.main import app
+    from caramello_api.shared.auth import get_current_user
+    from caramello_api.shared.database import get_session
+
+    fake_user = _make_fake_user()
+    account_uuid = uuid4()
+
+    fake_account = Account(
+        id=7,
+        uuid=account_uuid,
+        family_id=99,
+        name="Conta Alheia",
+        type="corrente",
+        currency="BRL",
+        is_active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = execute_mock(entity_sequence(fake_account))
+    mock_session.rollback = AsyncMock()
+
+    def _session_override():
+        yield mock_session
+
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    app.dependency_overrides[get_session] = _session_override
+    try:
+        client = TestClient(app)
+        response = client.get(f"/api/v1/finances/accounts/{account_uuid}/balance")
+        _assert_not_family_member(response)
     finally:
         app.dependency_overrides.clear()
 
 
 def test_family_balance():
-    """REL-02, D-BAL-02: GET /finances/families/{uuid}/balance returns the consolidated balance.
+    """REL-02, D-BAL-02: GET /finances/families/{uuid}/balance consolidates the accounts.
 
-    Response: {family_uuid, total_balance, accounts: [...]}.
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
+    Two accounts with different balances, one of them negative: the response must
+    carry each account's own figure and their sum as total_balance.
     """
     from decimal import Decimal
 
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
+    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
 
     fake_user = _make_fake_user()
     family_uuid = uuid4()
+    checking_uuid = uuid4()
+    card_uuid = uuid4()
 
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-
-    def _exec(stmt):
-        r = MagicMock()
-        r.first.return_value = fake_family
-        r.all.return_value = []
-        return r
+    fake_accounts = [
+        Account(
+            id=7,
+            uuid=checking_uuid,
+            family_id=1,
+            name="Conta Corrente",
+            type="corrente",
+            currency="BRL",
+            is_active=True,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        ),
+        Account(
+            id=8,
+            uuid=card_uuid,
+            family_id=1,
+            name="Cartão de Crédito",
+            type="cartao",
+            currency="BRL",
+            is_active=True,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        ),
+    ]
 
     mock_session = AsyncMock()
     mock_session.execute.side_effect = execute_mock(
-        _exec,
-        constant(MagicMock(scalar_one_or_none=lambda: Decimal("0.00"), fetchall=lambda: [])),
+        entity_sequence(_fake_family(family_uuid), _fake_member(fake_user), fake_accounts),
+        _sum_for_account({7: Decimal("100.50"), 8: Decimal("-25.25")}),
     )
     mock_session.rollback = AsyncMock()
 
@@ -2242,14 +2693,56 @@ def test_family_balance():
     try:
         client = TestClient(app)
         response = client.get(f"/api/v1/finances/families/{family_uuid}/balance")
-        assert response.status_code in (200, 404), (
-            f"Expected 200 or 404; got {response.status_code}: {response.text}"
-        )
-        if response.status_code == 200:
-            body = response.json()
-            assert "total_balance" in body, (
-                f"Response must contain 'total_balance' (D-BAL-02); got: {body}"
-            )
+        assert response.status_code == 200, response.text
+        assert response.json() == {
+            "family_uuid": str(family_uuid),
+            "total_balance": "75.25",
+            "accounts": [
+                {
+                    "account_uuid": str(checking_uuid),
+                    "name": "Conta Corrente",
+                    "currency": "BRL",
+                    "balance": "100.50",
+                },
+                {
+                    "account_uuid": str(card_uuid),
+                    "name": "Cartão de Crédito",
+                    "currency": "BRL",
+                    "balance": "-25.25",
+                },
+            ],
+        }, response.text
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_family_balance_403_non_member():
+    """AUTH-FIN-02, T-09-04: the family balance answers 403 to a non-member."""
+    from fastapi.testclient import TestClient
+
+    from caramello_api.main import app
+    from caramello_api.shared.auth import get_current_user
+    from caramello_api.shared.database import get_session
+
+    fake_user = _make_fake_user()
+    family_uuid = uuid4()
+
+    mock_session = AsyncMock()
+    # The family exists; the caller is not one of its members
+    mock_session.execute.side_effect = execute_mock(
+        entity_sequence(_fake_family(family_uuid, name="Familia Alheia"))
+    )
+    mock_session.rollback = AsyncMock()
+
+    def _session_override():
+        yield mock_session
+
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    app.dependency_overrides[get_session] = _session_override
+    try:
+        client = TestClient(app)
+        response = client.get(f"/api/v1/finances/families/{family_uuid}/balance")
+        _assert_not_family_member(response)
     finally:
         app.dependency_overrides.clear()
 
@@ -2259,42 +2752,75 @@ def test_family_balance():
 # ---------------------------------------------------------------------------
 
 
-def test_monthly_report():
-    """REL-03/04, D-REP-01: GET /finances/reports/monthly returns the breakdown.
+def _monthly_report_rows(*rows):
+    """Row handler answering the report's aggregate only for competência 2026-05.
 
-    Response: {period, total, rows} where each row has category_uuid,
-    subcategory_uuid and total.
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
+    The GROUP BY runs inside the mocked session, so the stand-in plays the part
+    the database would: it hands the rows over only when the compiled query is
+    the one D-REP-03 requires — filtered by FinancialEntry.competencia_year/month.
+    A report grouped by Movement.date instead comes back empty, which is what
+    makes this test able to fail.
     """
+    recorded: list[str] = []
+
+    def _row(stmt):
+        sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        recorded.append(sql)
+        by_competencia = (
+            "financial_entry.competencia_year = 2026" in sql
+            and "financial_entry.competencia_month = 5" in sql
+        )
+        r = MagicMock()
+        r.fetchall.return_value = list(rows) if by_competencia else []
+        return r
+
+    return _row, recorded
+
+
+def test_monthly_report():
+    """REL-03/04, D-REP-01/03: GET /finances/reports/monthly returns the breakdown.
+
+    Two subcategory rows go in and the response is asserted whole: the period
+    echoed back, both rows by value, and `total` as the sum of their totals.
+    """
+    from decimal import Decimal
 
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
 
     fake_user = _make_fake_user()
     family_uuid = uuid4()
+    food_cat_uuid = uuid4()
+    market_sub_uuid = uuid4()
+    transport_cat_uuid = uuid4()
+    fuel_sub_uuid = uuid4()
 
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+    # Rows as monthly_breakdown reads them: named attributes off a GROUP BY Row
+    market_row = MagicMock(
+        category_uuid=food_cat_uuid,
+        category_name="Alimentação",
+        subcategory_uuid=market_sub_uuid,
+        subcategory_name="Supermercado",
+        total=Decimal("300.00"),
+        count=5,
     )
-
-    def _exec(stmt):
-        r = MagicMock()
-        r.first.return_value = fake_family
-        r.all.return_value = []
-        return r
+    fuel_row = MagicMock(
+        category_uuid=transport_cat_uuid,
+        category_name="Transporte",
+        subcategory_uuid=fuel_sub_uuid,
+        subcategory_name="Combustível",
+        total=Decimal("150.75"),
+        count=2,
+    )
+    row_handler, recorded_sql = _monthly_report_rows(market_row, fuel_row)
 
     mock_session = AsyncMock()
-    mock_session.execute.side_effect = execute_mock(_exec, constant(MagicMock(fetchall=lambda: [])))
+    mock_session.execute.side_effect = execute_mock(
+        entity_sequence(_fake_family(family_uuid), _fake_member(fake_user)), row_handler
+    )
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2308,27 +2834,41 @@ def test_monthly_report():
             "/api/v1/finances/reports/monthly",
             params={"family_uuid": str(family_uuid), "year": 2026, "month": 5},
         )
-        assert response.status_code in (200, 404), (
-            f"Expected 200 or 404; got {response.status_code}: {response.text}"
-        )
-        if response.status_code == 200:
-            body = response.json()
-            assert "period" in body, f"Response must contain 'period' (D-REP-01); got: {body}"
-            assert "rows" in body, f"Response must contain 'rows'; got: {body}"
+        assert response.status_code == 200, response.text
+        assert response.json() == {
+            "period": {"year": 2026, "month": 5},
+            "total": "450.75",
+            "rows": [
+                {
+                    "category_uuid": str(food_cat_uuid),
+                    "category_name": "Alimentação",
+                    "subcategory_uuid": str(market_sub_uuid),
+                    "subcategory_name": "Supermercado",
+                    "total": "300.00",
+                    "count": 5,
+                },
+                {
+                    "category_uuid": str(transport_cat_uuid),
+                    "category_name": "Transporte",
+                    "subcategory_uuid": str(fuel_sub_uuid),
+                    "subcategory_name": "Combustível",
+                    "total": "150.75",
+                    "count": 2,
+                },
+            ],
+        }, response.text
+        # D-REP-04: one aggregate query, with func.sum and a GROUP BY
+        assert len(recorded_sql) == 1, recorded_sql
+        assert "sum(movement.amount)" in recorded_sql[0], recorded_sql[0]
+        assert "GROUP BY" in recorded_sql[0], recorded_sql[0]
     finally:
         app.dependency_overrides.clear()
 
 
-def test_report_uses_competencia():
-    """REL-05, D-REP-03: the report accepts year/month query params (accrual period).
-
-    Checks that the route exists and accepts the right parameters.
-    The report works over competencia_year/month — not over Movement.date.
-    Plan 09-04 Task 3: guard removed — endpoint implemented in 09-03/09-04.
-    """
+def test_monthly_report_403_non_member():
+    """AUTH-FIN-02, T-09-04: the monthly report answers 403 to a non-member."""
     from fastapi.testclient import TestClient
 
-    from caramello_api.families.models import Family  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
@@ -2336,24 +2876,56 @@ def test_report_uses_competencia():
     fake_user = _make_fake_user()
     family_uuid = uuid4()
 
-    fake_family = Family(
-        id=1,
-        uuid=family_uuid,
-        name="Familia Teste",
-        description=None,
-        status="active",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = execute_mock(
+        entity_sequence(_fake_family(family_uuid, name="Familia Alheia"))
     )
+    mock_session.rollback = AsyncMock()
 
-    def _exec(stmt):
+    def _session_override():
+        yield mock_session
+
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    app.dependency_overrides[get_session] = _session_override
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/finances/reports/monthly",
+            params={"family_uuid": str(family_uuid), "year": 2026, "month": 5},
+        )
+        _assert_not_family_member(response)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_report_uses_competencia():
+    """REL-05, D-REP-03: the report groups by accrual period, not by Movement.date.
+
+    The year/month query params must reach the aggregate as
+    FinancialEntry.competencia_year/competencia_month. The compiled statement is
+    what proves it: a report that filtered on the movement date would satisfy the
+    response shape just as well.
+    """
+    from fastapi.testclient import TestClient
+
+    from caramello_api.main import app
+    from caramello_api.shared.auth import get_current_user
+    from caramello_api.shared.database import get_session
+
+    fake_user = _make_fake_user()
+    family_uuid = uuid4()
+    recorded_sql: list[str] = []
+
+    def _row(stmt):
+        recorded_sql.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
         r = MagicMock()
-        r.first.return_value = fake_family
-        r.all.return_value = []
+        r.fetchall.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.execute.side_effect = execute_mock(_exec, constant(MagicMock(fetchall=lambda: [])))
+    mock_session.execute.side_effect = execute_mock(
+        entity_sequence(_fake_family(family_uuid), _fake_member(fake_user)), _row
+    )
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2368,12 +2940,14 @@ def test_report_uses_competencia():
             "/api/v1/finances/reports/monthly",
             params={"family_uuid": str(family_uuid), "year": 2026, "month": 3},
         )
-        # 200 or 404 (family not found in the mock) are both valid
-        # 422 means the params were not accepted — failure
-        assert response.status_code != 422, (
-            f"The endpoint must not return 422 for valid year/month params; "
-            f"got: {response.status_code}: {response.text}"
-        )
+        assert response.status_code == 200, response.text
+        assert response.json()["period"] == {"year": 2026, "month": 3}, response.text
+        assert len(recorded_sql) == 1, recorded_sql
+        sql = recorded_sql[0]
+        assert "financial_entry.competencia_year = 2026" in sql, sql
+        assert "financial_entry.competencia_month = 3" in sql, sql
+        # REL-05: the movement date is joined for its amount, never filtered on
+        assert "movement.date" not in sql, sql
     finally:
         app.dependency_overrides.clear()
 
@@ -2383,61 +2957,104 @@ def test_report_uses_competencia():
 # ---------------------------------------------------------------------------
 
 
-def test_movement_entry_uuid_field():
-    """D-MOV-01: GET movements includes an entry_uuid field on every item.
+def _movement_listing_fixtures(account_uuid, fake_user):
+    """Build the account plus one reconciled and one pending movement.
 
-    entry_uuid: UUID | None — null for movements pending reconciliation.
-    Implemented through a LEFT JOIN with FinancialEntry.
-    Plan 09-04 Task 3: guard removed — field and LEFT JOIN implemented in 09-04.
+    Returns (account, member, reconciled_row, pending_row), where each row is the
+    (Movement, entry_uuid) pair the LEFT JOIN of D-MOV-01 hands back.
     """
     from decimal import Decimal
 
+    from caramello_api.finances.models import Account, Movement  # type: ignore[import-not-found]
+
+    account = Account(
+        id=1,
+        uuid=account_uuid,
+        family_id=1,
+        name="Conta Corrente",
+        type="corrente",
+        currency="BRL",
+        is_active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    reconciled_movement = Movement(
+        id=1,
+        uuid=uuid4(),
+        account_id=1,
+        date=datetime(2026, 5, 12, tzinfo=UTC),
+        amount=Decimal("-89.90"),
+        description="Farmácia",
+        import_hash="hash-conciliado",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    pending_movement = Movement(
+        id=2,
+        uuid=uuid4(),
+        account_id=1,
+        date=datetime(2026, 5, 11, tzinfo=UTC),
+        amount=Decimal("250.00"),
+        description="Transferência recebida",
+        import_hash="hash-pendente",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    return (
+        account,
+        _fake_member(fake_user),
+        (reconciled_movement, uuid4()),
+        (pending_movement, None),
+    )
+
+
+def _movement_rows_handler(rows):
+    """Row handler applying the D-MOV-02 filter the way the database would.
+
+    The IS NULL / IS NOT NULL predicate lives in the SQL, so a mock that ignored
+    it would answer the same three lists for the three different requests. This
+    stand-in reads the predicate back out of the compiled statement and filters
+    accordingly — dropping the WHERE from the endpoint then changes the response.
+    """
+
+    def _row(stmt):
+        sql = str(stmt)
+        selected = rows
+        if "financial_entry.id IS NOT NULL" in sql:
+            selected = [row for row in rows if row[1] is not None]
+        elif "financial_entry.id IS NULL" in sql:
+            selected = [row for row in rows if row[1] is None]
+        r = MagicMock()
+        r.fetchall.return_value = selected
+        return r
+
+    return _row
+
+
+def test_movement_entry_uuid_field():
+    """D-MOV-01: GET movements carries entry_uuid, populated only when reconciled.
+
+    Two movements come back from the LEFT JOIN: one carrying the uuid of its
+    FinancialEntry, one with none. Both are asserted by value — a handler that
+    stopped reading the join's second column would answer null for both.
+    """
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-
-    fake_account = Account(
-        id=1,
-        uuid=account_uuid,
-        family_id=1,
-        name="Conta Corrente",
-        currency="BRL",
-        is_active=True,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+    account, member, reconciled_row, pending_row = _movement_listing_fixtures(
+        account_uuid, fake_user
     )
-
-    def _exec(stmt):
-        r = MagicMock()
-        r.first.return_value = fake_account
-        r.all.return_value = []
-        return r
-
-    # Simulates a movement without an entry (pending)
-    mock_movement_row = (
-        MagicMock(
-            uuid=uuid4(),
-            date=datetime.now(UTC),
-            amount=Decimal("100.00"),
-            description="Pagamento",
-            import_hash=None,
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
-        ),
-        None,  # entry_uuid = None (pending)
-    )
-
-    mock_execute_result = MagicMock()
-    mock_execute_result.fetchall.return_value = [mock_movement_row]
 
     mock_session = AsyncMock()
-    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
+    mock_session.execute.side_effect = execute_mock(
+        entity_sequence(account, member),
+        _movement_rows_handler([reconciled_row, pending_row]),
+    )
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2448,76 +3065,78 @@ def test_movement_entry_uuid_field():
     try:
         client = TestClient(app)
         response = client.get(f"/api/v1/finances/accounts/{account_uuid}/movements")
-        assert response.status_code in (200, 404), (
-            f"Expected 200 or 404; got {response.status_code}: {response.text}"
-        )
-        if response.status_code == 200:
-            body = response.json()
-            if isinstance(body, list) and body:
-                item = body[0]
-                assert "entry_uuid" in item, (
-                    f"D-MOV-01: every movement must have 'entry_uuid'; keys: {list(item.keys())}"
-                )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert len(body) == 2, body
+        reconciled_movement, entry_uuid = reconciled_row
+        pending_movement, _none = pending_row
+        assert body[0]["uuid"] == str(reconciled_movement.uuid), body
+        assert body[0]["description"] == "Farmácia", body
+        assert body[0]["amount"] == "-89.90", body
+        # D-MOV-01: a reconciled movement carries its entry's uuid
+        assert body[0]["entry_uuid"] == str(entry_uuid), body
+        assert body[1]["uuid"] == str(pending_movement.uuid), body
+        assert body[1]["description"] == "Transferência recebida", body
+        # ...and a pending one carries null
+        assert body[1]["entry_uuid"] is None, body
     finally:
         app.dependency_overrides.clear()
 
 
 def test_movement_reconciled_filter():
-    """D-MOV-02: GET /finances/accounts/{uuid}/movements?reconciled=false returns pending ones.
+    """D-MOV-02: ?reconciled= filters the listing through the LEFT JOIN.
 
-    Optional filter: reconciled=false returns only movements without an entry;
-    reconciled=true returns only reconciled ones. Implemented through LEFT JOIN + IS NULL.
-    Plan 09-04 Task 3: guard removed — filter implemented in 09-04.
+    The same two movements (one reconciled, one pending) are asked for three
+    ways. Each request must answer a different list, which is what tells a real
+    filter apart from a parameter the endpoint merely accepts.
     """
-
     from fastapi.testclient import TestClient
 
-    from caramello_api.finances.models import Account  # type: ignore[import-not-found]
     from caramello_api.main import app
     from caramello_api.shared.auth import get_current_user
     from caramello_api.shared.database import get_session
 
     fake_user = _make_fake_user()
     account_uuid = uuid4()
-
-    fake_account = Account(
-        id=1,
-        uuid=account_uuid,
-        family_id=1,
-        name="Conta Corrente",
-        currency="BRL",
-        is_active=True,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+    account, member, reconciled_row, pending_row = _movement_listing_fixtures(
+        account_uuid, fake_user
     )
-
-    def _exec(stmt):
-        r = MagicMock()
-        r.first.return_value = fake_account
-        return r
-
-    mock_execute_result = MagicMock()
-    mock_execute_result.fetchall.return_value = []
-
-    mock_session = AsyncMock()
-    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
-    mock_session.rollback = AsyncMock()
+    rows = [reconciled_row, pending_row]
 
     def _session_override():
+        # A fresh session per request: the entity sequence is consumed by each
+        # one, exactly as it would be by three separate HTTP calls in production.
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = execute_mock(
+            entity_sequence(account, member), _movement_rows_handler(rows)
+        )
+        mock_session.rollback = AsyncMock()
         yield mock_session
 
     app.dependency_overrides[get_current_user] = lambda: fake_user
     app.dependency_overrides[get_session] = _session_override
     try:
         client = TestClient(app)
-        response = client.get(
-            f"/api/v1/finances/accounts/{account_uuid}/movements",
-            params={"reconciled": "false"},
-        )
-        # 200 (empty list is fine) or 404 (account not found in the mock)
-        # 422 means the reconciled parameter is not accepted — failure
-        assert response.status_code in (200, 404), (
-            f"Expected 200 or 404; got {response.status_code}: {response.text}"
-        )
+        url = f"/api/v1/finances/accounts/{account_uuid}/movements"
+
+        # No filter: both movements
+        unfiltered = client.get(url)
+        assert unfiltered.status_code == 200, unfiltered.text
+        assert [item["uuid"] for item in unfiltered.json()] == [
+            str(reconciled_row[0].uuid),
+            str(pending_row[0].uuid),
+        ], unfiltered.text
+
+        # reconciled=false: only the movement with no entry
+        pending = client.get(url, params={"reconciled": "false"})
+        assert pending.status_code == 200, pending.text
+        assert [item["uuid"] for item in pending.json()] == [str(pending_row[0].uuid)], pending.text
+        assert pending.json()[0]["entry_uuid"] is None, pending.text
+
+        # reconciled=true: only the movement carrying an entry
+        done = client.get(url, params={"reconciled": "true"})
+        assert done.status_code == 200, done.text
+        assert [item["uuid"] for item in done.json()] == [str(reconciled_row[0].uuid)], done.text
+        assert done.json()[0]["entry_uuid"] == str(reconciled_row[1]), done.text
     finally:
         app.dependency_overrides.clear()
