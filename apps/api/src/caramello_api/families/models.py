@@ -1,104 +1,74 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Uuid
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from caramello_api.shared.base import Base
 from caramello_api.users.models import User
 
 
-class FamilyMember(SQLModel, table=True):
+class Family(Base):
+    """Represents a family group in the system."""
+
+    __tablename__ = "family"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    uuid: Mapped[UUID] = mapped_column(Uuid, unique=True, nullable=False, default=uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    members: Mapped[list[User]] = relationship(
+        secondary="family_member", back_populates="families", overlaps="user,family"
+    )
+    invitations: Mapped[list[FamilyInvitation]] = relationship(back_populates="family")
+
+
+class FamilyMember(Base):
     """
     Association table connecting Users and Families, defining the role of each member.
     """
 
     __tablename__ = "family_member"
 
-    user_id: int | None = Field(primary_key=True, foreign_key="user.id", default=None)
-    family_id: int | None = Field(primary_key=True, foreign_key="family.id", default=None)
-    role: str = Field(max_length=20, default="member", nullable=False)
-    joined_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-
-    user: "User" = Relationship(sa_relationship_kwargs={"overlaps": "families,members"})
-    family: "Family" = Relationship(sa_relationship_kwargs={"overlaps": "families,members"})
-
-
-class Family(SQLModel, table=True):
-    """Represents a family group in the system."""
-
-    __tablename__ = "family"
-
-    id: int | None = Field(primary_key=True, default=None)
-    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
-    name: str = Field(max_length=100, nullable=False)
-    description: str | None = Field(max_length=255, default=None)
-    status: str = Field(max_length=20, default="active", nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-
-    members: list["User"] = Relationship(
-        back_populates="families",
-        link_model=FamilyMember,
-        sa_relationship_kwargs={"overlaps": "user,family"},
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id"), primary_key=True, nullable=False
     )
-    invitations: list["FamilyInvitation"] = Relationship(back_populates="family")
+    family_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("family.id"), primary_key=True, nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    user: Mapped[User] = relationship(overlaps="families,members")
+    family: Mapped[Family] = relationship(overlaps="families,members")
 
 
-class FamilyRead(SQLModel):
-    uuid: UUID
-    name: str
-    description: str | None
-    status: str
-    created_at: datetime
-    updated_at: datetime
-
-
-class FamilyCreate(SQLModel):
-    name: str
-    description: str | None = None
-    status: str | None = None
-
-
-class FamilyUpdate(SQLModel):
-    name: str | None = None
-    description: str | None = None
-    status: str | None = None
-
-
-class FamilyInvitation(SQLModel, table=True):
+class FamilyInvitation(Base):
     """Pré-registro de membro de família por email (D-01)."""
 
     __tablename__ = "family_invitation"
 
-    id: int | None = Field(primary_key=True, default=None)
-    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
-    family_id: int = Field(foreign_key="family.id", nullable=False)
-    inviter_id: int = Field(foreign_key="user.id", nullable=False)
-    email: str = Field(nullable=False)
-    status: str = Field(max_length=20, default="pending_login", nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    uuid: Mapped[UUID] = mapped_column(Uuid, unique=True, nullable=False, default=uuid4)
+    family_id: Mapped[int] = mapped_column(Integer, ForeignKey("family.id"), nullable=False)
+    inviter_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending_login")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
-    family: "Family" = Relationship(back_populates="invitations")
-    inviter: "User" = Relationship(back_populates="sent_invitations")
-
-
-class FamilyInvitationRead(SQLModel):
-    uuid: UUID
-    family_id: int
-    inviter_id: int
-    email: str
-    status: str
-    created_at: datetime
-
-
-class FamilyInvitationCreate(SQLModel):
-    family_id: int
-    inviter_id: int
-    email: str
-    status: str | None = None
-
-
-class FamilyInvitationUpdate(SQLModel):
-    family_id: int | None = None
-    inviter_id: int | None = None
-    email: str | None = None
-    status: str | None = None
+    family: Mapped[Family] = relationship(back_populates="invitations")
+    inviter: Mapped[User] = relationship(back_populates="sent_invitations")

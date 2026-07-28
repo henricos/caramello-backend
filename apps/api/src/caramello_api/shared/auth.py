@@ -24,9 +24,9 @@ import httpx
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from caramello_api.core.config import get_settings
 from caramello_api.i18n import translate
@@ -205,8 +205,8 @@ async def get_current_user(
     await session.commit()
 
     # 6. SELECT — ON CONFLICT DO NOTHING does not return the row
-    result = await session.exec(select(User).where(User.idp_sub == idp_sub))
-    user = result.first()
+    result = await session.execute(select(User).where(User.idp_sub == idp_sub))
+    user = result.scalars().first()
     if user is None:
         # Unexpected state: the insert happened but the select found nothing
         raise HTTPException(
@@ -222,13 +222,13 @@ async def get_current_user(
         FamilyMember,
     )
 
-    inv_result = await session.exec(
+    inv_result = await session.execute(
         select(FamilyInvitation).where(
             FamilyInvitation.email == email,
             FamilyInvitation.status == "pending_login",
         )
     )
-    pending_inv = inv_result.first()
+    pending_inv = inv_result.scalars().first()
     if pending_inv is not None:
         new_member = FamilyMember(
             user_id=user.id,
@@ -260,13 +260,13 @@ async def _require_family_access(
     """
     from caramello_api.families.models import FamilyMember  # noqa: PLC0415
 
-    result = await session.exec(
+    result = await session.execute(
         select(FamilyMember).where(
             FamilyMember.family_id == family_id,
             FamilyMember.user_id == current_user.id,
         )
     )
-    if result.first() is None:
+    if result.scalars().first() is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_error_detail("not_family_member"),

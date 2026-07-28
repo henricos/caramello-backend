@@ -22,7 +22,6 @@ dependencies = [
     "pyjwt[crypto]~=2.13.0",
     "rapidfuzz~=3.14.5",
     "sqlalchemy[asyncio]~=2.0.43",
-    "sqlmodel~=0.0.38",
     "uvicorn[standard]~=0.37.0",
 ]
 

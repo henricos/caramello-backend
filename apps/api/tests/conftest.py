@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import os
 from datetime import UTC
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 # Default DSN for the test database. Integration tests run against the same
 # embedded dev instance (`caramello_dev`); isolation comes exclusively from a
@@ -32,6 +32,101 @@ os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["APP_ENV"] = "test"
 os.environ["AUTH_OIDC_ISSUER"] = "https://keycloak.exemplo.com/realms/caramello"
 os.environ["AUTH_OIDC_AUDIENCE"] = "caramello-api"
+
+
+def execute_mock(entity_handler=None, row_handler=None):
+    """Build the `session.execute` side effect used by the unit tests.
+
+    SQLAlchemy hands back a `Result`, and the handlers consume it in one of two
+    ways:
+
+      - `.scalars().first()` / `.scalars().all()` — a select of a SINGLE entity,
+        where `.scalars()` unwraps the Row into the ORM instance. `.first()` /
+        `.all()` called straight on the result belong here too: they are how a
+        multi-entity select reads its Rows.
+      - `.fetchone()` / `.fetchall()` / `.scalar_one_or_none()` — a multi-entity
+        select or an aggregation.
+
+    `entity_handler(stmt)` answers the first group, `row_handler(stmt)` the
+    second. Both are called lazily, on the first access within their own group,
+    so a handler that sequences its answers by call order counts only the
+    queries of its own group — which keeps a test's expected ordering
+    independent of how many queries of the other kind run in between.
+    """
+
+    def _lazy(handler, stmt):
+        cache: dict[str, object] = {}
+
+        def get():
+            if "result" not in cache:
+                cache["result"] = handler(stmt)
+            return cache["result"]
+
+        return get
+
+    async def _execute(stmt, *args, **kwargs):
+        result = MagicMock()
+        if entity_handler is not None:
+            entity = _lazy(entity_handler, stmt)
+            result.scalars.side_effect = entity
+            result.first.side_effect = lambda: entity().first()
+            result.all.side_effect = lambda: entity().all()
+        if row_handler is not None:
+            row = _lazy(row_handler, stmt)
+            result.fetchone.side_effect = lambda: row().fetchone()
+            result.fetchall.side_effect = lambda: row().fetchall()
+            result.scalar_one_or_none.side_effect = lambda: row().scalar_one_or_none()
+        return result
+
+    return _execute
+
+
+def constant(value):
+    """Handler for `execute_mock` that always answers with the same object."""
+    return lambda _stmt: value
+
+
+def apply_column_defaults(obj):
+    """Fill in the Python-side column defaults of an ORM instance.
+
+    SQLAlchemy evaluates `mapped_column(default=...)` during the INSERT flush,
+    not when the instance is constructed, so an object created against a mocked
+    session keeps `uuid`, `created_at`, `is_active`, ... at None. Applying the
+    defaults here is what a real flush plus refresh leaves behind, and it is why
+    the unit tests can assert on a response body without a database.
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    mapper = sa_inspect(type(obj))
+    for column in mapper.columns:
+        key = mapper.get_property_by_column(column).key
+        if column.default is None or getattr(obj, key, None) is not None:
+            continue
+        default = column.default
+        value = default.arg
+        if callable(value):
+            try:
+                value = value()
+            except TypeError:
+                value = value(None)
+        setattr(obj, key, value)
+    return obj
+
+
+def refresh_mock(extra=None):
+    """`session.refresh` stand-in applying the column defaults (see above).
+
+    `extra(obj)` runs afterwards for the per-test touches a real refresh would
+    also have produced (typically pinning a known uuid).
+    """
+
+    async def _refresh(obj, *args, **kwargs):
+        apply_column_defaults(obj)
+        if extra is not None:
+            extra(obj)
+        return None
+
+    return _refresh
 
 
 @pytest.fixture

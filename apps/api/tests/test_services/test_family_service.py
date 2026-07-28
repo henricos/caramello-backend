@@ -45,8 +45,8 @@ def _make_fake_family(family_id: int = 10, name: str = "Familia Teste") -> Famil
 async def test_list_my_families_returns_two_families():
     """list_my_families(session, user) retorna lista de famílias do usuário.
 
-    Verifica que o service retorna exatamente as famílias que o mock de session.exec
-    devolve — sem dependência de banco real.
+    Verifica que o service retorna exatamente as famílias que o mock de
+    session.execute devolve — sem dependência de banco real.
     """
     from caramello_api.families.services import list_my_families
 
@@ -55,10 +55,10 @@ async def test_list_my_families_returns_two_families():
     family_b = _make_fake_family(family_id=20, name="Familia B")
 
     mock_result = MagicMock()
-    mock_result.all.return_value = [family_a, family_b]
+    mock_result.scalars.return_value.all.return_value = [family_a, family_b]
 
     mock_session = AsyncMock()
-    mock_session.exec.return_value = mock_result
+    mock_session.execute.return_value = mock_result
 
     result = await list_my_families(mock_session, fake_user)
 
@@ -75,10 +75,10 @@ async def test_list_my_families_returns_empty_when_no_families():
     fake_user = _make_fake_user()
 
     mock_result = MagicMock()
-    mock_result.all.return_value = []
+    mock_result.scalars.return_value.all.return_value = []
 
     mock_session = AsyncMock()
-    mock_session.exec.return_value = mock_result
+    mock_session.execute.return_value = mock_result
 
     result = await list_my_families(mock_session, fake_user)
 
@@ -93,12 +93,12 @@ async def test_list_my_families_passes_user_id_to_query():
     fake_user = _make_fake_user(user_id=99)
 
     mock_result = MagicMock()
-    mock_result.all.return_value = []
+    mock_result.scalars.return_value.all.return_value = []
 
     mock_session = AsyncMock()
-    mock_session.exec.return_value = mock_result
+    mock_session.execute.return_value = mock_result
 
     await list_my_families(mock_session, fake_user)
 
-    # Verifica que exec foi chamado (a query foi executada)
-    mock_session.exec.assert_called_once()
+    # Verifica que execute foi chamado (a query foi executada)
+    mock_session.execute.assert_called_once()

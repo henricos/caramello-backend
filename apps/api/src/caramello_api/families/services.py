@@ -6,8 +6,8 @@ tornando-as reutilizáveis em contextos MCP, testes e outros callers sem framewo
 
 from __future__ import annotations
 
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from caramello_api.families.models import Family, FamilyMember
 from caramello_api.users.models import User
@@ -21,9 +21,9 @@ async def list_my_families(session: AsyncSession, user: User) -> list[Family]:
     Erros de domínio são erros Python puros; o caller (operations.py) trata e
     converte para respostas HTTP adequadas.
     """
-    result = await session.exec(
+    result = await session.execute(
         select(Family)
-        .join(FamilyMember, FamilyMember.family_id == Family.id)  # type: ignore[arg-type]
+        .join(FamilyMember, FamilyMember.family_id == Family.id)
         .where(FamilyMember.user_id == user.id)
     )
-    return list(result.all())
+    return list(result.scalars().all())

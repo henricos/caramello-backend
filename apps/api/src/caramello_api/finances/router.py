@@ -3,27 +3,23 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from caramello_api.finances.models import (
-    Account,
+from caramello_api.finances.models import Account, Category, FinancialEntry, Movement, Subcategory
+from caramello_api.finances.schemas import (
     AccountCreate,
     AccountRead,
     AccountUpdate,
-    Category,
     CategoryCreate,
     CategoryRead,
     CategoryUpdate,
-    FinancialEntry,
     FinancialEntryCreate,
     FinancialEntryRead,
     FinancialEntryUpdate,
-    Movement,
     MovementCreate,
     MovementRead,
     MovementUpdate,
-    Subcategory,
     SubcategoryCreate,
     SubcategoryRead,
     SubcategoryUpdate,
@@ -41,7 +37,7 @@ async def create_account(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
 ) -> Account:
-    db_obj = Account.model_validate(account_in)
+    db_obj = Account(**account_in.model_dump(exclude_unset=True))
     session.add(db_obj)
     await session.commit()
     await session.refresh(db_obj)
@@ -55,8 +51,8 @@ async def read_accounts(
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[Account]:
-    result = await session.exec(select(Account).offset(offset).limit(limit))
-    return list(result.all())
+    result = await session.execute(select(Account).offset(offset).limit(limit))
+    return list(result.scalars().all())
 
 
 @account_router.get("/{uuid}", response_model=AccountRead)
@@ -66,8 +62,8 @@ async def read_account(
     _: User = Depends(get_current_user),
 ) -> Account:
     statement = select(Account).where(Account.uuid == uuid)
-    result = await session.exec(statement)
-    account = result.first()
+    result = await session.execute(statement)
+    account = result.scalars().first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     return account
@@ -81,8 +77,8 @@ async def update_account(
     _: User = Depends(get_current_user),
 ) -> Account:
     statement = select(Account).where(Account.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Account not found")
     update_data = account_in.model_dump(exclude_unset=True)
@@ -101,8 +97,8 @@ async def delete_account(
     _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select(Account).where(Account.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Account not found")
     await session.delete(db_obj)
@@ -119,7 +115,7 @@ async def create_movement(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
 ) -> Movement:
-    db_obj = Movement.model_validate(movement_in)
+    db_obj = Movement(**movement_in.model_dump(exclude_unset=True))
     session.add(db_obj)
     await session.commit()
     await session.refresh(db_obj)
@@ -133,8 +129,8 @@ async def read_movements(
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[Movement]:
-    result = await session.exec(select(Movement).offset(offset).limit(limit))
-    return list(result.all())
+    result = await session.execute(select(Movement).offset(offset).limit(limit))
+    return list(result.scalars().all())
 
 
 @movement_router.get("/{uuid}", response_model=MovementRead)
@@ -144,8 +140,8 @@ async def read_movement(
     _: User = Depends(get_current_user),
 ) -> Movement:
     statement = select(Movement).where(Movement.uuid == uuid)
-    result = await session.exec(statement)
-    movement = result.first()
+    result = await session.execute(statement)
+    movement = result.scalars().first()
     if not movement:
         raise HTTPException(status_code=404, detail="Movement not found")
     return movement
@@ -159,8 +155,8 @@ async def update_movement(
     _: User = Depends(get_current_user),
 ) -> Movement:
     statement = select(Movement).where(Movement.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Movement not found")
     update_data = movement_in.model_dump(exclude_unset=True)
@@ -179,8 +175,8 @@ async def delete_movement(
     _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select(Movement).where(Movement.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Movement not found")
     await session.delete(db_obj)
@@ -197,7 +193,7 @@ async def create_financialentry(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
 ) -> FinancialEntry:
-    db_obj = FinancialEntry.model_validate(financialentry_in)
+    db_obj = FinancialEntry(**financialentry_in.model_dump(exclude_unset=True))
     session.add(db_obj)
     await session.commit()
     await session.refresh(db_obj)
@@ -211,8 +207,8 @@ async def read_financialentrys(
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[FinancialEntry]:
-    result = await session.exec(select(FinancialEntry).offset(offset).limit(limit))
-    return list(result.all())
+    result = await session.execute(select(FinancialEntry).offset(offset).limit(limit))
+    return list(result.scalars().all())
 
 
 @financialentry_router.get("/{uuid}", response_model=FinancialEntryRead)
@@ -222,8 +218,8 @@ async def read_financialentry(
     _: User = Depends(get_current_user),
 ) -> FinancialEntry:
     statement = select(FinancialEntry).where(FinancialEntry.uuid == uuid)
-    result = await session.exec(statement)
-    financialentry = result.first()
+    result = await session.execute(statement)
+    financialentry = result.scalars().first()
     if not financialentry:
         raise HTTPException(status_code=404, detail="FinancialEntry not found")
     return financialentry
@@ -237,8 +233,8 @@ async def update_financialentry(
     _: User = Depends(get_current_user),
 ) -> FinancialEntry:
     statement = select(FinancialEntry).where(FinancialEntry.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="FinancialEntry not found")
     update_data = financialentry_in.model_dump(exclude_unset=True)
@@ -257,8 +253,8 @@ async def delete_financialentry(
     _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select(FinancialEntry).where(FinancialEntry.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="FinancialEntry not found")
     await session.delete(db_obj)
@@ -275,7 +271,7 @@ async def create_category(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
 ) -> Category:
-    db_obj = Category.model_validate(category_in)
+    db_obj = Category(**category_in.model_dump(exclude_unset=True))
     session.add(db_obj)
     await session.commit()
     await session.refresh(db_obj)
@@ -289,8 +285,8 @@ async def read_categorys(
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[Category]:
-    result = await session.exec(select(Category).offset(offset).limit(limit))
-    return list(result.all())
+    result = await session.execute(select(Category).offset(offset).limit(limit))
+    return list(result.scalars().all())
 
 
 @category_router.get("/{uuid}", response_model=CategoryRead)
@@ -300,8 +296,8 @@ async def read_category(
     _: User = Depends(get_current_user),
 ) -> Category:
     statement = select(Category).where(Category.uuid == uuid)
-    result = await session.exec(statement)
-    category = result.first()
+    result = await session.execute(statement)
+    category = result.scalars().first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     return category
@@ -315,8 +311,8 @@ async def update_category(
     _: User = Depends(get_current_user),
 ) -> Category:
     statement = select(Category).where(Category.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Category not found")
     update_data = category_in.model_dump(exclude_unset=True)
@@ -335,8 +331,8 @@ async def delete_category(
     _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select(Category).where(Category.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Category not found")
     await session.delete(db_obj)
@@ -353,7 +349,7 @@ async def create_subcategory(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
 ) -> Subcategory:
-    db_obj = Subcategory.model_validate(subcategory_in)
+    db_obj = Subcategory(**subcategory_in.model_dump(exclude_unset=True))
     session.add(db_obj)
     await session.commit()
     await session.refresh(db_obj)
@@ -367,8 +363,8 @@ async def read_subcategorys(
     offset: int = 0,
     limit: int = Query(default=100, le=100),
 ) -> list[Subcategory]:
-    result = await session.exec(select(Subcategory).offset(offset).limit(limit))
-    return list(result.all())
+    result = await session.execute(select(Subcategory).offset(offset).limit(limit))
+    return list(result.scalars().all())
 
 
 @subcategory_router.get("/{uuid}", response_model=SubcategoryRead)
@@ -378,8 +374,8 @@ async def read_subcategory(
     _: User = Depends(get_current_user),
 ) -> Subcategory:
     statement = select(Subcategory).where(Subcategory.uuid == uuid)
-    result = await session.exec(statement)
-    subcategory = result.first()
+    result = await session.execute(statement)
+    subcategory = result.scalars().first()
     if not subcategory:
         raise HTTPException(status_code=404, detail="Subcategory not found")
     return subcategory
@@ -393,8 +389,8 @@ async def update_subcategory(
     _: User = Depends(get_current_user),
 ) -> Subcategory:
     statement = select(Subcategory).where(Subcategory.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Subcategory not found")
     update_data = subcategory_in.model_dump(exclude_unset=True)
@@ -413,8 +409,8 @@ async def delete_subcategory(
     _: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     statement = select(Subcategory).where(Subcategory.uuid == uuid)
-    result = await session.exec(statement)
-    db_obj = result.first()
+    result = await session.execute(statement)
+    db_obj = result.scalars().first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Subcategory not found")
     await session.delete(db_obj)

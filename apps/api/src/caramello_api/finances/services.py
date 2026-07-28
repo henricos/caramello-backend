@@ -16,9 +16,9 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from caramello_api.finances.models import Movement
 
@@ -341,7 +341,7 @@ async def suggest_category(
         Subcategory,
     )
 
-    # 1. Buscar Movement alvo pelo UUID (session.execute — não session.exec, pitfall P3)
+    # 1. Buscar Movement alvo pelo UUID
     result = await session.execute(select(Movement).where(Movement.uuid == movement_uuid))
     row = result.fetchone()
     if row is None:
@@ -395,7 +395,6 @@ async def account_balance(account_id: int, session: AsyncSession) -> Decimal:
     """REL-01, D-BAL-01: Calcula saldo da conta via SUM(movement.amount).
 
     Retorna Decimal('0.00') quando não há movimentações (pitfall P6 — SUM vazio = NULL).
-    Usa session.execute() — nunca session.exec() para agregações (pitfall P3).
     """
     from sqlalchemy import func
 
@@ -416,10 +415,10 @@ async def family_balance(family_id: int, session: AsyncSession) -> Decimal:
     """
     from caramello_api.finances.models import Account
 
-    accounts_result = await session.exec(
+    accounts_result = await session.execute(
         select(Account).where(Account.family_id == family_id, Account.is_active == True)  # noqa: E712
     )
-    accounts = accounts_result.all()
+    accounts = accounts_result.scalars().all()
     total = Decimal("0.00")
     for account in accounts:
         total += await account_balance(account.id, session)
@@ -437,7 +436,7 @@ async def monthly_breakdown(
 
     Retorna lista plana com total por subcategoria para o período de competência informado.
     Parâmetro member_uuid opcional — filtra por responsible_user_uuid (D-REP-01).
-    Usa session.execute() com func.sum + group_by (pitfall P3, D-REP-04).
+    Usa func.sum + group_by (D-REP-04).
     """
     from sqlalchemy import func
 
@@ -478,10 +477,10 @@ async def monthly_breakdown(
     )
 
     # Filtro opcional por membro (D-REP-01)
-    # WR-02: usa session.exec para single-entity select, evitando ambiguidade de row-wrapping
+    # WR-02: `.scalars()` desembrulha a Row — single-entity select devolve a entidade
     if member_uuid is not None:
-        user_result = await session.exec(select(User).where(User.uuid == member_uuid))
-        user = user_result.first()
+        user_result = await session.execute(select(User).where(User.uuid == member_uuid))
+        user = user_result.scalars().first()
         if user is not None:
             stmt = stmt.where(FinancialEntry.responsible_user_id == user.id)
 
@@ -510,7 +509,7 @@ async def by_member_breakdown(
 
     Lançamentos sem responsible_user_id agrupados em linha com user_uuid=None
     e name='Não atribuído' — não são descartados dos totais (pitfall P7).
-    Usa session.execute() com func.sum + group_by (pitfall P3, D-REP-04).
+    Usa func.sum + group_by (D-REP-04).
     """
     from sqlalchemy import func
 
@@ -569,7 +568,7 @@ async def import_movements(
     Deduplicação:
     - OFX (rows com fitid): hash existente → duplicates_skipped (D-04, não insere)
     - CSV/XLSX (rows sem fitid): hash existente → potential_duplicates[] (D-05, não insere)
-    - Pre-check em lote via session.execute (P8)
+    - Pre-check em lote numa única query (P8)
     - on_conflict_do_nothing como safety net para race conditions (P4)
     """
     # Dispatch por formato usando variantes com error_lines
@@ -599,7 +598,7 @@ async def import_movements(
 
     all_hashes = list(hash_map.keys())
 
-    # Pre-check em lote (P8: session.execute, não session.exec)
+    # Pre-check em lote numa única query (P8)
     result = await session.execute(
         select(Movement.import_hash).where(Movement.import_hash.in_(all_hashes))
     )

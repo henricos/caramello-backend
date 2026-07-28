@@ -14,7 +14,6 @@ Create Date: 2026-05-30
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-import sqlmodel  # noqa: F401
 from alembic import op
 
 revision: str = "0001"
@@ -28,10 +27,10 @@ def upgrade() -> None:
         "user",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("uuid", sa.Uuid(), nullable=False),
-        sa.Column("idp_sub", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("email", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("idp_sub", sa.String(), nullable=False),
+        sa.Column("email", sa.String(), nullable=False),
         sa.Column(
-            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+            "name", sa.String(length=100), nullable=False
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -45,15 +44,15 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("uuid", sa.Uuid(), nullable=False),
         sa.Column(
-            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+            "name", sa.String(length=100), nullable=False
         ),
         sa.Column(
             "description",
-            sqlmodel.sql.sqltypes.AutoString(length=255),
+            sa.String(length=255),
             nullable=True,
         ),
         sa.Column(
-            "status", sqlmodel.sql.sqltypes.AutoString(length=20), nullable=False
+            "status", sa.String(length=20), nullable=False
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -65,7 +64,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("family_id", sa.Integer(), nullable=False),
         sa.Column(
-            "role", sqlmodel.sql.sqltypes.AutoString(length=20), nullable=False
+            "role", sa.String(length=20), nullable=False
         ),
         sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["family_id"], ["family.id"]),
@@ -78,9 +77,9 @@ def upgrade() -> None:
         sa.Column("uuid", sa.Uuid(), nullable=False),
         sa.Column("family_id", sa.Integer(), nullable=False),
         sa.Column("inviter_id", sa.Integer(), nullable=False),
-        sa.Column("email", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("email", sa.String(), nullable=False),
         sa.Column(
-            "status", sqlmodel.sql.sqltypes.AutoString(length=20), nullable=False
+            "status", sa.String(length=20), nullable=False
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["family_id"], ["family.id"]),

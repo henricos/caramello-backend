@@ -8,7 +8,9 @@ chegar (planos 07-02 e 07-03). Quando operations.py for marcado como
 
 Estratégia (igual a tests/test_family_operations.py):
 - app.dependency_overrides[get_current_user] = lambda: fake_user
-- AsyncMock para get_session
+- AsyncMock para get_session, com `session.execute` montado por `execute_mock`
+  (ver tests/conftest.py): o handler de entidade responde aos selects de uma
+  única entidade (`.scalars()`), o handler de rows às queries multi-entidade
 - TestClient(app) sem context manager (evita disparar lifespan/fetch_jwks)
 """
 
@@ -21,6 +23,8 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+
+from tests.conftest import apply_column_defaults, constant, execute_mock, refresh_mock
 
 
 def _skip_if_stub() -> None:
@@ -178,7 +182,7 @@ def test_create_account_returns_uuid():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -193,16 +197,16 @@ def test_create_account_returns_uuid():
         return r
 
     async def _refresh(obj):
+        apply_column_defaults(obj)
         if isinstance(obj, Account) and not getattr(obj, "uuid", None):
             obj.uuid = fake_account.uuid
         return None
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock(side_effect=_refresh)
-    mock_session.execute = AsyncMock()
 
     def _session_override():
         yield mock_session
@@ -267,7 +271,7 @@ def test_list_accounts_scoped_to_family():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -285,7 +289,7 @@ def test_list_accounts_scoped_to_family():
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.commit = AsyncMock()
 
     def _session_override():
@@ -314,14 +318,14 @@ def test_accounts_require_auth():
     from caramello_api.main import app
     from caramello_api.shared.database import get_session
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         r.first.return_value = None
         r.all.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
 
     def _session_override():
         yield mock_session
@@ -367,7 +371,7 @@ def test_accounts_403_non_member():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -380,7 +384,7 @@ def test_accounts_403_non_member():
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.commit = AsyncMock()
 
     def _session_override():
@@ -438,7 +442,7 @@ def test_archive_account():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -454,10 +458,10 @@ def test_archive_account():
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
     mock_session.delete = MagicMock()
 
     def _session_override():
@@ -513,7 +517,7 @@ def test_create_category():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -528,16 +532,16 @@ def test_create_category():
         return r
 
     async def _refresh(obj):
+        apply_column_defaults(obj)
         if isinstance(obj, Category) and not getattr(obj, "uuid", None):
             obj.uuid = fake_category.uuid
         return None
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock(side_effect=_refresh)
-    mock_session.execute = AsyncMock()
 
     def _session_override():
         yield mock_session
@@ -595,7 +599,7 @@ def test_list_update_categories():
     # --- Teste GET ---
     call_count = [0]
 
-    async def _exec_list(_stmt):
+    def _exec_list(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -610,7 +614,7 @@ def test_list_update_categories():
         return r
 
     mock_session_list = AsyncMock()
-    mock_session_list.exec.side_effect = _exec_list
+    mock_session_list.execute.side_effect = execute_mock(_exec_list)
     mock_session_list.commit = AsyncMock()
 
     def _session_override_list():
@@ -629,7 +633,7 @@ def test_list_update_categories():
     # --- Teste PATCH ---
     call_count_patch = [0]
 
-    async def _exec_patch(_stmt):
+    def _exec_patch(_stmt):
         r = MagicMock()
         call_count_patch[0] += 1
         if call_count_patch[0] == 1:
@@ -645,7 +649,7 @@ def test_list_update_categories():
         return r
 
     mock_session_patch = AsyncMock()
-    mock_session_patch.exec.side_effect = _exec_patch
+    mock_session_patch.execute.side_effect = execute_mock(_exec_patch)
     mock_session_patch.add = MagicMock()
     mock_session_patch.commit = AsyncMock()
     mock_session_patch.refresh = AsyncMock()
@@ -711,7 +715,7 @@ def test_create_subcategory():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -729,16 +733,16 @@ def test_create_subcategory():
         return r
 
     async def _refresh(obj):
+        apply_column_defaults(obj)
         if isinstance(obj, Subcategory) and not getattr(obj, "uuid", None):
             obj.uuid = fake_subcategory.uuid
         return None
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock(side_effect=_refresh)
-    mock_session.execute = AsyncMock()
 
     def _session_override():
         yield mock_session
@@ -808,7 +812,7 @@ def test_create_movement():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -823,17 +827,17 @@ def test_create_movement():
         r.all.return_value = []
         return r
 
-    # session.execute usado para pre-check de hash (session.exec não retorna scalar)
+    # Resultado das queries multi-entidade: pre-check de hash em lote
     mock_execute_result = MagicMock()
     mock_execute_result.fetchall.return_value = []
 
     async def _movement_refresh(obj):
+        apply_column_defaults(obj)
         obj.uuid = movement_uuid
         return None
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock(side_effect=_movement_refresh)
@@ -912,7 +916,7 @@ def test_create_movement_409_duplicate():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -928,8 +932,7 @@ def test_create_movement_409_duplicate():
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock()
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
 
@@ -1003,7 +1006,7 @@ def test_import_csv():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -1020,11 +1023,10 @@ def test_import_csv():
     mock_execute_result.fetchall.return_value = []
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
 
     def _session_override():
         yield mock_session
@@ -1124,7 +1126,7 @@ NEWFILEUID:NONE
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -1140,11 +1142,10 @@ NEWFILEUID:NONE
     mock_execute_result.fetchall.return_value = []
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
 
     def _session_override():
         yield mock_session
@@ -1215,7 +1216,7 @@ def test_import_xlsx():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -1231,11 +1232,10 @@ def test_import_xlsx():
     mock_execute_result.fetchall.return_value = []
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
 
     def _session_override():
         yield mock_session
@@ -1320,7 +1320,7 @@ def test_import_deduplication():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -1344,15 +1344,14 @@ def test_import_deduplication():
 
     execute_call_count = [0]
 
-    async def _execute_import(stmt):
+    def _row_import(stmt):
         execute_call_count[0] += 1
         if execute_call_count[0] == 1:
             return mock_precheck_result
         return mock_uuid_result
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = _execute_import
+    mock_session.execute.side_effect = execute_mock(_exec, _row_import)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
 
@@ -1421,7 +1420,7 @@ def test_import_potential_duplicates():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -1439,8 +1438,7 @@ def test_import_potential_duplicates():
     mock_execute_result.fetchall.return_value = [(known_hash,)]
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
 
@@ -1508,7 +1506,7 @@ def test_import_confirm():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -1524,11 +1522,10 @@ def test_import_confirm():
     mock_execute_result.fetchall.return_value = []
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
 
     def _session_override():
         yield mock_session
@@ -1614,7 +1611,7 @@ def test_list_movements():
 
     call_count = [0]
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
@@ -1630,8 +1627,7 @@ def test_list_movements():
     mock_execute_result.fetchall.return_value = [(fake_movement,)]
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
 
     def _session_override():
         yield mock_session
@@ -1667,14 +1663,14 @@ def test_movements_require_auth():
     family_uuid = uuid4()
 
     # --- Parte 1: 401 sem autenticação ---
-    async def _exec_401(_stmt):
+    def _exec_401(_stmt):
         r = MagicMock()
         r.first.return_value = None
         r.all.return_value = []
         return r
 
     mock_session_401 = AsyncMock()
-    mock_session_401.exec.side_effect = _exec_401
+    mock_session_401.execute.side_effect = execute_mock(_exec_401)
 
     def _session_override_401():
         yield mock_session_401
@@ -1716,7 +1712,7 @@ def test_movements_require_auth():
 
     call_count_403 = [0]
 
-    async def _exec_403(_stmt):
+    def _exec_403(_stmt):
         r = MagicMock()
         call_count_403[0] += 1
         if call_count_403[0] == 1:
@@ -1729,7 +1725,7 @@ def test_movements_require_auth():
         return r
 
     mock_session_403 = AsyncMock()
-    mock_session_403.exec.side_effect = _exec_403
+    mock_session_403.execute.side_effect = execute_mock(_exec_403)
 
     def _session_override_403():
         yield mock_session_403
@@ -1838,41 +1834,44 @@ def test_reconcile_movement():
 
     added = []
 
-    # CR-05 fix: mock com contador — execução correta por ordem de sessão.exec
-    # Ordem: 1=Movement, 2=FamilyMember(_require_family_access), 3=Subcategory(fallback), 4=Category
+    # CR-05 fix: mock com contador — responde na ordem dos selects de UMA
+    # entidade (session.execute + .scalars()): 1=Movement, 2=Account,
+    # 3=FamilyMember(_require_family_access), 4=Subcategory(fallback), 5=Category
     exec_call_count = [0]
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         exec_call_count[0] += 1
         n = exec_call_count[0]
         if n == 1:
             r.first.return_value = fake_movement
         elif n == 2:
-            r.first.return_value = fake_member
+            r.first.return_value = fake_account
         elif n == 3:
-            r.first.return_value = fake_subcategory
+            r.first.return_value = fake_member
         elif n == 4:
+            r.first.return_value = fake_subcategory
+        elif n == 5:
             r.first.return_value = fake_category
         else:
             r.first.return_value = None
         r.all.return_value = []
         return r
 
-    async def _execute(stmt):
+    def _row(stmt):
         r = MagicMock()
-        r.first.return_value = fake_account
         r.fetchone.return_value = None  # faz cair no fallback individual de Subcategory+Category
         r.fetchall.return_value = []
         r.scalar_one_or_none.return_value = None
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(side_effect=_execute)
+    mock_session.execute.side_effect = execute_mock(_exec, _row)
     mock_session.add = MagicMock(side_effect=lambda o: added.append(o))
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock(side_effect=lambda o: setattr(o, "uuid", entry_uuid))
+    mock_session.refresh = AsyncMock(
+        side_effect=refresh_mock(lambda o: setattr(o, "uuid", entry_uuid))
+    )
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -1946,21 +1945,30 @@ def test_reconcile_409_duplicate():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(stmt):
+    # Ordem dos selects de UMA entidade: 1=Movement, 2=Account, depois o
+    # membership e a subcategoria — o commit falha antes de qualquer leitura
+    # relevante depois disso.
+    exec_call_count = [0]
+
+    def _exec(stmt):
         r = MagicMock()
-        r.first.return_value = fake_movement
+        exec_call_count[0] += 1
+        if exec_call_count[0] == 1:
+            r.first.return_value = fake_movement
+        elif exec_call_count[0] == 2:
+            r.first.return_value = fake_account
+        else:
+            r.first.return_value = MagicMock()
         r.all.return_value = []
         return r
 
-    async def _execute(stmt):
+    def _row(stmt):
         r = MagicMock()
-        r.first.return_value = fake_account
         r.fetchone.return_value = None
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(side_effect=_execute)
+    mock_session.execute.side_effect = execute_mock(_exec, _row)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock(side_effect=IntegrityError("duplicate", None, None))
     mock_session.rollback = AsyncMock()
@@ -2004,12 +2012,9 @@ def test_suggest_category():
     movement_uuid = uuid4()
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = lambda s: MagicMock(first=lambda: None, all=lambda: [])
-    mock_session.execute = AsyncMock(
-        return_value=MagicMock(
-            fetchone=lambda: None,
-            fetchall=lambda: [],
-        )
+    mock_session.execute.side_effect = execute_mock(
+        constant(MagicMock(first=lambda: None, all=lambda: [])),
+        constant(MagicMock(fetchone=lambda: None, fetchall=lambda: [])),
     )
     mock_session.rollback = AsyncMock()
 
@@ -2101,7 +2106,6 @@ def test_update_entry():
         id=1,
         uuid=sub_uuid,
         category_id=1,
-        family_id=1,
         name="Sub Teste",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -2121,12 +2125,12 @@ def test_update_entry():
         joined_at=datetime.now(UTC),
     )
 
-    # WR-06: mock com contador de chamadas — retorna objeto correto por ordem de exec
+    # WR-06: mock com contador — retorna o objeto correto por ordem de select de entidade
     # Ordem: 1=FinancialEntry, 2=Movement(auth), 3=Account, 4=FamilyMember(_require_family_access),
     #        5=Subcategory(update), 6=Subcategory(reload pós-commit), 7=Category(reload pós-commit)
     exec_call_count = [0]
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         exec_call_count[0] += 1
         n = exec_call_count[0]
@@ -2148,11 +2152,10 @@ def test_update_entry():
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=MagicMock())
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2199,11 +2202,12 @@ def test_entry_responsible_user_uuid():
     responsible_uuid = uuid4()
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = lambda s: MagicMock(first=lambda: None, all=lambda: [])
-    mock_session.execute = AsyncMock(return_value=MagicMock(first=lambda: None))
+    mock_session.execute.side_effect = execute_mock(
+        constant(MagicMock(first=lambda: None, all=lambda: []))
+    )
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
-    mock_session.refresh = AsyncMock()
+    mock_session.refresh = AsyncMock(side_effect=refresh_mock())
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2268,7 +2272,7 @@ def test_account_balance():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         r.first.return_value = fake_account
         return r
@@ -2277,8 +2281,7 @@ def test_account_balance():
     mock_balance_result.scalar_one_or_none.return_value = Decimal("250.00")
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_balance_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_balance_result))
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2330,19 +2333,16 @@ def test_family_balance():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         r.first.return_value = fake_family
         r.all.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(
-        return_value=MagicMock(
-            scalar_one_or_none=lambda: Decimal("0.00"),
-            fetchall=lambda: [],
-        )
+    mock_session.execute.side_effect = execute_mock(
+        _exec,
+        constant(MagicMock(scalar_one_or_none=lambda: Decimal("0.00"), fetchall=lambda: [])),
     )
     mock_session.rollback = AsyncMock()
 
@@ -2399,15 +2399,14 @@ def test_monthly_report():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         r.first.return_value = fake_family
         r.all.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=MagicMock(fetchall=lambda: []))
+    mock_session.execute.side_effect = execute_mock(_exec, constant(MagicMock(fetchall=lambda: [])))
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2459,15 +2458,14 @@ def test_report_uses_competencia():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         r.first.return_value = fake_family
         r.all.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=MagicMock(fetchall=lambda: []))
+    mock_session.execute.side_effect = execute_mock(_exec, constant(MagicMock(fetchall=lambda: [])))
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2527,7 +2525,7 @@ def test_movement_entry_uuid_field():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         r.first.return_value = fake_account
         r.all.return_value = []
@@ -2551,8 +2549,7 @@ def test_movement_entry_uuid_field():
     mock_execute_result.fetchall.return_value = [mock_movement_row]
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.rollback = AsyncMock()
 
     def _session_override():
@@ -2606,7 +2603,7 @@ def test_movement_reconciled_filter():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(stmt):
+    def _exec(stmt):
         r = MagicMock()
         r.first.return_value = fake_account
         return r
@@ -2615,8 +2612,7 @@ def test_movement_reconciled_filter():
     mock_execute_result.fetchall.return_value = []
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+    mock_session.execute.side_effect = execute_mock(_exec, constant(mock_execute_result))
     mock_session.rollback = AsyncMock()
 
     def _session_override():

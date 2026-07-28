@@ -62,12 +62,20 @@ def main():
 
         entity_name = entity_data["name"]
         table_name = entity_data.get("table_name", entity_name.lower())
+        domain = entity_data["domain"]
 
-        # Check Model File
-        model_file = Path(f"src/caramello_api/models/{entity_name.lower()}.py")
-        if not check_file_content(model_file, f"class {entity_name}Read(SQLModel):"):
-            print(f"❌ Missing Read DTO in {model_file}")
+        # Check the table class (models.py) and the Read DTO (schemas.py):
+        # the generator emits them into two separate files per domain.
+        models_file = Path(f"src/caramello_api/{domain}/models.py")
+        if not check_file_content(models_file, f"class {entity_name}(Base):"):
+            print(f"❌ Missing table class in {models_file}")
             all_passed = False
+
+        if not entity_data.get("is_link_model"):
+            schemas_file = Path(f"src/caramello_api/{domain}/schemas.py")
+            if not check_file_content(schemas_file, f"class {entity_name}Read(BaseModel):"):
+                print(f"❌ Missing Read DTO in {schemas_file}")
+                all_passed = False
 
         # Check Test File (if not link model)
         if not entity_data.get("is_link_model"):

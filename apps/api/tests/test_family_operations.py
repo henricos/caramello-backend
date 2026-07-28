@@ -7,7 +7,8 @@ chegar (plano 04-04). Após a implementação, basta remover a skip line
 
 Estratégia (igual a tests/test_user_operations.py):
 - app.dependency_overrides[get_current_user] = lambda: fake_user
-- AsyncMock para get_session
+- AsyncMock para get_session, com `session.execute` montado por `execute_mock`
+  (ver tests/conftest.py)
 - TestClient(app) sem context manager (evita disparar lifespan/fetch_jwks)
 """
 
@@ -18,6 +19,8 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+
+from tests.conftest import apply_column_defaults, execute_mock
 
 
 def _make_fake_user(user_id: int = 42):
@@ -104,19 +107,20 @@ def test_registry_creates_family_and_owner():
     fake_user = _make_fake_user()
     added = []
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         r.first.return_value = None
         r.all.return_value = []
         return r
 
     async def _refresh(obj):
+        apply_column_defaults(obj)
         if not getattr(obj, "id", None):
             obj.id = 1
         return None
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     # session.add() é SÍNCRONO em SQLAlchemy async — usar MagicMock para que
     # o side_effect seja executado imediatamente (sem await)
     mock_session.add = MagicMock(side_effect=lambda o: added.append(o))
@@ -125,7 +129,6 @@ def test_registry_creates_family_and_owner():
     )
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock(side_effect=_refresh)
-    mock_session.execute = AsyncMock()
 
     def _session_override():
         yield mock_session
@@ -172,14 +175,14 @@ def test_list_families_only_mine():
         updated_at=datetime.now(UTC),
     )
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         r.all.return_value = [my_family]
         r.first.return_value = my_family
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.commit = AsyncMock()
 
     def _session_override():
@@ -210,14 +213,14 @@ def test_get_family_detail_non_member_returns_403():
 
     fake_user = _make_fake_user()
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         r.first.return_value = None
         r.all.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.commit = AsyncMock()
 
     def _session_override():
@@ -245,14 +248,14 @@ def test_pre_register_member_non_owner_returns_403():
 
     fake_user = _make_fake_user()
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         r.first.return_value = None  # não encontra FamilyMember com role="owner"
         r.all.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.commit = AsyncMock()
 
     def _session_override():
@@ -282,14 +285,14 @@ def test_remove_member_non_owner_returns_403():
 
     fake_user = _make_fake_user()
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         r.first.return_value = None  # sem registro de owner
         r.all.return_value = []
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
+    mock_session.execute.side_effect = execute_mock(_exec)
     mock_session.commit = AsyncMock()
 
     def _session_override():

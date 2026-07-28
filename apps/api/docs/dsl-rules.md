@@ -54,14 +54,14 @@ FK int columns must never leak into public API schemas. Use the `expose_as_uuid:
 
 **What the generator produces:**
 
-> **Note:** the emitted shape below is currently being migrated (the ORM layer is moving to SQLAlchemy 2 + Pydantic). The table describes what the generator emits **today**; this section will be updated when the migration lands.
+The table class and the public schemas live in two different files: `{domain}/models.py` holds only SQLAlchemy 2 tables (`class Entity(Base)` with typed `Mapped[...] = mapped_column(...)` columns), and `{domain}/schemas.py` holds only plain Pydantic DTOs (`BaseModel`, with `model_config = ConfigDict(from_attributes=True)` on the Read models so they can be built straight from an ORM instance). The split is what makes the substitution below possible: the table keeps the integer column, the schemas never see it.
 
-| Class | Generated field |
-|--------|-------------|
-| `Entity` (table) | `responsible_user_id: int \| None = Field(foreign_key="user.id", ...)` |
-| `EntityRead` | `responsible_user_uuid: UUID \| None = None` |
-| `EntityCreate` | `responsible_user_uuid: UUID \| None = None` |
-| `EntityUpdate` | `responsible_user_uuid: UUID \| None = None` |
+| File | Class | Generated field |
+|------|-------|-----------------|
+| `{domain}/models.py` | `Entity(Base)` | `responsible_user_id: Mapped[int \| None] = mapped_column(Integer, ForeignKey("user.id"), nullable=True)` |
+| `{domain}/schemas.py` | `EntityRead(BaseModel)` | `responsible_user_uuid: UUID \| None = None` |
+| `{domain}/schemas.py` | `EntityCreate(BaseModel)` | `responsible_user_uuid: UUID \| None = None` |
+| `{domain}/schemas.py` | `EntityUpdate(BaseModel)` | `responsible_user_uuid: UUID \| None = None` |
 
 > **Rule:** any FK that is optional or that points to `user` must use `expose_as_uuid: true`. Mandatory FKs of internal structure (e.g. `movement_id` in `FinancialEntry`) may go without the flag when they are not exposed directly in the public business schemas.
 

@@ -15,7 +15,6 @@ Create Date: 2026-05-31
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-import sqlmodel  # noqa: F401
 from alembic import op
 
 revision: str = "0002"
@@ -32,7 +31,7 @@ def upgrade() -> None:
         sa.Column("uuid", sa.Uuid(), nullable=False),
         sa.Column("family_id", sa.Integer(), nullable=False),
         sa.Column(
-            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+            "name", sa.String(length=100), nullable=False
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -48,13 +47,13 @@ def upgrade() -> None:
         sa.Column("uuid", sa.Uuid(), nullable=False),
         sa.Column("family_id", sa.Integer(), nullable=False),
         sa.Column(
-            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+            "name", sa.String(length=100), nullable=False
         ),
         sa.Column(
-            "type", sqlmodel.sql.sqltypes.AutoString(length=20), nullable=False
+            "type", sa.String(length=20), nullable=False
         ),
         sa.Column(
-            "currency", sqlmodel.sql.sqltypes.AutoString(length=3), nullable=False
+            "currency", sa.String(length=3), nullable=False
         ),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -72,7 +71,7 @@ def upgrade() -> None:
         sa.Column("uuid", sa.Uuid(), nullable=False),
         sa.Column("category_id", sa.Integer(), nullable=False),
         sa.Column(
-            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
+            "name", sa.String(length=100), nullable=False
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -91,14 +90,14 @@ def upgrade() -> None:
         sa.Column("uuid", sa.Uuid(), nullable=False),
         sa.Column("account_id", sa.Integer(), nullable=False),
         sa.Column(
-            "type", sqlmodel.sql.sqltypes.AutoString(length=10), nullable=False
+            "type", sa.String(length=10), nullable=False
         ),
         sa.Column("date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("amount", sa.Numeric(precision=15, scale=2), nullable=False),
         sa.Column(
-            "description", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False
+            "description", sa.String(length=255), nullable=False
         ),
-        sa.Column("import_hash", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("import_hash", sa.String(), nullable=True),
         sa.Column("is_duplicate", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -122,7 +121,7 @@ def upgrade() -> None:
         sa.Column("competencia_year", sa.Integer(), nullable=False),
         sa.Column("competencia_month", sa.Integer(), nullable=False),
         sa.Column(
-            "notes", sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True
+            "notes", sa.String(length=500), nullable=True
         ),
         sa.Column("is_recorrente", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

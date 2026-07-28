@@ -16,11 +16,16 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-from sqlmodel import SQLModel  # noqa: E402
+from caramello_api.shared.base import Base  # noqa: E402
 
 # naming_convention MUST be set before any model import: it guarantees
 # deterministic constraint names in PostgreSQL instead of auto-generated ones.
-SQLModel.metadata.naming_convention = {
+# A constraint takes its name from the convention in force when the constraint
+# object is created — i.e. when the model module is imported. Importing a model
+# above this assignment would freeze the auto-generated names into that table,
+# and a later autogenerate would then propose dropping and recreating every
+# constraint. Keep every model import BELOW this block.
+Base.metadata.naming_convention = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
     "ck": "ck_%(table_name)s_%(constraint_name)s",
@@ -43,7 +48,7 @@ from caramello_api.finances.models import (  # noqa: E402, F401
 )
 from caramello_api.users.models import User  # noqa: E402, F401
 
-target_metadata = SQLModel.metadata
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

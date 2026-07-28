@@ -18,6 +18,8 @@ from uuid import uuid4
 
 import pytest
 
+from tests.conftest import constant, execute_mock
+
 
 def test_parse_csv():
     """MOV-02 + D-10: _parse_csv detecta separador ';' e ',' via csv.Sniffer.
@@ -387,7 +389,7 @@ def test_family_balance():
 
     mock_session = AsyncMock()
 
-    # Simula contas da família retornadas via session.exec ou session.execute
+    # Contas da família: select de UMA entidade, lido via .scalars().all()
     mock_accounts_result = MagicMock()
 
     from datetime import datetime
@@ -410,24 +412,16 @@ def test_family_balance():
     mock_balance_result = MagicMock()
     mock_balance_result.scalar_one_or_none.return_value = Decimal("500.00")
 
-    execute_calls = [mock_balance_result]
-    exec_count = [0]
-
-    async def _execute(_stmt):
-        idx = exec_count[0]
-        exec_count[0] += 1
-        return execute_calls[idx] if idx < len(execute_calls) else MagicMock()
-
-    async def _exec(_stmt):
-        return mock_accounts_result
-
-    mock_session.exec = AsyncMock(side_effect=_exec)
-    mock_session.execute = AsyncMock(side_effect=_execute)
+    mock_session.execute.side_effect = execute_mock(
+        constant(mock_accounts_result), constant(mock_balance_result)
+    )
 
     result = _run(family_balance(family_id=5, session=mock_session))
 
     assert isinstance(result, Decimal), f"family_balance deve retornar Decimal; foi {type(result)}"
-    assert result >= Decimal("0.00"), "Saldo familiar não deve ser negativo neste mock"
+    assert result == Decimal("500.00"), (
+        f"family_balance deve somar o saldo da única conta ativa; foi {result}"
+    )
 
 
 # ---------------------------------------------------------------------------

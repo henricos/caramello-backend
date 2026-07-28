@@ -22,15 +22,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from caramello_api.families.models import (
-    Family,
+from caramello_api.families.models import Family, FamilyInvitation, FamilyMember
+from caramello_api.families.schemas import (
     FamilyCreate,
-    FamilyInvitation,
     FamilyInvitationRead,
-    FamilyMember,
     FamilyRead,
 )
 from caramello_api.shared.auth import get_current_user
@@ -73,9 +71,9 @@ async def _require_owner(
 
     Retorna (family, member) se sim; raise 403 caso contrário.
     """
-    result = await session.exec(
+    result = await session.execute(
         select(Family, FamilyMember)
-        .join(FamilyMember, FamilyMember.family_id == Family.id)  # type: ignore[arg-type]
+        .join(FamilyMember, FamilyMember.family_id == Family.id)
         .where(
             Family.uuid == family_uuid,
             FamilyMember.user_id == current_user.id,
@@ -101,15 +99,15 @@ async def _require_member(
 
     Retorna Family se sim; raise 403 caso contrário.
     """
-    result = await session.exec(
+    result = await session.execute(
         select(Family)
-        .join(FamilyMember, FamilyMember.family_id == Family.id)  # type: ignore[arg-type]
+        .join(FamilyMember, FamilyMember.family_id == Family.id)
         .where(
             Family.uuid == family_uuid,
             FamilyMember.user_id == current_user.id,
         )
     )
-    family = result.first()
+    family = result.scalars().first()
     if family is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -133,10 +131,10 @@ async def registry_family(
     # exclude_unset=True + exclude_none=True para não sobrescrever defaults do modelo
     # (ex: status="active" default em Family, que seria None se omitido em FamilyCreate)
     family_data = family_in.model_dump(exclude_none=True)
-    db_family = Family.model_validate(family_data)
+    db_family = Family(**family_data)
     session.add(db_family)
     # flush para obter db_family.id sem commitar — necessário para o FK do FamilyMember.
-    # RESOLVED (Open Question 1 do 04-RESEARCH.md): session.flush() com SQLModel+asyncpg
+    # RESOLVED (Open Question 1 do 04-RESEARCH.md): session.flush() com SQLAlchemy+asyncpg
     # é seguro para obter PK autoincrement antes do commit (padrão estabelecido).
     await session.flush()
 
@@ -234,9 +232,9 @@ async def list_members(
     """D-07: lista todos os membros se o requisitante é membro da família."""
     family = await _require_member(family_uuid, current_user, session)
 
-    result = await session.exec(
+    result = await session.execute(
         select(User, FamilyMember)
-        .join(FamilyMember, FamilyMember.user_id == User.id)  # type: ignore[arg-type]
+        .join(FamilyMember, FamilyMember.user_id == User.id)
         .where(FamilyMember.family_id == family.id)
     )
     rows = list(result.all())
@@ -269,19 +267,19 @@ async def remove_member(
     family, _ = await _require_owner(family_uuid, current_user, session)
 
     # Localizar o user-alvo
-    target_result = await session.exec(select(User).where(User.uuid == user_uuid))
-    target_user = target_result.first()
+    target_result = await session.execute(select(User).where(User.uuid == user_uuid))
+    target_user = target_result.scalars().first()
     if target_user is None:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
     # Localizar o membership
-    member_result = await session.exec(
+    member_result = await session.execute(
         select(FamilyMember).where(
             FamilyMember.family_id == family.id,
             FamilyMember.user_id == target_user.id,
         )
     )
-    target_member = member_result.first()
+    target_member = member_result.scalars().first()
     if target_member is None:
         raise HTTPException(status_code=404, detail="Usuário não é membro desta família")
 

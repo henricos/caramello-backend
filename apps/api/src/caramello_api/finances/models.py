@@ -1,102 +1,60 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, Index, Numeric
-from sqlmodel import Field, SQLModel
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Uuid
+from sqlalchemy.orm import Mapped, mapped_column
+
+from caramello_api.shared.base import Base
 
 
-class Account(SQLModel, table=True):
+class Account(Base):
     """Conta bancária, cartão, poupança ou investimento de um membro da família."""
 
     __tablename__ = "account"
 
     __table_args__ = (Index("ix_account_family_id", "family_id"),)
 
-    id: int | None = Field(primary_key=True, default=None)
-    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
-    family_id: int = Field(foreign_key="family.id", nullable=False)
-    name: str = Field(max_length=100, nullable=False)
-    type: str = Field(max_length=20, nullable=False)
-    currency: str = Field(max_length=3, default="BRL", nullable=False)
-    is_active: bool = Field(default=True, nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    uuid: Mapped[UUID] = mapped_column(Uuid, unique=True, nullable=False, default=uuid4)
+    family_id: Mapped[int] = mapped_column(Integer, ForeignKey("family.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="BRL")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
-class AccountRead(SQLModel):
-    uuid: UUID
-    family_id: int
-    name: str
-    type: str
-    currency: str
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-class AccountCreate(SQLModel):
-    family_id: int
-    name: str
-    type: str
-    currency: str | None = None
-    is_active: bool | None = None
-
-
-class AccountUpdate(SQLModel):
-    family_id: int | None = None
-    name: str | None = None
-    type: str | None = None
-    currency: str | None = None
-    is_active: bool | None = None
-
-
-class Movement(SQLModel, table=True):
+class Movement(Base):
     """Movimentação financeira bruta importada do extrato bancário."""
 
     __tablename__ = "movement"
 
     __table_args__ = (Index("ix_movement_account_id", "account_id"),)
 
-    id: int | None = Field(primary_key=True, default=None)
-    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
-    account_id: int = Field(foreign_key="account.id", nullable=False)
-    date: datetime = Field(nullable=False)
-    amount: Decimal = Field(sa_column=Column(Numeric(15, 2), nullable=False))
-    description: str = Field(max_length=255, nullable=False)
-    import_hash: str | None = Field(unique=True, default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    uuid: Mapped[UUID] = mapped_column(Uuid, unique=True, nullable=False, default=uuid4)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("account.id"), nullable=False)
+    date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    import_hash: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
-class MovementRead(SQLModel):
-    uuid: UUID
-    account_id: int
-    date: datetime
-    amount: Decimal
-    description: str
-    import_hash: str | None
-    created_at: datetime
-    updated_at: datetime
-
-
-class MovementCreate(SQLModel):
-    account_id: int
-    date: datetime
-    amount: Decimal
-    description: str
-    import_hash: str | None = None
-
-
-class MovementUpdate(SQLModel):
-    account_id: int | None = None
-    date: datetime | None = None
-    amount: Decimal | None = None
-    description: str | None = None
-    import_hash: str | None = None
-
-
-class FinancialEntry(SQLModel, table=True):
+class FinancialEntry(Base):
     """
     Lançamento financeiro classificado. Herda valor e tipo de Movement via relação 1:1 (D-05).
     """
@@ -112,53 +70,30 @@ class FinancialEntry(SQLModel, table=True):
         Index("ix_financial_entry_subcategory_id", "subcategory_id"),
     )
 
-    id: int | None = Field(primary_key=True, default=None)
-    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
-    movement_id: int = Field(foreign_key="movement.id", unique=True, nullable=False)
-    subcategory_id: int = Field(foreign_key="subcategory.id", nullable=False)
-    competencia_year: int = Field(nullable=False)
-    competencia_month: int = Field(nullable=False)
-    notes: str | None = Field(max_length=500, default=None)
-    is_recorrente: bool = Field(default=False, nullable=False)
-    responsible_user_id: int | None = Field(foreign_key="user.id", default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    uuid: Mapped[UUID] = mapped_column(Uuid, unique=True, nullable=False, default=uuid4)
+    movement_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("movement.id"), unique=True, nullable=False
+    )
+    subcategory_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("subcategory.id"), nullable=False
+    )
+    competencia_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    competencia_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_recorrente: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    responsible_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("user.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
-class FinancialEntryRead(SQLModel):
-    uuid: UUID
-    movement_id: int
-    subcategory_id: int
-    competencia_year: int
-    competencia_month: int
-    notes: str | None
-    is_recorrente: bool
-    responsible_user_uuid: UUID | None = None
-    created_at: datetime
-    updated_at: datetime
-
-
-class FinancialEntryCreate(SQLModel):
-    movement_id: int
-    subcategory_id: int
-    competencia_year: int
-    competencia_month: int
-    notes: str | None = None
-    is_recorrente: bool | None = None
-    responsible_user_uuid: UUID | None = None
-
-
-class FinancialEntryUpdate(SQLModel):
-    movement_id: int | None = None
-    subcategory_id: int | None = None
-    competencia_year: int | None = None
-    competencia_month: int | None = None
-    notes: str | None = None
-    is_recorrente: bool | None = None
-    responsible_user_uuid: UUID | None = None
-
-
-class Category(SQLModel, table=True):
+class Category(Base):
     """
     Categoria de classificação financeira — nível 1 da hierarquia (D-06). Filha: Subcategory.
     """
@@ -167,33 +102,19 @@ class Category(SQLModel, table=True):
 
     __table_args__ = (Index("ix_category_family_id", "family_id"),)
 
-    id: int | None = Field(primary_key=True, default=None)
-    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
-    family_id: int = Field(foreign_key="family.id", nullable=False)
-    name: str = Field(max_length=100, nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    uuid: Mapped[UUID] = mapped_column(Uuid, unique=True, nullable=False, default=uuid4)
+    family_id: Mapped[int] = mapped_column(Integer, ForeignKey("family.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
-class CategoryRead(SQLModel):
-    uuid: UUID
-    family_id: int
-    name: str
-    created_at: datetime
-    updated_at: datetime
-
-
-class CategoryCreate(SQLModel):
-    family_id: int
-    name: str
-
-
-class CategoryUpdate(SQLModel):
-    family_id: int | None = None
-    name: str | None = None
-
-
-class Subcategory(SQLModel, table=True):
+class Subcategory(Base):
     """
     Subcategoria de classificação financeira — nível 2 da hierarquia (D-06). Pai: Category.
     """
@@ -202,27 +123,13 @@ class Subcategory(SQLModel, table=True):
 
     __table_args__ = (Index("ix_subcategory_category_id", "category_id"),)
 
-    id: int | None = Field(primary_key=True, default=None)
-    uuid: UUID = Field(unique=True, default_factory=uuid4, nullable=False)
-    category_id: int = Field(foreign_key="category.id", nullable=False)
-    name: str = Field(max_length=100, nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-
-
-class SubcategoryRead(SQLModel):
-    uuid: UUID
-    category_id: int
-    name: str
-    created_at: datetime
-    updated_at: datetime
-
-
-class SubcategoryCreate(SQLModel):
-    category_id: int
-    name: str
-
-
-class SubcategoryUpdate(SQLModel):
-    category_id: int | None = None
-    name: str | None = None
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    uuid: Mapped[UUID] = mapped_column(Uuid, unique=True, nullable=False, default=uuid4)
+    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("category.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )

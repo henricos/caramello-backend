@@ -75,6 +75,7 @@ def test_auto_join_on_login():
 
     from caramello_api.families.models import FamilyInvitation, FamilyMember
     from caramello_api.shared import auth as auth_module
+    from tests.conftest import execute_mock
 
     # Construir uma FamilyInvitation pending_login simulada
     pending_inv = FamilyInvitation(
@@ -103,7 +104,7 @@ def test_auto_join_on_login():
     # 2) SELECT FamilyInvitation WHERE email==status=='pending_login' → pending_inv
     select_results = iter([provisioned_user, pending_inv])
 
-    async def _exec(_stmt):
+    def _exec(_stmt):
         r = MagicMock()
         try:
             r.first.return_value = next(select_results)
@@ -112,8 +113,9 @@ def test_auto_join_on_login():
         return r
 
     mock_session = AsyncMock()
-    mock_session.exec.side_effect = _exec
-    mock_session.execute = AsyncMock()
+    # O INSERT ... ON CONFLICT DO NOTHING também passa por session.execute, mas
+    # não lê nenhum accessor — logo não consome a sequência de _exec.
+    mock_session.execute.side_effect = execute_mock(_exec)
     # session.add() é SÍNCRONO em SQLAlchemy async — usar MagicMock para que
     # o side_effect seja executado imediatamente (sem await)
     mock_session.add = MagicMock(side_effect=lambda o: added.append(o))

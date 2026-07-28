@@ -4,7 +4,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from caramello_api.shared.auth import get_current_user
-from caramello_api.users.models import User, UserRead
+from caramello_api.users.models import User
+from caramello_api.users.schemas import UserRead
 
 router = APIRouter(prefix="/users", tags=["User"])
 
