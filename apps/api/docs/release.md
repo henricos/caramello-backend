@@ -2,28 +2,34 @@
 
 Canonical flow for publishing a new version of the api image. The release covers the artifact's full cycle: closing the version, build and containerization (via GitHub Actions) and, finally, the guidance on how to run the published container. What happens after that (where and how the image runs) is a procedure of the publisher's environment, outside this repository.
 
-The build is done by GitHub Actions (`.github/workflows/release-ghcr.yml`), triggered by a **GitHub release** — never by a bare tag. The workflow asserts that the release commit is an ancestor of `main` and that `apps/api/pyproject.toml`'s `[project].version` matches the tag without its leading `v`.
+The build is done by GitHub Actions (`.github/workflows/release-ghcr.yml`), triggered by a **GitHub release** — never by a bare tag. The workflow asserts that the release commit is an ancestor of `main` and that BOTH modules' manifests — `apps/api/pyproject.toml` and `apps/web/package.json` — match the tag without its leading `v`.
 
-**Versions are paired across modules** (see "Paired versions" in the root `docs/architecture.md`): every release bumps all runnable modules to the same `X.Y.Z`, even when only one of them changed, and the single `vX.Y.Z` release publishes every image. Right now `apps/api` is the only runnable module in the repository, so this release publishes exactly one image; when `apps/web` lands, its manifest assertion and its `publish-web` job must be added to the workflow and its own `docs/release.md` becomes part of this flow.
+**Versions are paired across modules** (see "Paired versions" in the root `docs/architecture.md`): every release bumps all runnable modules to the same `X.Y.Z`, even when only one of them changed, and the single `vX.Y.Z` release publishes every image. Both runnable modules exist, so a single `vX.Y.Z` release publishes two images and `apps/web/docs/release.md` is part of the same flow.
 
 ## Preconditions
 
 - `main` branch up to date and a clean working tree.
 - Tests and lint passing, from `apps/api`: `uv run pytest && uv run ruff check .`
-- Root E2E tests passing (`e2e/` at the repository root), for every journey that has a script — UAT is always E2E, see the root `docs/testing.md`.
-- The version in `apps/api/pyproject.toml` is the exact version being released (the workflow fails the release otherwise).
+- Root E2E scripts passing (`node e2e/walking-skeleton.js`, `auth-flows.js`, `api-endpoints.js`) — UAT is always E2E, see the root `docs/testing.md`.
+- `apps/api/pyproject.toml` AND `apps/web/package.json` both carry the exact version being released (the workflow fails the release otherwise).
 
 ## Canonical checklist
 
 ```bash
-# From the repository root. Versions are paired: when more than one runnable
-# module exists, bump ALL of them to the same X.Y.Z, even if only one changed.
+# From the repository root. Versions are paired: bump BOTH modules to the same
+# X.Y.Z, even if only one of them changed. The release workflow asserts both
+# manifests against the tag and fails the whole release if either disagrees.
 
-# 1. Bump the version by hand in apps/api/pyproject.toml ([project].version)
+# 1. Bump the version
+#    - apps/api/pyproject.toml ([project].version) and this module's README.md
+#      badge, by hand.
+#    - apps/web/package.json (+ lockfile) and the web's README.md badge:
+(cd apps/web && npm version X.Y.Z --no-git-tag-version)
 
 # 2. Commit and tag
-git add apps/api/pyproject.toml
-git commit -m "chore: prepara release vX.Y.Z"
+git add apps/api/pyproject.toml apps/api/README.md \
+        apps/web/package.json apps/web/package-lock.json apps/web/README.md
+git commit -m "chore: prepare release vX.Y.Z"
 git tag vX.Y.Z
 git push origin main --follow-tags
 
@@ -73,7 +79,7 @@ The service reads the process environment only; it never loads a dotenv file on 
 
 ### Volumes and network
 
-- `/data`: shared data folder, mounted with **read and write** access in this module (the api is the writer; a future web mounts the same label read-only). Align the directory owner on the host with `PUID`/`PGID`.
+- `/data`: shared data folder, mounted with **read and write** access in this module (the api is the writer; the web mounts the same label read-only). Align the directory owner on the host with `PUID`/`PGID`.
 - Port `8000` published on the host: the Cloudflare Tunnel's ingress rules point at `<SERVER_IP>:8000`, and any application addressing the api directly uses the server's IP and the published port, never the container name — see `compose.example.yaml`.
 
 ### User authorization
