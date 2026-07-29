@@ -16,6 +16,16 @@ The AI fully owns the tests: it writes and updates the scripts as functionality 
 
 E2E scripts live in `e2e/` at the repository root, never inside a module, regardless of how many modules the journey crosses. Single-module scripts stay in that module's `tests/`.
 
+### The layers have different jobs, and very different sizes
+
+Read the table as a pyramid, because the two rules above are about *purpose*, not about volume:
+
+- **Unit tests carry the breadth.** They are where business rules are pinned so that changing something later cannot quietly alter behaviour, and that is the layer that should cover as much as makes sense to cover. **Mocking is legitimate and expected here** — the point is to isolate the rule, not to exercise infrastructure. A module with a lot of business logic should have a lot of these.
+- **E2E carries the depth, on few paths.** A journey proves the layers actually connect: the browser reaches the web, the web reaches the api, the api reaches the database, and a real token survives the whole way. That is expensive per scenario, so E2E covers a small number of **representative** journeys — never every path, never every endpoint. A domain with 25 endpoints does not need 25 E2E scenarios; it needs one journey that proves its stack is wired, with the remaining rules covered by unit tests.
+- **E2E runs without mocks.** No stubbed session, no faked authorization, no bypass. In development the database is the embedded PostgreSQL and the identity provider is a local mock that signs real RS256 tokens — a real provider substituted for the production one, never a shortcut around token validation.
+
+The failure mode to avoid in each direction: unit tests standing in for UAT ("the tests pass, so the feature works"), and E2E used as the place to get coverage, which buys a slow, flaky suite that still misses cases a unit test would have caught in milliseconds.
+
 ---
 
 ## 2. Autonomous UAT flow

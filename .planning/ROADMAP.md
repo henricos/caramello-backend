@@ -19,7 +19,7 @@ Os arquivos em `milestones/` são registro histórico do que foi entregue e não
 | FAMILY-05: solicitação de entrada via convite | M1 D-04 | Alta |
 | FAMILY-06: aprovação/rejeição de solicitações | M1 D-04 | Alta |
 | MCP-FIN: ferramentas MCP financeiras (D-MCP-01) | M2 deferido | Alta |
-| E2E do domínio finances — a suíte na raiz cobre auth, users, families, MCP e discovery, mas nenhum dos 25 endpoints financeiros | Alinhamento ao template | Alta |
+| Uma jornada E2E que atravesse o domínio finances — hoje a suíte da raiz não toca nele, então nada prova que suas camadas se conectam de ponta a ponta. Uma jornada representativa basta (criar conta, registrar movimentação, conciliar, conferir saldo); as demais regras seguem cobertas por unitário, conforme a pirâmide em `docs/testing.md` | Alinhamento ao template | Alta |
 | UAT do MCP com Bearer token de um Keycloak real (a suíte E2E usa provedor mock, com RS256 real) | M2 | Média |
 | Importação OFX com extrato real de banco BR — o fallback ISO-8859-1 nunca foi exercitado com arquivo de verdade | M2 Phase 8 | Média |
 | OPS-02: logging estruturado (structlog) | v2 backlog | Média |
