@@ -52,7 +52,7 @@ Estimated total: **10 to 15 applications**, organized into three groups with dis
 
 Keycloak covers all the requirements (OAuth2/Google, MFA, OIDC, standard JWT, admin GUI, e-mail allowlist) and is already running in the existing infrastructure with dev/prod clients configured, which removes the need to introduce and operate an additional identity service.
 
-> **Decision history:** the original choice recorded in this document was **Logto**, selected for its smaller footprint compared to Authentik (which consumes ~375MB on the server alone plus ~360MB on the worker at idle) and for being designed to reduce the complexity of small to medium setups; Keycloak had been assessed as too heavy for the size of the project. That decision was **reverted** in favor of Keycloak, because it was already provisioned in the infrastructure with dev/prod clients configured. See the Key Decisions table in `.planning/PROJECT.md`.
+> **Decision history:** the original choice recorded in this document was **Logto**, selected for its smaller footprint compared to Authentik (which consumes ~375MB on the server alone plus ~360MB on the worker at idle) and for being designed to reduce the complexity of small to medium setups; Keycloak had been assessed as too heavy for the size of the project. That decision was **reverted** in favor of Keycloak, because it was already provisioned in the infrastructure with dev/prod clients configured. The authentication model this settled on is recorded in the root `docs/architecture.md`.
 
 The Keycloak instance is single and shared as an infrastructure service, but each group operates in its own isolated tenant:
 
